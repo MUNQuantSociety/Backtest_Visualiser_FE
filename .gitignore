@@ -1,0 +1,54 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build output
+dist/
+dist-ssr/
+build/
+*.local
+
+# Environment — never commit real secrets
+.env
+.env.*
+!.env.example
+
+# Testing
+coverage/
+.vitest-cache/
+
+# Editors
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+
+# Agent tooling. launch.json pins an absolute path to the local Node binary,
+# so it is per-machine and must not be shared.
+.claude/launch.json
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Caches
+.eslintcache
+.cache/
+.temp/
+node_modules/.vite/
+*.tsbuildinfo

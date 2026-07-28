@@ -1,0 +1,18 @@
+# Normalise line endings. Without this, Git on Windows checks files out as CRLF
+# while Prettier is configured `endOfLine: lf`, so `npm run format:check` fails
+# for anyone on a different platform and diffs fill with whitespace churn.
+* text=auto eol=lf
+
+# Generated — collapse in diffs and reviews.
+package-lock.json linguist-generated=true -diff
+
+# Binary assets: never touch these.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.pdf binary
