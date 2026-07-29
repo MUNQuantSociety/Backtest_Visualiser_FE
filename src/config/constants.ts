@@ -1,6 +1,21 @@
 /** App-wide magic values. Anything referenced in more than one file lives here. */
 
-export const APP_NAME = 'Backtest Visualiser';
+export const APP_NAME = 'MQS';
+
+/** The two products this shell hosts. Used for nav section headings. */
+export const PRODUCT_NAMES = {
+  backtests: 'Backtest Visualiser',
+  live: 'MQS Master',
+} as const;
+
+/**
+ * How often live views refetch. The live engine ticks its OMS every 5s
+ * (`oms_tick_seconds`), so polling faster than that only burns requests.
+ */
+export const LIVE_REFETCH_MS = 15_000;
+
+/** Log tail length. The log view is a tail, not an archive — use search for history. */
+export const LOG_TAIL_SIZE = 200;
 
 /** Trading days per year — the standard annualisation factor for daily returns. */
 export const TRADING_DAYS_PER_YEAR = 252;
@@ -22,3 +37,11 @@ export const STORAGE_KEYS = {
   sidebarCollapsed: 'bv:sidebar-collapsed',
   comparisonSet: 'bv:comparison-set',
 } as const;
+
+/**
+ * Log levels as MQSMaster's Python `logging` emits them, ordered by severity.
+ * Index order is load-bearing: the log filter shows everything at or above the
+ * selected level.
+ */
+export const LOG_LEVELS = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'] as const;
+export type LogLevel = (typeof LOG_LEVELS)[number];

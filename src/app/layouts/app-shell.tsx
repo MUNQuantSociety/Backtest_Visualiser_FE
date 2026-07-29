@@ -1,16 +1,58 @@
-import { ChartCandlestick, GitCompareArrows, LayoutDashboard } from 'lucide-react';
+import {
+  Activity,
+  Briefcase,
+  ChartCandlestick,
+  GitCompareArrows,
+  LayoutDashboard,
+  ScrollText,
+  Settings,
+  type LucideIcon,
+} from 'lucide-react';
 import { type ReactNode } from 'react';
 import { NavLink } from 'react-router';
 
 import { paths } from '@/app/router/paths';
-import { APP_NAME } from '@/config/constants';
+import { APP_NAME, PRODUCT_NAMES } from '@/config/constants';
 import { cn } from '@/lib/utils';
 
-const navigation = [
-  { to: paths.dashboard, label: 'Dashboard', icon: LayoutDashboard, end: true },
-  { to: paths.backtests, label: 'Backtests', icon: ChartCandlestick, end: false },
-  { to: paths.compare, label: 'Compare', icon: GitCompareArrows, end: false },
-] as const;
+interface NavItem {
+  to: string;
+  label: string;
+  icon: LucideIcon;
+  /** `end` stops a parent route staying highlighted while a child is active. */
+  end: boolean;
+}
+
+interface NavSection {
+  heading: string;
+  items: readonly NavItem[];
+}
+
+/**
+ * One shell, two products. The section headings are the whole point: a member
+ * looking at a drawdown chart must know instantly whether it came from a
+ * simulation or from real fills, and grouped navigation is the cheapest place
+ * to establish that.
+ */
+const sections: readonly NavSection[] = [
+  {
+    heading: PRODUCT_NAMES.backtests,
+    items: [
+      { to: paths.dashboard, label: 'Dashboard', icon: LayoutDashboard, end: true },
+      { to: paths.backtests, label: 'Backtests', icon: ChartCandlestick, end: false },
+      { to: paths.compare, label: 'Compare', icon: GitCompareArrows, end: false },
+    ],
+  },
+  {
+    heading: PRODUCT_NAMES.live,
+    items: [
+      { to: paths.live, label: 'Overview', icon: Activity, end: true },
+      { to: paths.portfolios, label: 'Portfolios', icon: Briefcase, end: false },
+      { to: paths.log, label: 'Log', icon: ScrollText, end: false },
+      { to: paths.settings, label: 'Settings', icon: Settings, end: false },
+    ],
+  },
+];
 
 export function AppShell({ children }: { children: ReactNode }) {
   return (
@@ -41,24 +83,35 @@ function Sidebar() {
         <ChartCandlestick className="size-5 text-primary" aria-hidden />
         <span className="truncate text-sm font-semibold">{APP_NAME}</span>
       </div>
-      <nav className="space-y-1 p-3" aria-label="Main">
-        {navigation.map(({ to, label, icon: Icon, end }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={end}
-            className={({ isActive }) =>
-              cn(
-                'flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors',
-                isActive
-                  ? 'bg-accent font-medium text-accent-foreground'
-                  : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground',
-              )
-            }
-          >
-            <Icon className="size-4" aria-hidden />
-            {label}
-          </NavLink>
+
+      <nav className="space-y-6 p-3" aria-label="Main">
+        {sections.map((section) => (
+          <div key={section.heading}>
+            <p className="px-3 pb-1.5 text-[0.6875rem] font-semibold tracking-wider text-muted-foreground uppercase">
+              {section.heading}
+            </p>
+            <ul className="space-y-1">
+              {section.items.map(({ to, label, icon: Icon, end }) => (
+                <li key={to}>
+                  <NavLink
+                    to={to}
+                    end={end}
+                    className={({ isActive }) =>
+                      cn(
+                        'flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors',
+                        isActive
+                          ? 'bg-accent font-medium text-accent-foreground'
+                          : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground',
+                      )
+                    }
+                  >
+                    <Icon className="size-4" aria-hidden />
+                    {label}
+                  </NavLink>
+                </li>
+              ))}
+            </ul>
+          </div>
         ))}
       </nav>
     </aside>

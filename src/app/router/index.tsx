@@ -14,6 +14,13 @@ const BacktestsPage = lazy(async () => import('@/pages/backtests-page'));
 const BacktestDetailPage = lazy(async () => import('@/pages/backtest-detail-page'));
 const NotFoundPage = lazy(async () => import('@/pages/not-found-page'));
 
+/* MQS Master — ported from the SvelteKit prototype. */
+const LiveOverviewPage = lazy(async () => import('@/pages/live-overview-page'));
+const PortfoliosPage = lazy(async () => import('@/pages/portfolios-page'));
+const PortfolioDetailPage = lazy(async () => import('@/pages/portfolio-detail-page'));
+const LogPage = lazy(async () => import('@/pages/log-page'));
+const SettingsPage = lazy(async () => import('@/pages/settings-page'));
+
 export const router = createBrowserRouter([
   {
     path: '/',
@@ -22,6 +29,13 @@ export const router = createBrowserRouter([
       { index: true, element: <DashboardPage /> },
       { path: routePatterns.backtests, element: <BacktestsPage /> },
       { path: routePatterns.backtestDetail, element: <BacktestDetailPage /> },
+
+      { path: routePatterns.live, element: <LiveOverviewPage /> },
+      { path: routePatterns.portfolios, element: <PortfoliosPage /> },
+      { path: routePatterns.portfolioDetail, element: <PortfolioDetailPage /> },
+      { path: routePatterns.log, element: <LogPage /> },
+      { path: routePatterns.settings, element: <SettingsPage /> },
+
       { path: '*', element: <NotFoundPage /> },
     ],
   },

@@ -27,6 +27,23 @@ Nothing on the right may import from the left. A `util` never imports a
 | `styles/`       | `globals.css` — Tailwind v4 entry point and all design tokens.               |
 | `test/`         | Test setup and `renderWithProviders`.                                        |
 
+## The four features
+
+| Feature        | Product             | Owns                                                |
+| -------------- | ------------------- | --------------------------------------------------- |
+| `backtests`    | Backtest Visualiser | Runs, metrics, round-trip trades                     |
+| `performance`  | both                | Equity curve, drawdown chart, metrics grid           |
+| `portfolios`   | MQS Master          | Live sleeves, positions, fills, correlations, config |
+| `system`       | MQS Master          | Per-service engine health, log tail                  |
+
+`performance` is the shared one, and it is shared *on purpose*: the live
+portfolio page renders its charts unchanged. If you find yourself writing a
+second equity chart, stop — the reason both products live in one app is so that
+never happens.
+
+Cross-feature imports go through the barrel (`@/features/backtests`), which is
+how `performance` reaches `EquityPoint` today.
+
 ## Anatomy of a feature
 
 ```

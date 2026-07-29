@@ -31,6 +31,13 @@
   --color-loss: var(--loss);
   --color-neutral: var(--neutral);
 
+  /* Semantic warning — distinct from `--loss` (a number moved the wrong way)
+     and from `--destructive` (an action that destroys something). This is
+     "degraded but running": a WARNING log line, a service missing heartbeats.
+     Borrowing a `--chart-N` series colour for it would tie an operational
+     meaning to a palette slot that exists to be reordered. */
+  --color-warning: var(--warning);
+
   /* Chart series palette, used by both Recharts and lightweight-charts. */
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
@@ -74,6 +81,7 @@
   --profit: oklch(0.62 0.17 152);
   --loss: oklch(0.58 0.22 25);
   --neutral: oklch(0.556 0 0);
+  --warning: oklch(0.62 0.15 65);
 
   --chart-1: oklch(0.55 0.19 258);
   --chart-2: oklch(0.62 0.17 152);
@@ -106,6 +114,7 @@
   --profit: oklch(0.72 0.17 152);
   --loss: oklch(0.68 0.2 25);
   --neutral: oklch(0.708 0 0);
+  --warning: oklch(0.78 0.15 65);
 
   --chart-1: oklch(0.66 0.17 258);
   --chart-2: oklch(0.72 0.17 152);
