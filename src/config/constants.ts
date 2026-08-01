@@ -1,6 +1,6 @@
 /** App-wide magic values. Anything referenced in more than one file lives here. */
 
-export const APP_NAME = 'MQS';
+export const APP_NAME = 'MQS Backtest Engine';
 
 /** The two products this shell hosts. Used for nav section headings. */
 export const PRODUCT_NAMES = {

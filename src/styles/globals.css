@@ -143,6 +143,6 @@
   }
 
   :focus-visible {
-    @apply ring-2 ring-ring ring-offset-2 ring-offset-[var(--background)] outline-none;
+    @apply ring-2 ring-ring ring-offset-2 ring-offset-background outline-none;
   }
 }

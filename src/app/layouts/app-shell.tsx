@@ -12,6 +12,7 @@ import { type ReactNode } from 'react';
 import { NavLink } from 'react-router';
 
 import { paths } from '@/app/router/paths';
+import logo from '@/assets/logo_dark.svg';
 import { APP_NAME, PRODUCT_NAMES } from '@/config/constants';
 import { cn } from '@/lib/utils';
 
@@ -46,7 +47,7 @@ const sections: readonly NavSection[] = [
   {
     heading: PRODUCT_NAMES.live,
     items: [
-      { to: paths.live, label: 'Overview', icon: Activity, end: true },
+      { to: paths.live, label: 'Live Trading', icon: Activity, end: true },
       { to: paths.portfolios, label: 'Portfolios', icon: Briefcase, end: false },
       { to: paths.log, label: 'Log', icon: ScrollText, end: false },
       { to: paths.settings, label: 'Settings', icon: Settings, end: false },
@@ -80,7 +81,7 @@ function Sidebar() {
   return (
     <aside className="hidden w-56 shrink-0 border-r bg-card md:block">
       <div className="flex h-14 items-center gap-2 border-b px-4">
-        <ChartCandlestick className="size-5 text-primary" aria-hidden />
+        <img src={logo} alt="MQS Logo" style={{ height: 1.5 + 'rem' }} />
         <span className="truncate text-sm font-semibold">{APP_NAME}</span>
       </div>
 

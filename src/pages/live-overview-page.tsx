@@ -23,7 +23,7 @@ export default function LiveOverviewPage() {
   return (
     <>
       <PageHeader
-        title="MQS Master"
+        title="MQS Live Trader"
         description="Live trading system. Every figure on this page is real money."
         // `buttonVariants` rather than <Button>: this navigates, so it must be
         // an anchor. Wrapping a <Link> in a <button> nests interactive elements
