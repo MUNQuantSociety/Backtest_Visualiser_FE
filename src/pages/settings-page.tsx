@@ -30,7 +30,8 @@ export default function SettingsPage() {
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Appearance</CardTitle>
           <CardDescription>
-            Chart palettes follow this setting — both chart libraries resolve the same tokens.
+            {/*Chart palettes follow this setting — both chart
+                libraries resolve the same tokens.*/}
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
@@ -52,11 +53,8 @@ export default function SettingsPage() {
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Connection</CardTitle>
-          <CardDescription>
-            Read-only. These come from build-time environment variables and are validated at startup
-            by <code className="font-mono">src/config/env.ts</code>.
-          </CardDescription>
+          <CardTitle className="text-base">Connection Information</CardTitle>
+          {/* Taken from src/config/env.ts */}
         </CardHeader>
         <CardContent>
           <dl className="grid gap-3 text-sm sm:grid-cols-2">
