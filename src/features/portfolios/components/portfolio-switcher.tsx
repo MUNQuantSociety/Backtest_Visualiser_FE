@@ -1,15 +1,10 @@
 import { NavLink } from 'react-router';
 
-import { paths } from '@/app/router/paths';
+import { paths } from '@/app/paths';
 import { cn } from '@/lib/utils';
 
-import { usePortfolios } from '../hooks/use-portfolios';
+import { usePortfolios } from '../portfolios-api';
 
-/**
- * The tab strip from the SvelteKit prototype's `<nav id="portfolios">`, except
- * the tabs come from the API rather than three hardcoded links. Rendering a
- * "Portfolio 3" tab that 404s on click was the prototype's most visible lie.
- */
 export function PortfolioSwitcher({ activeId }: { activeId: string | undefined }) {
   const { data } = usePortfolios();
   if (!data) return null;

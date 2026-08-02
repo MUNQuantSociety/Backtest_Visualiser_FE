@@ -3,7 +3,7 @@ import { Outlet } from 'react-router';
 
 import { ErrorBoundary } from '@/components/common/error-boundary';
 
-import { AppShell } from './app-shell';
+import { AppShell } from './shell';
 
 /** Chrome that persists across every route, plus per-route error isolation. */
 export function RootLayout() {

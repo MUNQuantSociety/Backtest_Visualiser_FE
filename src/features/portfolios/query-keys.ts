@@ -1,4 +1,4 @@
-import type { ExecutionFilters } from '../types/portfolio';
+import type { ExecutionFilters } from './types';
 
 /**
  * Hierarchical query keys for the live portfolios feature.

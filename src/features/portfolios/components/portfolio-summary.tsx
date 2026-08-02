@@ -2,7 +2,7 @@ import { StatTile } from '@/components/common/stat-tile';
 import { formatCurrency, formatPercent, formatSigned } from '@/utils/format';
 import { toneFromValue } from '@/utils/tone';
 
-import type { PortfolioDetail } from '../types/portfolio';
+import type { PortfolioDetail } from '../types';
 
 interface PortfolioSummaryProps {
   portfolio: PortfolioDetail | undefined;

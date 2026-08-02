@@ -1,12 +1,12 @@
 import { Link } from 'react-router';
 
-import { paths } from '@/app/router/paths';
+import { paths } from '@/app/paths';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { formatCompact, formatCurrency, formatPercent, formatSigned } from '@/utils/format';
 import { toneFromValue } from '@/utils/tone';
 
-import type { PortfolioSummary } from '../types/portfolio';
+import type { PortfolioSummary } from '../types';
 
 import { EngineStateBadge } from './engine-state-badge';
 

@@ -5,20 +5,20 @@ import { EmptyState } from '@/components/common/empty-state';
 import { PageHeader } from '@/components/common/page-header';
 import { StatTile } from '@/components/common/stat-tile';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { DrawdownChart, EquityCurveChart } from '@/features/performance';
-import {
-  ConfigPanel,
-  CorrelationMatrix,
-  EngineStateBadge,
-  ExecutionLogTable,
-  PortfolioSummary,
-  PortfolioSwitcher,
-  PositionsTable,
-  usePortfolio,
-  usePortfolioEquity,
-} from '@/features/portfolios';
 import { formatNumber, formatPercent } from '@/utils/format';
 import { maxDrawdown, sharpeRatio, toReturns } from '@/utils/metrics';
+
+import { DrawdownChart } from '../features/performance/drawdown-chart';
+import { EquityCurveChart } from '../features/performance/equity-curve-chart';
+import { ConfigPanel } from '../features/portfolios/components/config-panel';
+import { CorrelationMatrix } from '../features/portfolios/components/correlation-matrix';
+import { EngineStateBadge } from '../features/portfolios/components/engine-state-badge';
+import { ExecutionLogTable } from '../features/portfolios/components/execution-log-table';
+import { PortfolioSummary } from '../features/portfolios/components/portfolio-summary';
+import { PortfolioSwitcher } from '../features/portfolios/components/portfolio-switcher';
+import { PositionsTable } from '../features/portfolios/components/positions-table';
+import { usePortfolio } from '../features/portfolios/portfolios-api';
+import { usePortfolioEquity } from '../features/portfolios/portfolios-api';
 
 /**
  * The prototype's portfolio page — summary, historical graph, asset

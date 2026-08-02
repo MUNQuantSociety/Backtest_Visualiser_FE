@@ -1,13 +1,15 @@
 import { Link } from 'react-router';
 
-import { paths } from '@/app/router/paths';
-import { PageHeader } from '@/components/common/page-header';
-import { StatTile } from '@/components/common/stat-tile';
-import { buttonVariants } from '@/components/ui/button';
-import { PortfolioList, usePortfolioTotals } from '@/features/portfolios';
-import { ServerStatusCard } from '@/features/system';
-import { formatCurrency, formatPercent, formatSigned } from '@/utils/format';
-import { toneFromValue } from '@/utils/tone';
+import { paths } from '../app/paths';
+import { PageHeader } from '../components/common/page-header';
+import { StatTile } from '../components/common/stat-tile';
+import { buttonVariants } from '../components/ui/button';
+import { PortfolioList } from '../features/portfolios/components/portfolio-list';
+import { usePortfolioTotals } from '../features/portfolios/portfolios-api';
+import { ServerStatusCard } from '../features/system/server-status-card';
+import { formatCurrency, formatPercent, formatSigned } from '../utils/format';
+import { toneFromValue } from '../utils/tone';
+
 
 /**
  * The prototype's dashboard — "Latest Strategy Summary", balance, total P&L,

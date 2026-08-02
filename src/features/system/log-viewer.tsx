@@ -5,7 +5,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { LOG_LEVELS, type LogLevel } from '@/config/constants';
 import { cn } from '@/lib/utils';
 
-import { useLogTail } from '../hooks/use-system';
+import { useLogTail } from './system-api';
 
 const levelClass: Record<LogLevel, string> = {
   DEBUG: 'text-muted-foreground',
@@ -73,7 +73,7 @@ export function LogViewer() {
 
       {entries.length > 0 ? (
         <div
-          className="max-h-[32rem] overflow-auto rounded-md border bg-muted/30"
+          className="max-h-128 overflow-auto rounded-md border bg-muted/30"
           role="log"
           aria-live="polite"
           aria-label="Engine log"

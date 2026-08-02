@@ -5,7 +5,10 @@ import { ChartContainer } from '@/components/charts/chart-container';
 import { EmptyState } from '@/components/common/empty-state';
 import { PageHeader } from '@/components/common/page-header';
 import { useBacktest } from '@/features/backtests';
-import { DrawdownChart, EquityCurveChart, MetricsGrid } from '@/features/performance';
+
+import { DrawdownChart } from '../features/performance/drawdown-chart';
+import { EquityCurveChart } from '../features/performance/equity-curve-chart';
+import { MetricsGrid } from '../features/performance/metrics-grid';
 
 export default function BacktestDetailPage() {
   const { backtestId } = useParams<{ backtestId: string }>();

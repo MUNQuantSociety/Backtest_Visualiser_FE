@@ -1,7 +1,7 @@
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatNumber } from '@/utils/format';
 
-import { usePortfolioCorrelations } from '../hooks/use-portfolios';
+import { usePortfolioCorrelations } from '../portfolios-api';
 
 /**
  * Diverging fill for a signed quantity in [-1, 1].

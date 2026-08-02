@@ -1,5 +1,6 @@
 import { PageHeader } from '@/components/common/page-header';
-import { PortfolioList } from '@/features/portfolios';
+
+import { PortfolioList } from '../features/portfolios/components/portfolio-list';
 
 export default function PortfoliosPage() {
   return (

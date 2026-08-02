@@ -3,10 +3,9 @@ import { FlaskConical, WifiOff } from 'lucide-react';
 import { EmptyState } from '@/components/common/empty-state';
 import { Skeleton } from '@/components/ui/skeleton';
 
-import { useBacktests } from '../hooks/use-backtests';
-import type { BacktestFilters } from '../types/backtest';
-
 import { BacktestCard } from './backtest-card';
+import { useBacktests } from './backtests-api';
+import type { BacktestFilters } from './types';
 
 interface BacktestListProps {
   filters?: BacktestFilters;

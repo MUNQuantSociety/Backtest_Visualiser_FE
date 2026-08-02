@@ -11,7 +11,7 @@ import {
 import { type ReactNode } from 'react';
 import { NavLink } from 'react-router';
 
-import { paths } from '@/app/router/paths';
+import { paths } from '@/app/paths';
 import logo from '@/assets/logo_dark.svg';
 import { APP_NAME, PRODUCT_NAMES } from '@/config/constants';
 import { cn } from '@/lib/utils';

@@ -3,11 +3,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '@/lib/api-client';
 import { renderWithProviders, screen } from '@/test/test-utils';
 
-
-import * as api from '../api/backtests-api';
-import type { BacktestSummary } from '../types/backtest';
-
 import { BacktestList } from './backtest-list';
+import * as api from './backtests-api';
+import type { BacktestSummary } from './types';
 
 vi.mock('../api/backtests-api');
 

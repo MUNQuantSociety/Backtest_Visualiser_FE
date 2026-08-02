@@ -12,29 +12,27 @@ Nothing on the right may import from the left. A `util` never imports a
 
 ## Directories
 
-| Path            | Holds                                                                       |
-| --------------- | --------------------------------------------------------------------------- |
-| `app/`          | Application wiring: providers, router, layouts. Composed once, at boot.      |
-| `pages/`        | One component per route. Thin — layout and route params only.                |
-| `features/`     | Self-contained domain modules. Where nearly all real code lives.             |
-| `components/`   | Shared presentational components. Domain-agnostic by definition.             |
-| `hooks/`        | Shared hooks used by more than one feature.                                  |
-| `lib/`          | Third-party integration points: axios, query client, chart theming, `cn`.    |
-| `config/`       | Validated env vars and app-wide constants.                                   |
-| `stores/`       | Zustand stores for client-only UI state.                                     |
-| `types/`        | Types shared across features. Feature-specific types stay in the feature.    |
-| `utils/`        | Pure functions. No React, no imports from features.                          |
-| `styles/`       | `globals.css` — Tailwind v4 entry point and all design tokens.               |
-| `test/`         | Test setup and `renderWithProviders`.                                        |
+| Path          | Holds                                                                     |
+| ------------- | ------------------------------------------------------------------------- |
+| `app/`        | Application wiring: providers, router, layouts. Composed once, at boot.   |
+| `pages/`      | One component per route. Thin — layout and route params only.             |
+| `features/`   | Self-contained domain modules. Where nearly all real code lives.          |
+| `components/` | Shared presentational components. Domain-agnostic by definition.          |
+| `hooks/`      | Shared hooks used by more than one feature.                               |
+| `lib/`        | Third-party integration points: axios, query client, chart theming, `cn`. |
+| `config/`     | Validated env vars and app-wide constants.                                |
+| `types/`      | Types shared across features. Feature-specific types stay in the feature. |
+| `utils/`      | Pure functions. No React, no imports from features.                       |
+| `test/`       | Test setup and `renderWithProviders`.                                     |
 
 ## The four features
 
-| Feature        | Product             | Owns                                                |
-| -------------- | ------------------- | --------------------------------------------------- |
-| `backtests`    | Backtest Visualiser | Runs, metrics, round-trip trades                     |
-| `performance`  | both                | Equity curve, drawdown chart, metrics grid           |
-| `portfolios`   | MQS Master          | Live sleeves, positions, fills, correlations, config |
-| `system`       | MQS Master          | Per-service engine health, log tail                  |
+| Feature       | Product             | Owns                                                 |
+| ------------- | ------------------- | ---------------------------------------------------- |
+| `backtests`   | Backtest Visualiser | Runs, metrics, round-trip trades                     |
+| `performance` | both                | Equity curve, drawdown chart, metrics grid           |
+| `portfolios`  | MQS Master          | Live sleeves, positions, fills, correlations, config |
+| `system`      | MQS Master          | Per-service engine health, log tail                  |
 
 `performance` is the shared one, and it is shared *on purpose*: the live
 portfolio page renders its charts unchanged. If you find yourself writing a
@@ -47,14 +45,12 @@ how `performance` reaches `EquityPoint` today.
 ## Anatomy of a feature
 
 ```
-features/backtests/
-├── api/          # transport + query keys — no React
-│   ├── backtests-api.ts
-│   └── query-keys.ts
-├── components/   # UI specific to this domain
-├── hooks/        # React Query bindings and feature logic
-├── types/        # Zod schemas; types inferred from them
-└── index.ts      # PUBLIC BARREL — the only entry point
+{feature}/
+├── {feature}-api.ts   # transport + query keys + React Query bindings
+├── card.tsx           # 
+├── components/        # UI specific to this domain
+├── {feature}-page.tsx # Feature's page
+└── types.ts           # Zod schemas; types inferred from them
 ```
 
 ### The barrel rule

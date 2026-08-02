@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils';
 import { formatCurrency, formatNumber, formatPercent, formatSigned } from '@/utils/format';
 import { toneFromValue } from '@/utils/tone';
 
-import type { Position } from '../types/portfolio';
+import type { Position } from '../types';
 
 const toneClass = {
   profit: 'text-[var(--profit)]',

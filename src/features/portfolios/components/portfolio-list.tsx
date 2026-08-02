@@ -3,7 +3,7 @@ import { Briefcase, WifiOff } from 'lucide-react';
 import { EmptyState } from '@/components/common/empty-state';
 import { Skeleton } from '@/components/ui/skeleton';
 
-import { usePortfolios } from '../hooks/use-portfolios';
+import { usePortfolios } from '../portfolios-api';
 
 import { PortfolioCard } from './portfolio-card';
 

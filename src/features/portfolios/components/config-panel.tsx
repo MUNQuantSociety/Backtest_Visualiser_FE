@@ -1,6 +1,6 @@
 import { Skeleton } from '@/components/ui/skeleton';
 
-import type { PortfolioConfig } from '../types/portfolio';
+import type { PortfolioConfig } from '../types';
 
 interface ConfigPanelProps {
   config: PortfolioConfig | undefined;

@@ -1,10 +1,10 @@
 import { PageHeader } from '@/components/common/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { LIVE_REFETCH_MS } from '@/config/constants';
 import { env } from '@/config/env';
-import { useSetTheme, useTheme, type Theme } from '@/stores/ui-store';
+import { useSetTheme, useTheme, type Theme } from '@/lib/ui-store';
 
 const THEMES: readonly { value: Theme; label: string }[] = [
   { value: 'light', label: 'Light' },
@@ -29,10 +29,8 @@ export default function SettingsPage() {
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Appearance</CardTitle>
-          <CardDescription>
-            {/*Chart palettes follow this setting — both chart
+          {/*Chart palettes follow this setting — both chart
                 libraries resolve the same tokens.*/}
-          </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
           {THEMES.map((option) => (

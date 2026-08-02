@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 import { formatNumber, formatPercent, formatSigned } from '@/utils/format';
 import { toneFromValue } from '@/utils/tone';
 
-import type { BacktestSummary, BacktestStatus } from '../types/backtest';
+import type { BacktestSummary, BacktestStatus } from './types';
 
 const statusVariant: Record<BacktestStatus, 'default' | 'secondary' | 'destructive' | 'outline'> = {
   queued: 'outline',

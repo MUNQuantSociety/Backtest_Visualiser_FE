@@ -12,7 +12,7 @@ import {
 import { useEffect, useRef } from 'react';
 
 import type { EquityPoint } from '@/features/backtests';
-import { useChartPalette } from '@/hooks/use-chart-palette';
+import { useChartPalette } from '@/utils/use-chart-palette';
 
 interface EquityCurveChartProps {
   data: readonly EquityPoint[];

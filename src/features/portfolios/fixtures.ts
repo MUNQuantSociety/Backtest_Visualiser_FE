@@ -4,7 +4,7 @@ import type {
   Execution,
   PortfolioDetail,
   PortfolioSummary,
-} from '../types/portfolio';
+} from './types';
 
 /**
  * Demo data for the MQS Master views, served when `VITE_USE_FIXTURES=true`.

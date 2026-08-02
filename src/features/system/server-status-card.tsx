@@ -4,8 +4,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { formatDuration } from '@/utils/format';
 
-import { useSystemStatus } from '../hooks/use-system';
-import type { ServiceState } from '../types/system';
+import { useSystemStatus } from './system-api';
+import type { ServiceState } from './types';
 
 const statePresentation: Record<
   ServiceState,

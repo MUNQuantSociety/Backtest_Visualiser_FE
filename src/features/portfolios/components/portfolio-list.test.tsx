@@ -3,8 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '@/lib/api-client';
 import { renderWithProviders, screen } from '@/test/test-utils';
 
-import * as api from '../api/portfolios-api';
-import type { PortfolioSummary } from '../types/portfolio';
+import * as api from '../portfolios-api';
+import type { PortfolioSummary } from '../types';
 
 import { PortfolioList } from './portfolio-list';
 

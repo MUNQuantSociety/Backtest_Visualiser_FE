@@ -1,4 +1,4 @@
-import type { LogEntry, SystemStatus } from '../types/system';
+import type { LogEntry, SystemStatus } from '../types';
 
 /**
  * Demo data for the MQS Master system views, served when `VITE_USE_FIXTURES=true`.

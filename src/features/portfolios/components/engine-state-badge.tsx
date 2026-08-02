@@ -1,6 +1,6 @@
 import { Badge, type BadgeProps } from '@/components/ui/badge';
 
-import type { EngineState } from '../types/portfolio';
+import type { EngineState } from '../types';
 
 /**
  * `RunEngine` runs each portfolio in its own thread behind a consecutive-failure

@@ -2,7 +2,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatCurrency, formatNumber } from '@/utils/format';
 
-import { usePortfolioExecutions } from '../hooks/use-portfolios';
+import { usePortfolioExecutions } from '../portfolios-api';
 
 interface ExecutionLogTableProps {
   portfolioId: string | undefined;
