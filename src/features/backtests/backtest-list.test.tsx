@@ -1,15 +1,34 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ApiError } from '@/lib/api-client';
+import { ApiError, apiClient } from '@/lib/api-client';
+import type * as ApiClientModule from '@/lib/api-client';
 import { renderWithProviders, screen } from '@/test/test-utils';
 
 import { BacktestList } from './backtest-list';
-import * as api from './backtests-api';
 import type { BacktestSummary } from './types';
 
-vi.mock('../api/backtests-api');
+/**
+ * Pinned so the suite does not inherit the developer's `.env.local` — with
+ * `VITE_USE_FIXTURES=true` the transport short-circuits to demo data and never
+ * makes a request, which would make these assertions depend on an untracked file.
+ */
+vi.mock('@/config/env', () => ({
+  env: { apiBaseUrl: '/api', apiTimeout: 30_000, useFixtures: false, isDev: false, isProd: true },
+}));
 
-const fetchBacktests = vi.mocked(api.fetchBacktests);
+/**
+ * Mocked at the HTTP boundary rather than at `fetchBacktests`, because
+ * `backtests-api` exports the transport and the query hooks from one module —
+ * and replacing a module's export does not rebind that module's own internal
+ * references, so `useBacktests` would still call the real fetch. Stubbing the
+ * client also keeps the Zod parse inside the tested path.
+ */
+vi.mock('@/lib/api-client', async (importOriginal) => {
+  const actual = await importOriginal<typeof ApiClientModule>();
+  return { ...actual, apiClient: { ...actual.apiClient, get: vi.fn() } };
+});
+
+const get = vi.mocked(apiClient.get);
 
 function makeSummary(overrides: Partial<BacktestSummary> = {}): BacktestSummary {
   return {
@@ -38,7 +57,7 @@ beforeEach(() => {
 
 describe('BacktestList', () => {
   it('renders a card per backtest with formatted metrics', async () => {
-    fetchBacktests.mockResolvedValue({
+    get.mockResolvedValue({
       items: [makeSummary(), makeSummary({ id: 'bt-2', name: 'Mean reversion' })],
       total: 2,
       page: 1,
@@ -55,7 +74,7 @@ describe('BacktestList', () => {
   });
 
   it('shows the error message when the request fails', async () => {
-    fetchBacktests.mockRejectedValue(new ApiError('Backend unavailable', 503, 'HTTP_503'));
+    get.mockRejectedValue(new ApiError('Backend unavailable', 503, 'HTTP_503'));
 
     renderWithProviders(<BacktestList />);
 
@@ -64,7 +83,7 @@ describe('BacktestList', () => {
   });
 
   it('shows an empty state rather than a bare grid when there are no results', async () => {
-    fetchBacktests.mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 25 });
+    get.mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 25 });
 
     renderWithProviders(<BacktestList />);
 
@@ -72,11 +91,13 @@ describe('BacktestList', () => {
   });
 
   it('passes filters through to the API', async () => {
-    fetchBacktests.mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 10 });
+    get.mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 10 });
 
     renderWithProviders(<BacktestList filters={{ status: 'failed', pageSize: 10 }} />);
 
     await screen.findByText('No backtests yet');
-    expect(fetchBacktests).toHaveBeenCalledWith({ status: 'failed', pageSize: 10 });
+    expect(get).toHaveBeenCalledWith('/backtests', {
+      params: { status: 'failed', pageSize: 10 },
+    });
   });
 });

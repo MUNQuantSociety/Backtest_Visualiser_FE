@@ -1,16 +1,28 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ApiError } from '@/lib/api-client';
+import { ApiError, apiClient } from '@/lib/api-client';
+import type * as ApiClientModule from '@/lib/api-client';
 import { renderWithProviders, screen } from '@/test/test-utils';
 
-import * as api from '../portfolios-api';
 import type { PortfolioSummary } from '../types';
 
 import { PortfolioList } from './portfolio-list';
 
-vi.mock('../api/portfolios-api');
+/**
+ * `useFixtures: false` is load-bearing here — `fetchPortfolios` returns demo
+ * data and never issues a request when the flag is on, and `.env.local` sets
+ * it to `true`. See the fuller note in `backtest-list.test.tsx`.
+ */
+vi.mock('@/config/env', () => ({
+  env: { apiBaseUrl: '/api', apiTimeout: 30_000, useFixtures: false, isDev: false, isProd: true },
+}));
 
-const fetchPortfolios = vi.mocked(api.fetchPortfolios);
+vi.mock('@/lib/api-client', async (importOriginal) => {
+  const actual = await importOriginal<typeof ApiClientModule>();
+  return { ...actual, apiClient: { ...actual.apiClient, get: vi.fn() } };
+});
+
+const get = vi.mocked(apiClient.get);
 
 function makeSummary(overrides: Partial<PortfolioSummary> = {}): PortfolioSummary {
   return {
@@ -36,7 +48,7 @@ beforeEach(() => {
 
 describe('PortfolioList', () => {
   it('renders a card per portfolio with formatted figures', async () => {
-    fetchPortfolios.mockResolvedValue({
+    get.mockResolvedValue({
       items: [makeSummary(), makeSummary({ id: '2', name: 'Mean Reversion' })],
       total: 2,
       page: 1,
@@ -52,7 +64,7 @@ describe('PortfolioList', () => {
   });
 
   it('distinguishes a halted engine from a merely stopped one', async () => {
-    fetchPortfolios.mockResolvedValue({
+    get.mockResolvedValue({
       items: [
         makeSummary({ id: '5', state: 'halted' }),
         makeSummary({ id: '6', name: 'Screener', state: 'stopped' }),
@@ -69,7 +81,7 @@ describe('PortfolioList', () => {
   });
 
   it('caps the rendered cards when a limit is given', async () => {
-    fetchPortfolios.mockResolvedValue({
+    get.mockResolvedValue({
       items: [
         makeSummary({ id: '1', name: 'One' }),
         makeSummary({ id: '2', name: 'Two' }),
@@ -88,7 +100,7 @@ describe('PortfolioList', () => {
   });
 
   it('shows the error message when the request fails', async () => {
-    fetchPortfolios.mockRejectedValue(new ApiError('Engine unreachable', 503, 'HTTP_503'));
+    get.mockRejectedValue(new ApiError('Engine unreachable', 503, 'HTTP_503'));
 
     renderWithProviders(<PortfolioList />);
 
@@ -97,7 +109,7 @@ describe('PortfolioList', () => {
   });
 
   it('explains an empty result rather than rendering a bare grid', async () => {
-    fetchPortfolios.mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 25 });
+    get.mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 25 });
 
     renderWithProviders(<PortfolioList />);
 

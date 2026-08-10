@@ -1,7 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { env } from '@/config/env';
 import { apiClient } from '@/lib/api-client';
 
+import { fixtureBacktest, fixtureBacktests } from './fixtures';
 import {
   backtestDetailSchema,
   backtestListResponseSchema,
@@ -15,17 +17,59 @@ import {
  * No React here: these stay trivially unit-testable and reusable outside hooks.
  */
 
+/** Fake latency, so loading states are visible in the demo instead of flashing. */
+const FIXTURE_DELAY_MS = 220;
+
+async function withFixtureDelay<T>(value: T): Promise<T> {
+  await new Promise((resolve) => setTimeout(resolve, FIXTURE_DELAY_MS));
+  return value;
+}
+
 export async function fetchBacktests(filters: BacktestFilters = {}) {
+  if (env.useFixtures) {
+    const all = fixtureBacktests();
+    const search = filters.search?.toLowerCase();
+
+    // Filtering happens here rather than in the component so the demo exercises
+    // the same round trip the real endpoint will: query in, filtered page out.
+    const items = all.filter((item) => {
+      if (filters.status && item.status !== filters.status) return false;
+      if (filters.strategyId && item.strategyId !== filters.strategyId) return false;
+      if (search && !`${item.name} ${item.symbol} ${item.strategyName}`.toLowerCase().includes(search)) {
+        return false;
+      }
+      return true;
+    });
+
+    const pageSize = filters.pageSize ?? items.length;
+    const page = filters.page ?? 1;
+
+    return withFixtureDelay(
+      backtestListResponseSchema.parse({
+        items: items.slice((page - 1) * pageSize, page * pageSize),
+        total: items.length,
+        page,
+        pageSize,
+      }),
+    );
+  }
+
   const data = await apiClient.get<unknown>('/backtests', { params: filters });
   return backtestListResponseSchema.parse(data);
 }
 
 export async function fetchBacktest(id: string): Promise<BacktestDetail> {
+  if (env.useFixtures) {
+    return withFixtureDelay(backtestDetailSchema.parse(fixtureBacktest(id)));
+  }
+
   const data = await apiClient.get<unknown>(`/backtests/${encodeURIComponent(id)}`);
   return backtestDetailSchema.parse(data);
 }
 
 export async function deleteBacktest(id: string): Promise<void> {
+  if (env.useFixtures) return withFixtureDelay(undefined);
+
   await apiClient.delete(`/backtests/${encodeURIComponent(id)}`);
 }
 

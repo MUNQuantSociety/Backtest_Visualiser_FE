@@ -12,6 +12,7 @@ import {
 import { useEffect, useRef } from 'react';
 
 import type { EquityPoint } from '@/features/backtests';
+import { withAlpha } from '@/lib/chart-theme';
 import { useChartPalette } from '@/utils/use-chart-palette';
 
 interface EquityCurveChartProps {
@@ -86,8 +87,8 @@ export function EquityCurveChart({ data, showBenchmark = true }: EquityCurveChar
     const [primary, , tertiary] = palette.series;
     equitySeriesRef.current?.applyOptions({
       lineColor: primary,
-      topColor: `color-mix(in oklab, ${primary} 35%, transparent)`,
-      bottomColor: `color-mix(in oklab, ${primary} 0%, transparent)`,
+      topColor: withAlpha(primary, 0.35),
+      bottomColor: withAlpha(primary, 0),
     });
     benchmarkSeriesRef.current?.applyOptions({ color: tertiary });
   }, [palette]);

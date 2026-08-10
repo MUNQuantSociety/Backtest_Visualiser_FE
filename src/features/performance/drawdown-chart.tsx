@@ -10,9 +10,9 @@ import {
 } from 'recharts';
 
 import type { EquityPoint } from '@/features/backtests';
-import { useChartPalette } from '@/utils/use-chart-palette';
 import { formatPercent } from '@/utils/format';
 import { drawdownSeries } from '@/utils/metrics';
+import { useChartPalette } from '@/utils/use-chart-palette';
 
 interface DrawdownChartProps {
   data: readonly EquityPoint[];
