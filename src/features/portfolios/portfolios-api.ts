@@ -5,6 +5,7 @@ import { env } from '@/config/env';
 import { apiClient } from '@/lib/api-client';
 
 import {
+  fixtureComposition,
   fixtureCorrelations,
   fixtureEquity,
   fixtureExecutions,
@@ -13,11 +14,13 @@ import {
 } from './fixtures';
 import { portfolioKeys } from './query-keys';
 import {
+  compositionSeriesSchema,
   correlationMatrixSchema,
   equitySeriesSchema,
   executionListResponseSchema,
   portfolioDetailSchema,
   portfolioListResponseSchema,
+  type CompositionSeries,
   type CorrelationMatrix,
   type EquitySeries,
   type ExecutionFilters,
@@ -79,6 +82,21 @@ export async function fetchPortfolioEquity(id: string, days: number): Promise<Eq
     params: { days },
   });
   return equitySeriesSchema.parse(data);
+}
+
+export async function fetchPortfolioComposition(
+  id: string,
+  days: number,
+): Promise<CompositionSeries> {
+  if (env.useFixtures) {
+    return withFixtureDelay(compositionSeriesSchema.parse(fixtureComposition(id, days)));
+  }
+
+  const data = await apiClient.get<unknown>(
+    `/live/portfolios/${encodeURIComponent(id)}/composition`,
+    { params: { days } },
+  );
+  return compositionSeriesSchema.parse(data);
 }
 
 export async function fetchPortfolioExecutions(id: string, filters: ExecutionFilters = {}) {
@@ -218,5 +236,15 @@ export function usePortfolioCorrelations(id: string | undefined) {
     enabled: Boolean(id),
     // A rolling correlation over 90 days barely moves intraday.
     staleTime: 30 * 60_000,
+  });
+}
+
+export function usePortfolioComposition(id: string | undefined, days = 180) {
+  return useQuery({
+    queryKey: portfolioKeys.composition(id ?? '', days),
+    queryFn: () => fetchPortfolioComposition(id ?? '', days),
+    enabled: Boolean(id),
+    // Same reasoning as the equity series: this is historical, not live.
+    staleTime: 5 * 60_000,
   });
 }

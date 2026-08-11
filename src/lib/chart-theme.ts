@@ -103,6 +103,8 @@ export interface ChartPalette {
   background: string;
   profit: string;
   loss: string;
+  /** For components that carry no directional meaning, e.g. a cash band. */
+  neutral: string;
   series: [string, string, string, string, string];
 }
 
@@ -114,6 +116,7 @@ export function readChartPalette(): ChartPalette {
     background: resolveToken('card'),
     profit: resolveToken('profit'),
     loss: resolveToken('loss'),
+    neutral: resolveToken('neutral'),
     series: [
       resolveToken('chart-1'),
       resolveToken('chart-2'),

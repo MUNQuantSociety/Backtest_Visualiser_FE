@@ -118,6 +118,60 @@ export function profitFactor(pnls: readonly number[]): number {
   return grossProfit / grossLoss;
 }
 
+export interface HistogramBin {
+  /** Inclusive lower edge. */
+  from: number;
+  /** Exclusive upper edge, except for the final bin which includes its top. */
+  to: number;
+  count: number;
+}
+
+/**
+ * Bins values for a distribution chart, with an edge forced exactly at zero.
+ *
+ * The zero edge is the whole point. Bin naively across the full range and the
+ * central bin straddles zero, so it holds winners *and* losers and any colour
+ * you give it is a lie. Splitting the range at zero and binning each side
+ * independently means every bin is unambiguously one sign.
+ *
+ * `binsPerSide` is a target, not a guarantee — a set with no losers returns
+ * only positive bins.
+ */
+export function histogram(values: readonly number[], binsPerSide = 12): HistogramBin[] {
+  if (values.length === 0) return [];
+
+  const negatives = values.filter((value) => value < 0);
+  const positives = values.filter((value) => value > 0);
+
+  const bins: HistogramBin[] = [];
+
+  const push = (min: number, max: number, count: number) => {
+    if (count <= 0) return;
+    // A degenerate range (every value identical) would give a zero-width bin.
+    const width = (max - min) / count || 1;
+    for (let i = 0; i < count; i += 1) {
+      bins.push({ from: min + width * i, to: min + width * (i + 1), count: 0 });
+    }
+  };
+
+  if (negatives.length > 0) push(Math.min(...negatives), 0, binsPerSide);
+  if (positives.length > 0) push(0, Math.max(...positives), binsPerSide);
+
+  if (bins.length === 0) return [];
+
+  for (const value of values) {
+    // Break-even trades are neither wins nor losses; excluding them keeps the
+    // bar heights consistent with the win/loss counts shown elsewhere.
+    if (value === 0) continue;
+
+    const index = bins.findIndex((bin) => value >= bin.from && value < bin.to);
+    const target = index === -1 ? bins[bins.length - 1] : bins[index];
+    if (target) target.count += 1;
+  }
+
+  return bins;
+}
+
 /** Mean of the winning trades. Zero when there were none. */
 export function averageWin(pnls: readonly number[]): number {
   return mean(pnls.filter((pnl) => pnl > 0));

@@ -62,6 +62,40 @@ export const strategyListResponseSchema = z.object({
  * the defaults for that form and nothing more.
  */
 
+/** Largest source file accepted, in bytes. A strategy is not a dataset. */
+export const MAX_SOURCE_BYTES = 256 * 1024;
+
+/**
+ * New strategy source, however the author supplied it.
+ *
+ * `source` is text in both cases — the upload path reads the file in the
+ * browser so the author can read it back before submitting. `filename` records
+ * where it came from, which matters when someone uploads the wrong file and
+ * needs to be told which one.
+ */
+export const strategySubmissionSchema = z.object({
+  name: z.string().trim().min(1, 'Give the strategy a name.').max(80),
+  description: z.string().trim().max(500).default(''),
+  source: z
+    .string()
+    .min(1, 'Add some code, or upload a file.')
+    .refine(
+      (value) => new Blob([value]).size <= MAX_SOURCE_BYTES,
+      'That file is too large — strategies are capped at 256 KB.',
+    ),
+  /** Null when typed directly into the editor. */
+  filename: z.string().nullable().default(null),
+});
+export type StrategySubmission = z.infer<typeof strategySubmissionSchema>;
+
+export const strategySubmissionResultSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  status: strategyStatusSchema,
+  message: z.string().default(''),
+});
+export type StrategySubmissionResult = z.infer<typeof strategySubmissionResultSchema>;
+
 export interface StrategyFilters {
   search?: string;
   status?: StrategyStatus;

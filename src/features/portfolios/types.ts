@@ -95,6 +95,32 @@ export const equitySamplePointSchema = z.object({
 });
 export type EquitySamplePoint = z.infer<typeof equitySamplePointSchema>;
 
+/**
+ * Per-component notional over time — cash plus one entry per ticker.
+ *
+ * Stored column-wise (parallel arrays keyed by ticker) rather than as a row of
+ * objects per timestamp. At minute resolution over a year that is ~98k points
+ * per series, and the row-of-objects shape would repeat every key 98k times.
+ *
+ * `downsampled` follows the same contract as `equitySeriesSchema`: the server
+ * decides the resolution and the UI says so rather than implying full fidelity.
+ */
+export const compositionSeriesSchema = z
+  .object({
+    timestamps: z.array(z.string()),
+    cash: z.array(z.number()),
+    /** Ticker -> notional at each timestamp. Same length as `timestamps`. */
+    holdings: z.record(z.string(), z.array(z.number())),
+    downsampled: z.boolean().default(false),
+  })
+  .refine(
+    (value) =>
+      value.cash.length === value.timestamps.length &&
+      Object.values(value.holdings).every((series) => series.length === value.timestamps.length),
+    'Every series must be the same length as `timestamps`.',
+  );
+export type CompositionSeries = z.infer<typeof compositionSeriesSchema>;
+
 /** Row shape for the portfolio list — lighter than the detail payload. */
 export const portfolioSummarySchema = z.object({
   id: z.string(),

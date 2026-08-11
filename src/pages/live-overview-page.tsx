@@ -1,11 +1,13 @@
 import { Link } from 'react-router';
 
 import { paths } from '../app/paths';
+import { ChartContainer } from '../components/charts/chart-container';
 import { PageHeader } from '../components/common/page-header';
 import { StatTile } from '../components/common/stat-tile';
 import { buttonVariants } from '../components/ui/button';
 import { PortfolioList } from '../features/portfolios/components/portfolio-list';
-import { usePortfolioTotals } from '../features/portfolios/portfolios-api';
+import { SleevePnlChart } from '../features/portfolios/components/sleeve-pnl-chart';
+import { usePortfolios, usePortfolioTotals } from '../features/portfolios/portfolios-api';
 import { ServerStatusCard } from '../features/system/server-status-card';
 import { formatCurrency, formatPercent, formatSigned } from '../utils/format';
 import { toneFromValue } from '../utils/tone';
@@ -20,6 +22,7 @@ import { toneFromValue } from '../utils/tone';
  */
 export default function LiveOverviewPage() {
   const { totals, isPending } = usePortfolioTotals();
+  const { data: portfolios } = usePortfolios();
   const placeholder = '—';
 
   return (
@@ -71,6 +74,17 @@ export default function LiveOverviewPage() {
           isLoading={isPending}
         />
       </div>
+
+      {/* The tiles above give one aggregate P&L, which cannot show whether it
+          came from every sleeve or one carrying the rest. */}
+      <ChartContainer
+        title="P&amp;L by sleeve"
+        description="Where the aggregate figure above actually comes from."
+        height={280}
+        isLoading={isPending}
+      >
+        <SleevePnlChart portfolios={portfolios?.items ?? []} />
+      </ChartContainer>
 
       <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
         <section className="space-y-3">

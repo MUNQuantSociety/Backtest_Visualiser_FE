@@ -1,4 +1,5 @@
 import type {
+  CompositionSeries,
   CorrelationMatrix,
   EquitySamplePoint,
   Execution,
@@ -292,4 +293,61 @@ export function fixtureCorrelations(id: string): CorrelationMatrix {
   }
 
   return { tickers, matrix, lookbackDays: blueprint?.lookbackDays ?? 90 };
+}
+
+/**
+ * Per-component notional over time, for the composition chart.
+ *
+ * Deliberately *not* minute-by-minute: a year of minute bars is ~98k points per
+ * series, which is a real payload the backend should downsample before sending.
+ * Generating that here would hide the problem rather than model it, so this
+ * emits daily samples and reports `downsampled: true` — the same thing a
+ * competent endpoint would do.
+ *
+ * Holdings are driven by a slow weight drift plus periodic flat-to-cash
+ * stretches, so the chart shows a strategy moving in and out of the market
+ * rather than five flat ribbons.
+ */
+export function fixtureComposition(id: string, days: number): CompositionSeries {
+  const blueprint = BLUEPRINTS.find((candidate) => candidate.id === id);
+  const tickers = blueprint?.tickers ?? [];
+  const curve = equityWalk(id, days);
+  const random = makeRandom(seedFrom(id) + 137);
+
+  const phases = tickers.map(() => random() * Math.PI * 2);
+  const timestamps: string[] = [];
+  const cash: number[] = [];
+  const holdings: Record<string, number[]> = Object.fromEntries(
+    tickers.map((ticker) => [ticker, [] as number[]]),
+  );
+
+  curve.forEach((point, index) => {
+    timestamps.push(point.date);
+
+    // Roughly every three weeks the strategy stands down for a few days; the
+    // resulting all-cash gaps are the most legible thing on the chart.
+    const flat = index % 21 >= 18;
+
+    const rawWeights = tickers.map((_ticker, position) => {
+      if (flat) return 0;
+      const phase = phases[position] ?? 0;
+      return 0.6 + Math.sin(index / 18 + phase) * 0.35 + random() * 0.1;
+    });
+
+    const weightTotal = rawWeights.reduce((sum, value) => sum + value, 0);
+    // Keep 8-20% in cash even when fully deployed, so "Cash" never vanishes.
+    const invested = flat ? 0 : point.equity * (0.8 + Math.sin(index / 40) * 0.06);
+
+    let allocated = 0;
+    tickers.forEach((ticker, position) => {
+      const weight = weightTotal === 0 ? 0 : (rawWeights[position] ?? 0) / weightTotal;
+      const value = Math.round(invested * weight * 100) / 100;
+      allocated += value;
+      holdings[ticker]?.push(value);
+    });
+
+    cash.push(Math.round((point.equity - allocated) * 100) / 100);
+  });
+
+  return { timestamps, cash, holdings, downsampled: true };
 }

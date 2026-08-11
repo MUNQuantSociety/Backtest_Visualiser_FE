@@ -44,6 +44,20 @@ export const router = createBrowserRouter([
         },
       },
       {
+        path: routePatterns.compare,
+        lazy: async () => {
+          const ComparePage = await import('@/pages/compare-page');
+          return { Component: ComparePage.default };
+        },
+      },
+      {
+        path: routePatterns.strategies,
+        lazy: async () => {
+          const StrategiesPage = await import('@/pages/strategies-page');
+          return { Component: StrategiesPage.default };
+        },
+      },
+      {
         path: routePatterns.live,
         lazy: async () => {
           const LiveOverviewPage = await import('@/pages/live-overview-page');

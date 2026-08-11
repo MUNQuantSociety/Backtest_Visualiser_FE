@@ -8,7 +8,13 @@
 
 export { BacktestCard } from './backtest-card';
 export { BacktestList } from './backtest-list';
-export { useBacktest, useBacktests, useDeleteBacktest } from './backtests-api';
+export {
+  fetchBacktests,
+  useBacktest,
+  useBacktestDetails,
+  useBacktests,
+  useDeleteBacktest,
+} from './backtests-api';
 export { backtestKeys } from './backtests-api';
 export type {
   BacktestDetail,

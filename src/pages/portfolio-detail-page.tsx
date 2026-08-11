@@ -9,6 +9,7 @@ import { DrawdownChart, EquityCurveChart } from '@/features/performance';
 import { formatNumber, formatPercent } from '@/utils/format';
 import { maxDrawdown, sharpeRatio, toReturns } from '@/utils/metrics';
 
+import { CompositionChart } from '../features/portfolios/components/composition-chart';
 import { ConfigPanel } from '../features/portfolios/components/config-panel';
 import { CorrelationMatrix } from '../features/portfolios/components/correlation-matrix';
 import { EngineStateBadge } from '../features/portfolios/components/engine-state-badge';
@@ -17,7 +18,7 @@ import { PortfolioSummary } from '../features/portfolios/components/portfolio-su
 import { PortfolioSwitcher } from '../features/portfolios/components/portfolio-switcher';
 import { PositionsTable } from '../features/portfolios/components/positions-table';
 import { usePortfolio } from '../features/portfolios/portfolios-api';
-import { usePortfolioEquity } from '../features/portfolios/portfolios-api';
+import { usePortfolioComposition, usePortfolioEquity } from '../features/portfolios/portfolios-api';
 
 /**
  * The prototype's portfolio page — summary, historical graph, asset
@@ -34,6 +35,7 @@ export default function PortfolioDetailPage() {
   const { portfolioId } = useParams<{ portfolioId: string }>();
   const { data: portfolio, isPending, isError, error } = usePortfolio(portfolioId);
   const { data: equity, isPending: isEquityPending } = usePortfolioEquity(portfolioId);
+  const { data: composition, isPending: isCompositionPending } = usePortfolioComposition(portfolioId);
 
   const points = equity?.points ?? [];
   const returns = toReturns(points.map((point) => point.equity));
@@ -73,6 +75,19 @@ export default function PortfolioDetailPage() {
         {/* `EquitySamplePoint` is structurally `EquityPoint` minus the optional
             benchmark, so it satisfies the chart's contract without a cast. */}
         <EquityCurveChart data={points} showBenchmark={false} />
+      </ChartContainer>
+
+      <ChartContainer
+        title="Portfolio composition over time"
+        description={
+          composition?.downsampled
+            ? 'Notional by component. Downsampled by the server — not every bar is shown.'
+            : 'Notional value held in each component, including cash.'
+        }
+        isLoading={isCompositionPending}
+        height={340}
+      >
+        <CompositionChart data={composition} />
       </ChartContainer>
 
       <div className="grid gap-6 lg:grid-cols-2">

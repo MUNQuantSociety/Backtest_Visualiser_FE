@@ -68,3 +68,4 @@ export const useUiStore = create<UiState>()(
 export const useTheme = () => useUiStore((state) => state.theme);
 export const useSetTheme = () => useUiStore((state) => state.setTheme);
 export const useSidebarCollapsed = () => useUiStore((state) => state.sidebarCollapsed);
+export const useToggleSidebar = () => useUiStore((state) => state.toggleSidebar);

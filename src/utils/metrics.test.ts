@@ -4,6 +4,7 @@ import {
   averageLoss,
   averageWin,
   cagr,
+  histogram,
   maxDrawdown,
   payoffRatio,
   profitFactor,
@@ -82,6 +83,41 @@ describe('winRate / profitFactor', () => {
 
   it('is Infinity when nothing lost money', () => {
     expect(profitFactor([10, 20])).toBe(Number.POSITIVE_INFINITY);
+  });
+});
+
+describe('histogram', () => {
+  it('never puts winners and losers in the same bin', () => {
+    const bins = histogram([-10, -5, -1, 1, 5, 10], 4);
+    // Every bin must sit wholly on one side of zero, or its colour is a lie.
+    for (const bin of bins) {
+      expect(bin.from >= 0 || bin.to <= 0).toBe(true);
+    }
+  });
+
+  it('counts every non-zero value exactly once', () => {
+    const values = [-10, -5, -1, 1, 5, 10, 10];
+    const total = histogram(values, 5).reduce((sum, bin) => sum + bin.count, 0);
+    expect(total).toBe(values.length);
+  });
+
+  it('includes the maximum value rather than dropping it off the top edge', () => {
+    const bins = histogram([1, 10], 3);
+    expect(bins.reduce((sum, bin) => sum + bin.count, 0)).toBe(2);
+  });
+
+  it('excludes break-even trades from the counts', () => {
+    expect(histogram([0, 0, 0]).length).toBe(0);
+    expect(histogram([-1, 0, 1], 2).reduce((sum, bin) => sum + bin.count, 0)).toBe(2);
+  });
+
+  it('returns only one side when every trade went the same way', () => {
+    const bins = histogram([1, 2, 3], 3);
+    expect(bins.every((bin) => bin.from >= 0)).toBe(true);
+  });
+
+  it('is empty for no values', () => {
+    expect(histogram([])).toEqual([]);
   });
 });
 

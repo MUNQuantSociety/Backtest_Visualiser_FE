@@ -15,6 +15,8 @@ export const portfolioKeys = {
   details: () => [...portfolioKeys.all, 'detail'] as const,
   detail: (id: string) => [...portfolioKeys.details(), id] as const,
   equity: (id: string, days: number) => [...portfolioKeys.detail(id), 'equity', days] as const,
+  composition: (id: string, days: number) =>
+    [...portfolioKeys.detail(id), 'composition', days] as const,
   executions: (id: string, filters: ExecutionFilters) =>
     [...portfolioKeys.detail(id), 'executions', filters] as const,
   correlations: (id: string) => [...portfolioKeys.detail(id), 'correlations'] as const,

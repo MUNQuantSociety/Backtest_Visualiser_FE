@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { env } from '@/config/env';
 import { apiClient } from '@/lib/api-client';
@@ -99,6 +99,29 @@ export function useBacktest(id: string | undefined) {
     enabled: Boolean(id),
     // A completed backtest never changes, so cache it for the session.
     staleTime: Number.POSITIVE_INFINITY,
+  });
+}
+
+/**
+ * Several backtest details at once, for side-by-side comparison.
+ *
+ * `useQueries` rather than a bulk endpoint: each detail is already cached
+ * individually by `useBacktest`, so opening a run you have compared before is
+ * free, and adding a fourth strategy fetches one payload instead of re-fetching
+ * all four.
+ */
+export function useBacktestDetails(ids: readonly string[]) {
+  return useQueries({
+    queries: ids.map((id) => ({
+      queryKey: backtestKeys.detail(id),
+      queryFn: () => fetchBacktest(id),
+      staleTime: Number.POSITIVE_INFINITY,
+    })),
+    combine: (results) => ({
+      data: results.flatMap((result) => (result.data ? [result.data] : [])),
+      isPending: results.some((result) => result.isPending),
+      isError: results.some((result) => result.isError),
+    }),
   });
 }
 

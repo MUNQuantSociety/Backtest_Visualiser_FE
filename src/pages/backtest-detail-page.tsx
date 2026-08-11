@@ -6,7 +6,7 @@ import { EmptyState } from '@/components/common/empty-state';
 import { PageHeader } from '@/components/common/page-header';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { useBacktest } from '@/features/backtests';
-import { EquityCurveChart, MetricsGrid, MetricsTable } from '@/features/performance';
+import { EquityCurveChart, MetricsGrid, MetricsTable, PnlHistogram } from '@/features/performance';
 
 export default function BacktestDetailPage() {
   const { backtestId } = useParams<{ backtestId: string }>();
@@ -47,6 +47,15 @@ export default function BacktestDetailPage() {
         isLoading={isPending}
       >
         <EquityCurveChart data={equityCurve} trades={data?.trades} showDrawdownPane />
+      </ChartContainer>
+
+      <ChartContainer
+        title="Distribution of profit &amp; loss per trade"
+        description="Realised P&amp;L per closed trade. Bins split at zero, so colour always matches sign."
+        height={300}
+        isLoading={isPending}
+      >
+        <PnlHistogram trades={data?.trades ?? []} />
       </ChartContainer>
 
       <Card>
