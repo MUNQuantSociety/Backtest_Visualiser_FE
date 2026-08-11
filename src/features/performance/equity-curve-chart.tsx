@@ -89,9 +89,8 @@ export function EquityCurveChart({
     });
 
     if (showDrawdownPane) {
-      // The pane is created by addressing index 1 here, not by `addPane()` —
-      // that discards an empty pane immediately unless `preserveEmptyPane` is
-      // set, so the series would land back on pane 0 and the split vanish.
+      // Addressing pane index 1 creates the pane implicitly, so there is no
+      // separate `addPane()` call to keep in sync with the index used here.
       drawdownSeriesRef.current = chart.addSeries(
         BaselineSeries,
         {
