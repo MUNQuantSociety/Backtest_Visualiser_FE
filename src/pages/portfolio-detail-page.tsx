@@ -5,11 +5,10 @@ import { EmptyState } from '@/components/common/empty-state';
 import { PageHeader } from '@/components/common/page-header';
 import { StatTile } from '@/components/common/stat-tile';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { DrawdownChart, EquityCurveChart } from '@/features/performance';
 import { formatNumber, formatPercent } from '@/utils/format';
 import { maxDrawdown, sharpeRatio, toReturns } from '@/utils/metrics';
 
-import { DrawdownChart } from '../features/performance/drawdown-chart';
-import { EquityCurveChart } from '../features/performance/equity-curve-chart';
 import { ConfigPanel } from '../features/portfolios/components/config-panel';
 import { CorrelationMatrix } from '../features/portfolios/components/correlation-matrix';
 import { EngineStateBadge } from '../features/portfolios/components/engine-state-badge';

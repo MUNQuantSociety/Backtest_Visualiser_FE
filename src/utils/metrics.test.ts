@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  averageLoss,
+  averageWin,
   cagr,
   maxDrawdown,
+  payoffRatio,
   profitFactor,
   sharpeRatio,
   stdDev,
@@ -79,5 +82,35 @@ describe('winRate / profitFactor', () => {
 
   it('is Infinity when nothing lost money', () => {
     expect(profitFactor([10, 20])).toBe(Number.POSITIVE_INFINITY);
+  });
+});
+
+describe('averageWin / averageLoss / payoffRatio', () => {
+  it('averages each side independently', () => {
+    expect(averageWin([10, 20, -5, -15])).toBe(15);
+    expect(averageLoss([10, 20, -5, -15])).toBe(-10);
+  });
+
+  it('ignores break-even trades on both sides', () => {
+    expect(averageWin([10, 0, 20])).toBe(15);
+    expect(averageLoss([-10, 0, -20])).toBe(-15);
+  });
+
+  it('divides average win by the magnitude of average loss', () => {
+    expect(payoffRatio([10, 20, -5, -15])).toBe(1.5);
+  });
+
+  it('separates payoff ratio from profit factor', () => {
+    // One big winner against three small losers: the payoff ratio is excellent
+    // while the profit factor is barely above 1. A tearsheet showing only one
+    // of these would flatter the strategy.
+    const pnls = [90, -20, -20, -20];
+    expect(payoffRatio(pnls)).toBeCloseTo(4.5, 10);
+    expect(profitFactor(pnls)).toBeCloseTo(1.5, 10);
+  });
+
+  it('is Infinity when nothing lost money, and 0 with no trades', () => {
+    expect(payoffRatio([10, 20])).toBe(Number.POSITIVE_INFINITY);
+    expect(payoffRatio([])).toBe(0);
   });
 });

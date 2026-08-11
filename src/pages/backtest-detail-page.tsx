@@ -4,11 +4,9 @@ import { useParams } from 'react-router';
 import { ChartContainer } from '@/components/charts/chart-container';
 import { EmptyState } from '@/components/common/empty-state';
 import { PageHeader } from '@/components/common/page-header';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { useBacktest } from '@/features/backtests';
-
-import { DrawdownChart } from '../features/performance/drawdown-chart';
-import { EquityCurveChart } from '../features/performance/equity-curve-chart';
-import { MetricsGrid } from '../features/performance/metrics-grid';
+import { EquityCurveChart, MetricsGrid, MetricsTable } from '@/features/performance';
 
 export default function BacktestDetailPage() {
   const { backtestId } = useParams<{ backtestId: string }>();
@@ -39,23 +37,26 @@ export default function BacktestDetailPage() {
 
       <MetricsGrid metrics={data?.metrics} isLoading={isPending} />
 
+      {/* One figure, two panes. The drawdown shares the equity curve's time
+          axis so a dip and the hole it dug line up vertically — reading them
+          off two separately-scaled charts meant re-anchoring on the dates. */}
       <ChartContainer
-        title="Equity curve"
-        description="Account value over the backtest window, versus benchmark."
-        height={380}
+        title="Performance vs. benchmark and drawdown"
+        description="Account value against buy-and-hold, with trade entries and distance below the running peak."
+        height={520}
         isLoading={isPending}
       >
-        <EquityCurveChart data={equityCurve} />
+        <EquityCurveChart data={equityCurve} trades={data?.trades} showDrawdownPane />
       </ChartContainer>
 
-      <ChartContainer
-        title="Drawdown"
-        description="Distance below the running peak."
-        height={220}
-        isLoading={isPending}
-      >
-        <DrawdownChart data={equityCurve} />
-      </ChartContainer>
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Performance summary</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <MetricsTable detail={data} isLoading={isPending} />
+        </CardContent>
+      </Card>
     </>
   );
 }

@@ -59,7 +59,7 @@ serves generated demo data for the `/live` views so they render standalone. See
 | --------------------------- | ---------------------------------------------------------------- |
 | `/`                         | Backtest dashboard                                               |
 | `/backtests`                | All runs, filters in the URL                                     |
-| `/backtests/:backtestId`    | Run detail — equity curve, drawdown, metrics, trades             |
+| `/backtests/:backtestId`    | Run detail — performance vs. benchmark, drawdown, tearsheet      |
 | `/live`                     | MQS Master overview — balance, P&L, server status                |
 | `/live/portfolios`          | Every sleeve the live engine runs                                |
 | `/live/portfolios/:id`      | Summary, equity, drawdowns, risk, positions, correlations, fills |
@@ -96,13 +96,55 @@ path into it:
 | Feature                | Owns                                                    |
 | ---------------------- | ------------------------------------------------------- |
 | `features/backtests`   | Backtest runs, their metrics and round-trip trades      |
-| `features/performance` | Equity curve and drawdown charts, metrics grid          |
+| `features/performance` | Equity/drawdown charts, metrics grid, tearsheet table   |
 | `features/portfolios`  | Live portfolios, positions, fills, correlations, config |
 | `features/system`      | Engine health per service, and the log tail             |
 
 `features/performance` is shared: the live portfolio page renders its
 `EquityCurveChart` and `DrawdownChart` unchanged. Theme-reactive palettes and
 canvas token resolution are solved once, not per product.
+
+## Charting
+
+Two libraries, split by what the x-axis means. **Do not add a third.**
+
+| Library              | Use for                                                     |
+| -------------------- | ----------------------------------------------------------- |
+| `lightweight-charts` | Anything on a time axis: equity, drawdown, price            |
+| `recharts`           | Categorical and derived views: histograms, distributions    |
+
+`lightweight-charts` is canvas, handles very large series, and is the only one
+of the two with multi-pane support and series markers. `recharts` is SVG and
+declarative, which is far better for a binned chart with a custom tooltip and
+far worse past a few thousand points. Chart.js was considered and rejected: it
+adds a third dependency without covering either case better than the incumbent.
+
+**The equity chart is one component, not several.** `EquityCurveChart` takes
+optional `trades` (entry markers) and `showDrawdownPane` (a second pane sharing
+the time axis). The backtest detail page passes both; the live portfolio page
+passes neither and gets the plain curve. If you find yourself writing a second
+equity chart, stop — that is the reason both products live in one app.
+
+### The `oklch()` trap
+
+Tailwind 4 emits design tokens as `oklch(...)`, and `lightweight-charts` ships
+its own colour parser that predates CSS Color 4. Handing it a token verbatim
+throws `Failed to parse color` and the chart never mounts — silently, because
+the `ChartContainer` error boundary swallows it and you just get a blank panel.
+
+Browsers will not convert for you either: Chrome serialises both
+`getComputedStyle(el).color` and `ctx.fillStyle` straight back as `oklch(...)`.
+So `src/lib/chart-theme.ts` paints each token to a 1×1 canvas and reads the
+pixel back, which forces a real sRGB conversion.
+
+Consequences for anyone touching chart colour:
+
+- Always go through `resolveToken()` / `useChartPalette()`. Never read a CSS
+  custom property into a canvas chart yourself.
+- `color-mix()` is unparseable for the same reason. Use `withAlpha()`.
+- This applies to `lightweight-charts` only. Recharts hands colours to SVG,
+  where the browser parses them natively — which is why the drawdown chart kept
+  working while the equity curve was broken.
 
 ### Two things that look like duplication and are not
 
@@ -137,10 +179,17 @@ make `VITE_USE_FIXTURES=false` silently mean *true*.
 
 ## Fixtures
 
-With `VITE_USE_FIXTURES=true`, the `/live` views render generated demo data
+With `VITE_USE_FIXTURES=true`, **both** products render generated demo data
 shaped like the real payloads — including the actual portfolio IDs, ticker sets
 and strategy class names from MQSMaster, so nobody learns a layout that does not
 exist. Settings shows a **"Fixtures — not live data"** badge whenever it is on.
+
+The backtest fixtures derive their numbers rather than inventing them: metrics
+run through `@/utils/metrics` over the generated equity curve, and trade P&L is
+scaled so it reconciles exactly with the curve's net profit. A tearsheet whose
+Sharpe disagrees with its own equity chart is worse than no tearsheet. The set
+also includes a losing strategy on purpose — a demo where everything wins is the
+one thing a quant reader will not believe.
 
 The swap happens in each feature's `api/` module and nowhere else. Components,
 hooks and query keys are byte-identical in both modes, which is what makes
@@ -199,4 +248,14 @@ pull request against the trading repo, with review.
 - **Optional props are typed `?: T | undefined`** — required by
   `exactOptionalPropertyTypes`.
 - **Import features through their barrel.** `@/features/portfolios`, never
-  `@/features/portfolios/hooks/use-portfolios`. ESLint enforces it.
+  `@/features/portfolios/portfolios-api`. ESLint enforces it.
+- **Mock at the `apiClient` boundary in component tests**, not at the feature's
+  fetch function. Each `<feature>-api.ts` exports the transport *and* the React
+  Query hooks, and replacing a module's export does not rebind that module's own
+  internal references — so `vi.mock` on `fetchBacktests` leaves `useBacktests`
+  calling the real one. Mocking `apiClient` sidesteps that and keeps the Zod
+  parse in the tested path.
+- **Pin `env.useFixtures` to `false` in tests.** Vitest loads Vite's env, so a
+  developer's `.env.local` with `VITE_USE_FIXTURES=true` would otherwise make
+  the transport short-circuit to demo data and never issue the request the test
+  is asserting on. Test outcomes must not depend on an untracked file.
