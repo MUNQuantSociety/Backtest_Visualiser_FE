@@ -68,12 +68,62 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="flex min-h-dvh">
         <Sidebar />
         <div className="flex min-w-0 flex-1 flex-col">
+          <TopNav />
           <main id="main" className="mx-auto w-full max-w-[1600px] flex-1 space-y-6 p-6">
             {children}
           </main>
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Navigation for viewports below `md`, where `Sidebar` is display:none.
+ *
+ * Without this the app has *no* navigation at all under 768px — every link is
+ * unreachable and the only way to change page is editing the URL. A scrolling
+ * row rather than a hamburger drawer: it needs no open/close state, no overlay
+ * and no focus trap, and every destination stays one tap away instead of two.
+ *
+ * Both this and `Sidebar` render from the same `sections` array, so a new route
+ * cannot appear in one and go missing from the other.
+ */
+function TopNav() {
+  return (
+    <header className="sticky top-0 z-40 border-b bg-card/95 backdrop-blur md:hidden">
+      <div className="flex h-14 items-center gap-2 border-b px-4">
+        <img src={logo} alt="MQS Logo" className="h-6" />
+        <span className="truncate text-sm font-semibold">{APP_NAME}</span>
+      </div>
+
+      {/* The row scrolls sideways inside itself; the page body must not. */}
+      <nav aria-label="Main" className="overflow-x-auto">
+        <ul className="flex w-max items-center gap-1 px-2 py-2">
+          {sections.flatMap((section) =>
+            section.items.map(({ to, label, icon: Icon, end }) => (
+              <li key={to}>
+                <NavLink
+                  to={to}
+                  end={end}
+                  className={({ isActive }) =>
+                    cn(
+                      'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm whitespace-nowrap transition-colors',
+                      isActive
+                        ? 'bg-accent font-medium text-accent-foreground'
+                        : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground',
+                    )
+                  }
+                >
+                  <Icon className="size-4" aria-hidden />
+                  {label}
+                </NavLink>
+              </li>
+            )),
+          )}
+        </ul>
+      </nav>
+    </header>
   );
 }
 
