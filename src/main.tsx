@@ -5,7 +5,7 @@ import { RouterProvider } from 'react-router';
 import { AppProviders } from '@/app/providers';
 import { router } from '@/app/router';
 
-import './styles/globals.css';
+import './app/styles.css';
 
 const container = document.getElementById('root');
 if (!container) {

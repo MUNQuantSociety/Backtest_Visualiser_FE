@@ -1,6 +1,6 @@
 import { useEffect, type ReactNode } from 'react';
 
-import { useTheme } from '@/stores/ui-store';
+import { useTheme } from '@/lib/ui-store';
 
 /**
  * Applies the `dark` class to <html>, which is what both Tailwind's dark

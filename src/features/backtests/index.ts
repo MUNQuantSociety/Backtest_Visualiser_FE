@@ -6,10 +6,10 @@
  * deep paths. That keeps internals free to move without a repo-wide refactor.
  */
 
-export { BacktestCard } from './components/backtest-card';
-export { BacktestList } from './components/backtest-list';
-export { useBacktest, useBacktests, useDeleteBacktest } from './hooks/use-backtests';
-export { backtestKeys } from './api/query-keys';
+export { BacktestCard } from './backtest-card';
+export { BacktestList } from './backtest-list';
+export { useBacktest, useBacktests, useDeleteBacktest } from './backtests-api';
+export { backtestKeys } from './backtests-api';
 export type {
   BacktestDetail,
   BacktestFilters,
@@ -18,4 +18,4 @@ export type {
   EquityPoint,
   PerformanceMetrics,
   Trade,
-} from './types/backtest';
+} from './types';

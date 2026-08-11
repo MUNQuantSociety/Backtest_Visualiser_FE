@@ -1,7 +1,7 @@
 import { FileQuestion } from 'lucide-react';
 import { Link } from 'react-router';
 
-import { paths } from '@/app/router/paths';
+import { paths } from '@/app/paths';
 import { EmptyState } from '@/components/common/empty-state';
 import { buttonVariants } from '@/components/ui/button';
 

@@ -117,3 +117,26 @@ export function profitFactor(pnls: readonly number[]): number {
   if (grossLoss === 0) return grossProfit > 0 ? Number.POSITIVE_INFINITY : 0;
   return grossProfit / grossLoss;
 }
+
+/** Mean of the winning trades. Zero when there were none. */
+export function averageWin(pnls: readonly number[]): number {
+  return mean(pnls.filter((pnl) => pnl > 0));
+}
+
+/** Mean of the losing trades, as a negative number. Zero when there were none. */
+export function averageLoss(pnls: readonly number[]): number {
+  return mean(pnls.filter((pnl) => pnl < 0));
+}
+
+/**
+ * Average win over the magnitude of the average loss.
+ *
+ * Distinct from profit factor, which weights by how *many* trades fell on each
+ * side. A strategy can have a payoff ratio well above 1 and still lose money if
+ * it wins rarely enough — which is why a tearsheet shows both.
+ */
+export function payoffRatio(pnls: readonly number[]): number {
+  const avgLoss = Math.abs(averageLoss(pnls));
+  if (avgLoss === 0) return averageWin(pnls) > 0 ? Number.POSITIVE_INFINITY : 0;
+  return averageWin(pnls) / avgLoss;
+}

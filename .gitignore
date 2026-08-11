@@ -9,14 +9,30 @@ dist-ssr/
 build/
 *.local
 
-# Environment — never commit real secrets
+# Deploy provider artifacts
+.vercel/
+.netlify/
+
+# Environment — never commit real secrets.
+# This hides the FILE, not the VALUE: every VITE_-prefixed variable is inlined
+# into the bundle at build time and shipped to every browser. Ignoring
+# .env.local does not make a secret in it private — never put one there.
 .env
 .env.*
 !.env.example
 
+# Key material. Nothing here should ever need it; cheap insurance against a
+# stray download landing in the repo root.
+*.pem
+*.key
+*.p12
+*.keystore
+
 # Testing
 coverage/
 .vitest-cache/
+playwright-report/
+test-results/
 
 # Editors
 .vscode/*

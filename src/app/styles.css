@@ -1,0 +1,155 @@
+@import 'tailwindcss';
+
+/* Tailwind v4 is CSS-first: design tokens live here, not in a JS config file. */
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* Domain tokens — always refer to gains/losses through these, never a raw
+     colour, so the whole app flips together if the convention changes. */
+  --color-profit: var(--profit);
+  --color-loss: var(--loss);
+  --color-neutral: var(--neutral);
+
+  /* Semantic warning — distinct from `--loss` (a number moved the wrong way)
+     and from `--destructive` (an action that destroys something). This is
+     "degraded but running": a WARNING log line, a service missing heartbeats.
+     Borrowing a `--chart-N` series colour for it would tie an operational
+     meaning to a palette slot that exists to be reordered. */
+  --color-warning: var(--warning);
+
+  /* Chart series palette, used by both Recharts and lightweight-charts. */
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --font-mono: ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+}
+
+:root {
+  --radius: 0.625rem;
+
+  /* Faintly teal-tinted neutrals, so switching themes reads as one system
+     rather than "teal app" and "grey app". Signal colours stay untinted. */
+  --background: oklch(0.993 0.004 195);
+  --foreground: oklch(0.16 0.014 195);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.16 0.014 195);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.16 0.014 195);
+  --primary: oklch(0.55 0.19 258);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.965 0.008 195);
+  --secondary-foreground: oklch(0.22 0.016 195);
+  --muted: oklch(0.965 0.008 195);
+  --muted-foreground: oklch(0.55 0.016 195);
+  --accent: oklch(0.965 0.008 195);
+  --accent-foreground: oklch(0.22 0.016 195);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(0.915 0.011 195);
+  --input: oklch(0.915 0.011 195);
+  --ring: oklch(0.7 0.025 195);
+
+  --profit: oklch(0.62 0.17 152);
+  --loss: oklch(0.58 0.22 25);
+  --neutral: oklch(0.556 0 0);
+  --warning: oklch(0.62 0.15 65);
+
+  --chart-1: oklch(0.55 0.19 258);
+  --chart-2: oklch(0.62 0.17 152);
+  --chart-3: oklch(0.7 0.16 70);
+  --chart-4: oklch(0.6 0.19 305);
+  --chart-5: oklch(0.65 0.19 20);
+}
+
+.dark {
+  /*
+   * Dim teal surfaces. Only the neutrals carry the hue — the signal colours
+   * below (profit, loss, chart series) stay untinted, because a P&L green that
+   * drifts toward the background hue is exactly the colour a trader misreads.
+   */
+  --background: oklch(0.17 0.021 195);
+  --foreground: oklch(0.98 0.004 195);
+  --card: oklch(0.21 0.025 195);
+  --card-foreground: oklch(0.98 0.004 195);
+  --popover: oklch(0.21 0.025 195);
+  --popover-foreground: oklch(0.98 0.004 195);
+  --primary: oklch(0.66 0.17 258);
+  --primary-foreground: oklch(0.17 0.021 195);
+  --secondary: oklch(0.27 0.03 195);
+  --secondary-foreground: oklch(0.98 0.004 195);
+  --muted: oklch(0.27 0.03 195);
+  --muted-foreground: oklch(0.72 0.018 195);
+  --accent: oklch(0.27 0.03 195);
+  --accent-foreground: oklch(0.98 0.004 195);
+  --destructive: oklch(0.65 0.2 25);
+  --destructive-foreground: oklch(0.98 0.004 195);
+  --border: oklch(0.31 0.032 195);
+  --input: oklch(0.31 0.032 195);
+  --ring: oklch(0.58 0.04 195);
+
+  --profit: oklch(0.72 0.17 152);
+  --loss: oklch(0.68 0.2 25);
+  --neutral: oklch(0.708 0 0);
+  --warning: oklch(0.78 0.15 65);
+
+  --chart-1: oklch(0.66 0.17 258);
+  --chart-2: oklch(0.72 0.17 152);
+  --chart-3: oklch(0.77 0.15 70);
+  --chart-4: oklch(0.7 0.18 305);
+  --chart-5: oklch(0.72 0.18 20);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    color-scheme: light dark;
+  }
+
+  body {
+    @apply bg-background font-sans text-foreground antialiased;
+  }
+
+  /* Numeric columns must line up — tabular figures everywhere we show money. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum';
+  }
+
+  :focus-visible {
+    @apply ring-2 ring-ring ring-offset-2 ring-offset-background outline-none;
+  }
+}
