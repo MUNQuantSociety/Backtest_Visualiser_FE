@@ -32,147 +32,158 @@ import { usePortfolioComposition, usePortfolioEquity } from '../features/portfol
  * lightweight-charts lifecycle were solved once.
  */
 export default function PortfolioDetailPage() {
-  const { portfolioId } = useParams<{ portfolioId: string }>();
-  const { data: portfolio, isPending, isError, error } = usePortfolio(portfolioId);
-  const { data: equity, isPending: isEquityPending } = usePortfolioEquity(portfolioId);
-  const { data: composition, isPending: isCompositionPending } = usePortfolioComposition(portfolioId);
+    const { portfolioId } = useParams<{ portfolioId: string }>();
+    const { data: portfolio, isPending, isError, error } = usePortfolio(portfolioId);
+    const { data: equity, isPending: isEquityPending } = usePortfolioEquity(portfolioId);
+    const { data: composition, isPending: isCompositionPending } =
+        usePortfolioComposition(portfolioId);
 
-  const points = equity?.points ?? [];
-  const returns = toReturns(points.map((point) => point.equity));
-  const hasSeries = points.length > 1;
+    const points = equity?.points ?? [];
+    const returns = toReturns(points.map((point) => point.equity));
+    const hasSeries = points.length > 1;
 
-  if (isError) {
+    if (isError) {
+        return (
+            <>
+                <PageHeader title="Portfolio" />
+                <EmptyState title="Could not load this portfolio" description={error.message} />
+            </>
+        );
+    }
+
     return (
-      <>
-        <PageHeader title="Portfolio" />
-        <EmptyState title="Could not load this portfolio" description={error.message} />
-      </>
-    );
-  }
+        <>
+            <PageHeader
+                title={portfolio?.name ?? 'Portfolio'}
+                description={
+                    portfolio
+                        ? `${portfolio.strategyClass} · ${String(portfolio.tickers.length)} tickers · ${String(portfolio.config.INTERVAL)}m bars`
+                        : undefined
+                }
+                actions={portfolio ? <EngineStateBadge state={portfolio.state} /> : undefined}
+            />
 
-  return (
-    <>
-      <PageHeader
-        title={portfolio?.name ?? 'Portfolio'}
-        description={
-          portfolio
-            ? `${portfolio.strategyClass} · ${String(portfolio.tickers.length)} tickers · ${String(portfolio.config.INTERVAL)}m bars`
-            : undefined
-        }
-        actions={portfolio ? <EngineStateBadge state={portfolio.state} /> : undefined}
-      />
+            <PortfolioSwitcher activeId={portfolioId} />
 
-      <PortfolioSwitcher activeId={portfolioId} />
+            <PortfolioSummary portfolio={portfolio} isLoading={isPending} />
 
-      <PortfolioSummary portfolio={portfolio} isLoading={isPending} />
-
-      <ChartContainer
-        title="Historical performance"
-        description="Portfolio equity since the engine started."
-        isLoading={isEquityPending}
-        height={360}
-      >
-        {/* `EquitySamplePoint` is structurally `EquityPoint` minus the optional
+            <ChartContainer
+                title="Historical performance"
+                description="Portfolio equity since the engine started."
+                isLoading={isEquityPending}
+                height={360}
+            >
+                {/* `EquitySamplePoint` is structurally `EquityPoint` minus the optional
             benchmark, so it satisfies the chart's contract without a cast. */}
-        <EquityCurveChart data={points} showBenchmark={false} />
-      </ChartContainer>
+                <EquityCurveChart data={points} showBenchmark={false} />
+            </ChartContainer>
 
-      <ChartContainer
-        title="Portfolio composition over time"
-        description={
-          composition?.downsampled
-            ? 'Notional by component. Downsampled by the server — not every bar is shown.'
-            : 'Notional value held in each component, including cash.'
-        }
-        isLoading={isCompositionPending}
-        height={340}
-      >
-        <CompositionChart data={composition} />
-      </ChartContainer>
+            <ChartContainer
+                title="Portfolio composition over time"
+                description={
+                    composition?.downsampled
+                        ? 'Notional by component. Downsampled by the server — not every bar is shown.'
+                        : 'Notional value held in each component, including cash.'
+                }
+                isLoading={isCompositionPending}
+                height={340}
+            >
+                <CompositionChart data={composition} />
+            </ChartContainer>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <ChartContainer
-          title="Drawdowns"
-          description="Distance below the running peak."
-          isLoading={isEquityPending}
-        >
-          <DrawdownChart data={points} />
-        </ChartContainer>
+            <div className="grid gap-6 lg:grid-cols-2">
+                <ChartContainer
+                    title="Drawdowns"
+                    description="Distance below the running peak."
+                    isLoading={isEquityPending}
+                >
+                    <DrawdownChart data={points} />
+                </ChartContainer>
 
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Overall risk</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-3 sm:grid-cols-2">
-            {/* Computed client-side from the equity curve rather than fetched:
+                <Card>
+                    <CardHeader className="pb-3">
+                        <CardTitle className="text-base">Overall risk</CardTitle>
+                    </CardHeader>
+                    <CardContent className="grid gap-3 sm:grid-cols-2">
+                        {/* Computed client-side from the equity curve rather than fetched:
                 these are cheap, and the engine's own risk numbers are scoped to
                 the master portfolio, not a single sleeve. */}
-            <StatTile
-              label="Max drawdown"
-              value={hasSeries ? formatPercent(maxDrawdown(points.map((p) => p.equity))) : '—'}
-              tone="loss"
-              isLoading={isEquityPending}
-            />
-            <StatTile
-              label="Sharpe"
-              value={hasSeries ? formatNumber(sharpeRatio(returns)) : '—'}
-              hint="Annualised, client-side"
-              isLoading={isEquityPending}
-            />
-            <StatTile
-              label="Cash weight"
-              value={portfolio ? formatPercent(portfolio.cash / portfolio.totalValue, 1) : '—'}
-              hint="Risk-off trigger is 10%"
-              isLoading={isPending}
-            />
-            <StatTile
-              label="Consecutive failures"
-              value={portfolio ? formatNumber(portfolio.consecutiveFailures, 0) : '—'}
-              tone={portfolio && portfolio.consecutiveFailures > 0 ? 'loss' : 'neutral'}
-              hint="Circuit breaker counter"
-              isLoading={isPending}
-            />
-          </CardContent>
-        </Card>
-      </div>
+                        <StatTile
+                            label="Max drawdown"
+                            value={
+                                hasSeries
+                                    ? formatPercent(maxDrawdown(points.map((p) => p.equity)))
+                                    : '—'
+                            }
+                            tone="loss"
+                            isLoading={isEquityPending}
+                        />
+                        <StatTile
+                            label="Sharpe"
+                            value={hasSeries ? formatNumber(sharpeRatio(returns)) : '—'}
+                            hint="Annualised, client-side"
+                            isLoading={isEquityPending}
+                        />
+                        <StatTile
+                            label="Cash weight"
+                            value={
+                                portfolio
+                                    ? formatPercent(portfolio.cash / portfolio.totalValue, 1)
+                                    : '—'
+                            }
+                            hint="Risk-off trigger is 10%"
+                            isLoading={isPending}
+                        />
+                        <StatTile
+                            label="Consecutive failures"
+                            value={portfolio ? formatNumber(portfolio.consecutiveFailures, 0) : '—'}
+                            tone={
+                                portfolio && portfolio.consecutiveFailures > 0 ? 'loss' : 'neutral'
+                            }
+                            hint="Circuit breaker counter"
+                            isLoading={isPending}
+                        />
+                    </CardContent>
+                </Card>
+            </div>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Asset breakdown</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <PositionsTable positions={portfolio?.positions} isLoading={isPending} />
-        </CardContent>
-      </Card>
+            <Card>
+                <CardHeader className="pb-3">
+                    <CardTitle className="text-base">Asset breakdown</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <PositionsTable positions={portfolio?.positions} isLoading={isPending} />
+                </CardContent>
+            </Card>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Asset correlations</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <CorrelationMatrix portfolioId={portfolioId} />
-          </CardContent>
-        </Card>
+            <div className="grid gap-6 lg:grid-cols-2">
+                <Card>
+                    <CardHeader className="pb-3">
+                        <CardTitle className="text-base">Asset correlations</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <CorrelationMatrix portfolioId={portfolioId} />
+                    </CardContent>
+                </Card>
 
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Configuration</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ConfigPanel config={portfolio?.config} isLoading={isPending} />
-          </CardContent>
-        </Card>
-      </div>
+                <Card>
+                    <CardHeader className="pb-3">
+                        <CardTitle className="text-base">Configuration</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <ConfigPanel config={portfolio?.config} isLoading={isPending} />
+                    </CardContent>
+                </Card>
+            </div>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Trade log</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ExecutionLogTable portfolioId={portfolioId} />
-        </CardContent>
-      </Card>
-    </>
-  );
+            <Card>
+                <CardHeader className="pb-3">
+                    <CardTitle className="text-base">Trade log</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <ExecutionLogTable portfolioId={portfolioId} />
+                </CardContent>
+            </Card>
+        </>
+    );
 }

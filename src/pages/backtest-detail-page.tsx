@@ -6,66 +6,73 @@ import { EmptyState } from '@/components/common/empty-state';
 import { PageHeader } from '@/components/common/page-header';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { useBacktest } from '@/features/backtests';
-import { EquityCurveChart, MetricsGrid, MetricsTable, PnlHistogram } from '@/features/performance';
+// import { EquityCurveChart, MetricsGrid, MetricsTable, PnlHistogram } from '@/features/performance';
+import { EquityCurveChart, PnlHistogram } from '@/features/performance';
 
 export default function BacktestDetailPage() {
-  const { backtestId } = useParams<{ backtestId: string }>();
-  const { data, isPending, isError, error } = useBacktest(backtestId);
+    const { backtestId } = useParams<{ backtestId: string }>();
+    const { data, isPending, isError, error } = useBacktest(backtestId);
 
-  if (isError) {
+    if (isError) {
+        return (
+            <EmptyState
+                icon={FlaskConical}
+                title="Could not load this backtest"
+                description={error.message}
+            />
+        );
+    }
+
+    const equityCurve = data?.equityCurve ?? [];
+
     return (
-      <EmptyState
-        icon={FlaskConical}
-        title="Could not load this backtest"
-        description={error.message}
-      />
-    );
-  }
+        <>
+            <PageHeader
+                title={data?.name ?? 'Backtest'}
+                description={
+                    data
+                        ? `${data.strategyName} · ${data.symbol} · ${data.startDate} → ${data.endDate}`
+                        : undefined
+                }
+            />
 
-  const equityCurve = data?.equityCurve ?? [];
+            {/*
+        * Commenting out for now till I figure out the error
+        <MetricsGrid metrics={data?.metrics} isLoading={isPending} />
+        */}
 
-  return (
-    <>
-      <PageHeader
-        title={data?.name ?? 'Backtest'}
-        description={
-          data
-            ? `${data.strategyName} · ${data.symbol} · ${data.startDate} → ${data.endDate}`
-            : undefined
-        }
-      />
-
-      <MetricsGrid metrics={data?.metrics} isLoading={isPending} />
-
-      {/* One figure, two panes. The drawdown shares the equity curve's time
+            {/* One figure, two panes. The drawdown shares the equity curve's time
           axis so a dip and the hole it dug line up vertically — reading them
           off two separately-scaled charts meant re-anchoring on the dates. */}
-      <ChartContainer
-        title="Performance vs. benchmark and drawdown"
-        description="Account value against buy-and-hold, with trade entries and distance below the running peak."
-        height={520}
-        isLoading={isPending}
-      >
-        <EquityCurveChart data={equityCurve} trades={data?.trades} showDrawdownPane />
-      </ChartContainer>
+            <ChartContainer
+                title="Performance vs. benchmark and drawdown"
+                description="Account value against buy-and-hold, with trade entries and distance below the running peak."
+                height={520}
+                isLoading={isPending}
+            >
+                <EquityCurveChart data={equityCurve} trades={data?.trades} showDrawdownPane />
+            </ChartContainer>
 
-      <ChartContainer
-        title="Distribution of profit &amp; loss per trade"
-        description="Realised P&amp;L per closed trade. Bins split at zero, so colour always matches sign."
-        height={300}
-        isLoading={isPending}
-      >
-        <PnlHistogram trades={data?.trades ?? []} />
-      </ChartContainer>
+            <ChartContainer
+                title="Distribution of profit &amp; loss per trade"
+                description="Realised P&amp;L per closed trade. Bins split at zero, so colour always matches sign."
+                height={300}
+                isLoading={isPending}
+            >
+                <PnlHistogram trades={data?.trades ?? []} />
+            </ChartContainer>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Performance summary</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <MetricsTable detail={data} isLoading={isPending} />
-        </CardContent>
-      </Card>
-    </>
-  );
+            <Card>
+                <CardHeader className="pb-3">
+                    <CardTitle className="text-base">Performance summary</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    {/*
+          * Commenting out for now till I figure out the error
+            <MetricsTable detail={data} isLoading={isPending} />
+          */}
+                </CardContent>
+            </Card>
+        </>
+    );
 }

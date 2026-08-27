@@ -3,8 +3,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import type { PortfolioConfig } from '../types';
 
 interface ConfigPanelProps {
-  config: PortfolioConfig | undefined;
-  isLoading?: boolean | undefined;
+    config: PortfolioConfig | undefined;
+    isLoading?: boolean | undefined;
 }
 
 /**
@@ -18,24 +18,26 @@ interface ConfigPanelProps {
  * pull request against the trading repo, with review.
  */
 export function ConfigPanel({ config, isLoading = false }: ConfigPanelProps) {
-  if (isLoading) return <Skeleton className="h-64" />;
+    if (isLoading) return <Skeleton className="h-64" />;
 
-  if (!config) {
-    return <p className="py-8 text-center text-sm text-muted-foreground">No config available.</p>;
-  }
+    if (!config) {
+        return (
+            <p className="text-muted-foreground py-8 text-center text-sm">No config available.</p>
+        );
+    }
 
-  return (
-    <div className="space-y-3">
-      <p className="text-xs text-muted-foreground">
-        Read-only. Config is loaded by the engine from{' '}
-        <code className="font-mono">
-          src/portfolios/portfolio_{config.PORTFOLIO_ID}/config.json
-        </code>
-        ; changing it is a pull request against the trading repo.
-      </p>
-      <pre className="max-h-96 overflow-auto rounded-md border bg-muted/40 p-3 font-mono text-xs">
-        <code>{JSON.stringify(config, null, 2)}</code>
-      </pre>
-    </div>
-  );
+    return (
+        <div className="space-y-3">
+            <p className="text-muted-foreground text-xs">
+                Read-only. Config is loaded by the engine from{' '}
+                <code className="font-mono">
+                    src/portfolios/portfolio_{config.PORTFOLIO_ID}/config.json
+                </code>
+                ; changing it is a pull request against the trading repo.
+            </p>
+            <pre className="bg-muted/40 max-h-96 overflow-auto rounded-md border p-3 font-mono text-xs">
+                <code>{JSON.stringify(config, null, 2)}</code>
+            </pre>
+        </div>
+    );
 }

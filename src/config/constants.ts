@@ -4,8 +4,8 @@ export const APP_NAME = 'MQS Backtest Engine';
 
 /** The two products this shell hosts. Used for nav section headings. */
 export const PRODUCT_NAMES = {
-  backtests: 'Backtest Visualiser',
-  live: 'MQS Master',
+    backtests: 'Backtest Visualiser',
+    live: 'MQS Master',
 } as const;
 
 /**
@@ -33,9 +33,9 @@ export type Timeframe = (typeof TIMEFRAMES)[number];
 
 /** localStorage keys, namespaced so they never collide with other apps on the origin. */
 export const STORAGE_KEYS = {
-  theme: 'bv:theme',
-  sidebarCollapsed: 'bv:sidebar-collapsed',
-  comparisonSet: 'bv:comparison-set',
+    theme: 'bv:theme',
+    sidebarCollapsed: 'bv:sidebar-collapsed',
+    comparisonSet: 'bv:comparison-set',
 } as const;
 
 /**

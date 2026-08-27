@@ -8,21 +8,21 @@ import { ApiError } from '@/lib/api-client';
  * override `staleTime` at the individual query level instead of loosening this.
  */
 export function createQueryClient(): QueryClient {
-  return new QueryClient({
-    defaultOptions: {
-      queries: {
-        staleTime: 5 * 60 * 1000,
-        gcTime: 30 * 60 * 1000,
-        refetchOnWindowFocus: false,
-        retry: (failureCount, error) => {
-          if (error instanceof ApiError && !error.isRetryable) return false;
-          return failureCount < 2;
+    return new QueryClient({
+        defaultOptions: {
+            queries: {
+                staleTime: 5 * 60 * 1000,
+                gcTime: 30 * 60 * 1000,
+                refetchOnWindowFocus: false,
+                retry: (failureCount, error) => {
+                    if (error instanceof ApiError && !error.isRetryable) return false;
+                    return failureCount < 2;
+                },
+                retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 15_000),
+            },
+            mutations: {
+                retry: false,
+            },
         },
-        retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 15_000),
-      },
-      mutations: {
-        retry: false,
-      },
-    },
-  });
+    });
 }

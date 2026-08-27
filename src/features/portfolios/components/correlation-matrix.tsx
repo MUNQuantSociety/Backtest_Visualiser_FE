@@ -13,77 +13,79 @@ import { usePortfolioCorrelations } from '../portfolios-api';
  * app, which is exactly why the panel spells it out in its description.
  */
 function cellStyle(value: number): { background: string } {
-  const magnitude = Math.min(Math.abs(value), 1);
-  const token = value >= 0 ? 'var(--loss)' : 'var(--profit)';
-  const percent = Math.round(magnitude * 55);
-  return { background: `color-mix(in oklab, ${token} ${String(percent)}%, transparent)` };
+    const magnitude = Math.min(Math.abs(value), 1);
+    const token = value >= 0 ? 'var(--loss)' : 'var(--profit)';
+    const percent = Math.round(magnitude * 55);
+    return { background: `color-mix(in oklab, ${token} ${String(percent)}%, transparent)` };
 }
 
 export function CorrelationMatrix({ portfolioId }: { portfolioId: string | undefined }) {
-  const { data, isPending, isError, error } = usePortfolioCorrelations(portfolioId);
+    const { data, isPending, isError, error } = usePortfolioCorrelations(portfolioId);
 
-  if (isPending) return <Skeleton className="h-64" />;
+    if (isPending) return <Skeleton className="h-64" />;
 
-  if (isError) {
-    return <p className="py-8 text-center text-sm text-muted-foreground">{error.message}</p>;
-  }
+    if (isError) {
+        return <p className="text-muted-foreground py-8 text-center text-sm">{error.message}</p>;
+    }
 
-  if (data.tickers.length === 0) {
+    if (data.tickers.length === 0) {
+        return (
+            <p className="text-muted-foreground py-8 text-center text-sm">
+                Not enough history to compute correlations.
+            </p>
+        );
+    }
+
     return (
-      <p className="py-8 text-center text-sm text-muted-foreground">
-        Not enough history to compute correlations.
-      </p>
+        <div className="overflow-x-auto">
+            <table className="text-sm">
+                <caption className="text-muted-foreground pb-3 text-left text-xs">
+                    Pairwise return correlation over {formatNumber(data.lookbackDays, 0)} days. Red
+                    is concentration risk (moves together); green is diversifying.
+                </caption>
+                <thead>
+                    <tr>
+                        <td className="p-1" />
+                        {data.tickers.map((ticker) => (
+                            <th
+                                key={ticker}
+                                scope="col"
+                                className="text-muted-foreground p-1 text-center font-mono text-xs font-medium"
+                            >
+                                {ticker}
+                            </th>
+                        ))}
+                    </tr>
+                </thead>
+                <tbody>
+                    {data.tickers.map((rowTicker, rowIndex) => (
+                        <tr key={rowTicker}>
+                            <th
+                                scope="row"
+                                className="text-muted-foreground p-1 pr-2 text-right font-mono text-xs font-medium"
+                            >
+                                {rowTicker}
+                            </th>
+                            {data.tickers.map((columnTicker, columnIndex) => {
+                                const value = data.matrix[rowIndex]?.[columnIndex];
+                                return (
+                                    <td key={columnTicker} className="p-0.5">
+                                        <div
+                                            className="tabular flex size-12 items-center justify-center rounded text-xs"
+                                            style={
+                                                value === undefined ? undefined : cellStyle(value)
+                                            }
+                                            title={`${rowTicker} vs ${columnTicker}`}
+                                        >
+                                            {value === undefined ? '—' : formatNumber(value, 2)}
+                                        </div>
+                                    </td>
+                                );
+                            })}
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
     );
-  }
-
-  return (
-    <div className="overflow-x-auto">
-      <table className="text-sm">
-        <caption className="pb-3 text-left text-xs text-muted-foreground">
-          Pairwise return correlation over {formatNumber(data.lookbackDays, 0)} days. Red is
-          concentration risk (moves together); green is diversifying.
-        </caption>
-        <thead>
-          <tr>
-            <td className="p-1" />
-            {data.tickers.map((ticker) => (
-              <th
-                key={ticker}
-                scope="col"
-                className="p-1 text-center font-mono text-xs font-medium text-muted-foreground"
-              >
-                {ticker}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {data.tickers.map((rowTicker, rowIndex) => (
-            <tr key={rowTicker}>
-              <th
-                scope="row"
-                className="p-1 pr-2 text-right font-mono text-xs font-medium text-muted-foreground"
-              >
-                {rowTicker}
-              </th>
-              {data.tickers.map((columnTicker, columnIndex) => {
-                const value = data.matrix[rowIndex]?.[columnIndex];
-                return (
-                  <td key={columnTicker} className="p-0.5">
-                    <div
-                      className="tabular flex size-12 items-center justify-center rounded text-xs"
-                      style={value === undefined ? undefined : cellStyle(value)}
-                      title={`${rowTicker} vs ${columnTicker}`}
-                    >
-                      {value === undefined ? '—' : formatNumber(value, 2)}
-                    </div>
-                  </td>
-                );
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
 }

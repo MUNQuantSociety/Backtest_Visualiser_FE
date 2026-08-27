@@ -38,219 +38,235 @@ const ACCEPTED_EXTENSIONS = ['.py'];
 type Mode = 'write' | 'upload';
 
 export function StrategyEditor() {
-  const [mode, setMode] = useState<Mode>('write');
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [source, setSource] = useState(TEMPLATE);
-  const [filename, setFilename] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+    const [mode, setMode] = useState<Mode>('write');
+    const [name, setName] = useState('');
+    const [description, setDescription] = useState('');
+    const [source, setSource] = useState(TEMPLATE);
+    const [filename, setFilename] = useState<string | null>(null);
+    const [error, setError] = useState<string | null>(null);
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const submit = useSubmitStrategy();
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const submit = useSubmitStrategy();
 
-  const nameId = useId();
-  const descriptionId = useId();
-  const sourceId = useId();
-  const errorId = useId();
+    const nameId = useId();
+    const descriptionId = useId();
+    const sourceId = useId();
+    const errorId = useId();
 
-  function handleFile(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
+    function handleFile(event: ChangeEvent<HTMLInputElement>) {
+        const file = event.target.files?.[0];
+        if (!file) return;
 
-    setError(null);
+        setError(null);
 
-    if (!ACCEPTED_EXTENSIONS.some((extension) => file.name.toLowerCase().endsWith(extension))) {
-      setError(`${file.name} is not a Python file. Strategies must be .py.`);
-      return;
+        if (!ACCEPTED_EXTENSIONS.some((extension) => file.name.toLowerCase().endsWith(extension))) {
+            setError(`${file.name} is not a Python file. Strategies must be .py.`);
+            return;
+        }
+
+        // Checked before reading, so an enormous file is rejected rather than
+        // pulled into memory first.
+        if (file.size > MAX_SOURCE_BYTES) {
+            setError('That file is too large — strategies are capped at 256 KB.');
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onerror = () => {
+            setError(`Could not read ${file.name}.`);
+        };
+        reader.onload = () => {
+            setSource(typeof reader.result === 'string' ? reader.result : '');
+            setFilename(file.name);
+            // Uploading drops you into the editor rather than submitting blind, so
+            // the author sees what is about to be sent under their name.
+            setMode('write');
+            if (!name) setName(file.name.replace(/\.py$/i, ''));
+        };
+        reader.readAsText(file);
     }
 
-    // Checked before reading, so an enormous file is rejected rather than
-    // pulled into memory first.
-    if (file.size > MAX_SOURCE_BYTES) {
-      setError('That file is too large — strategies are capped at 256 KB.');
-      return;
+    function handleSubmit(event: FormEvent) {
+        event.preventDefault();
+        setError(null);
+
+        const parsed = strategySubmissionSchema.safeParse({ name, description, source, filename });
+        if (!parsed.success) {
+            setError(parsed.error.issues[0]?.message ?? 'Check the form and try again.');
+            return;
+        }
+
+        submit.mutate(parsed.data);
     }
 
-    const reader = new FileReader();
-    reader.onerror = () => {
-      setError(`Could not read ${file.name}.`);
-    };
-    reader.onload = () => {
-      setSource(typeof reader.result === 'string' ? reader.result : '');
-      setFilename(file.name);
-      // Uploading drops you into the editor rather than submitting blind, so
-      // the author sees what is about to be sent under their name.
-      setMode('write');
-      if (!name) setName(file.name.replace(/\.py$/i, ''));
-    };
-    reader.readAsText(file);
-  }
+    return (
+        <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                    <label htmlFor={nameId} className="text-sm font-medium">
+                        Strategy name
+                    </label>
+                    <input
+                        id={nameId}
+                        value={name}
+                        onChange={(event) => {
+                            setName(event.target.value);
+                        }}
+                        placeholder="Volatility Momentum"
+                        className="border-input bg-background focus-visible:ring-ring h-9 w-full rounded-md border px-3 text-sm outline-none focus-visible:ring-2"
+                    />
+                </div>
 
-  function handleSubmit(event: FormEvent) {
-    event.preventDefault();
-    setError(null);
+                <div className="space-y-1.5">
+                    <label htmlFor={descriptionId} className="text-sm font-medium">
+                        Description <span className="text-muted-foreground">(optional)</span>
+                    </label>
+                    <input
+                        id={descriptionId}
+                        value={description}
+                        onChange={(event) => {
+                            setDescription(event.target.value);
+                        }}
+                        placeholder="What edge is this trying to capture?"
+                        className="border-input bg-background focus-visible:ring-ring h-9 w-full rounded-md border px-3 text-sm outline-none focus-visible:ring-2"
+                    />
+                </div>
+            </div>
 
-    const parsed = strategySubmissionSchema.safeParse({ name, description, source, filename });
-    if (!parsed.success) {
-      setError(parsed.error.issues[0]?.message ?? 'Check the form and try again.');
-      return;
-    }
+            {/* Two ways in, one payload out — upload reads into the same editor. */}
+            <div className="flex flex-wrap items-center gap-2">
+                <div className="flex rounded-md border p-0.5">
+                    <ModeTab
+                        active={mode === 'write'}
+                        onClick={() => {
+                            setMode('write');
+                        }}
+                        icon={PencilLine}
+                    >
+                        Write code
+                    </ModeTab>
+                    <ModeTab
+                        active={mode === 'upload'}
+                        onClick={() => {
+                            setMode('upload');
+                        }}
+                        icon={FileUp}
+                    >
+                        Upload file
+                    </ModeTab>
+                </div>
 
-    submit.mutate(parsed.data);
-  }
+                {filename ? (
+                    <span className="text-muted-foreground text-xs">
+                        Loaded from <span className="font-mono">{filename}</span>
+                    </span>
+                ) : null}
+            </div>
 
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-1.5">
-          <label htmlFor={nameId} className="text-sm font-medium">
-            Strategy name
-          </label>
-          <input
-            id={nameId}
-            value={name}
-            onChange={(event) => {
-              setName(event.target.value);
-            }}
-            placeholder="Volatility Momentum"
-            className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          />
-        </div>
+            {mode === 'write' ? (
+                <div className="space-y-1.5">
+                    <label htmlFor={sourceId} className="sr-only">
+                        Strategy source code
+                    </label>
+                    <textarea
+                        id={sourceId}
+                        value={source}
+                        onChange={(event) => {
+                            setSource(event.target.value);
+                            setFilename(null);
+                        }}
+                        spellCheck={false}
+                        rows={20}
+                        // Off by default in textareas, and mandatory for code.
+                        className="border-input bg-background focus-visible:ring-ring w-full resize-y rounded-md border p-3 font-mono text-xs leading-relaxed whitespace-pre outline-none focus-visible:ring-2"
+                    />
+                </div>
+            ) : (
+                <div
+                    onClick={() => fileInputRef.current?.click()}
+                    className="hover:bg-accent/40 flex cursor-pointer flex-col items-center justify-center gap-2 rounded-md border border-dashed p-10 text-center transition-colors"
+                >
+                    <FileUp className="text-muted-foreground size-7" aria-hidden />
+                    <p className="text-sm font-medium">Choose a .py file</p>
+                    <p className="text-muted-foreground text-xs">
+                        Up to 256 KB. It opens in the editor so you can check it before submitting.
+                    </p>
+                    <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept=".py,text/x-python"
+                        onChange={handleFile}
+                        className="sr-only"
+                    />
+                </div>
+            )}
 
-        <div className="space-y-1.5">
-          <label htmlFor={descriptionId} className="text-sm font-medium">
-            Description <span className="text-muted-foreground">(optional)</span>
-          </label>
-          <input
-            id={descriptionId}
-            value={description}
-            onChange={(event) => {
-              setDescription(event.target.value);
-            }}
-            placeholder="What edge is this trying to capture?"
-            className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          />
-        </div>
-      </div>
+            {error ? (
+                <p id={errorId} role="alert" className="text-sm text-[var(--loss)]">
+                    {error}
+                </p>
+            ) : null}
 
-      {/* Two ways in, one payload out — upload reads into the same editor. */}
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="flex rounded-md border p-0.5">
-          <ModeTab active={mode === 'write'} onClick={() => { setMode('write'); }} icon={PencilLine}>
-            Write code
-          </ModeTab>
-          <ModeTab active={mode === 'upload'} onClick={() => { setMode('upload'); }} icon={FileUp}>
-            Upload file
-          </ModeTab>
-        </div>
+            {submit.isSuccess ? (
+                <p role="status" className="text-sm text-[var(--profit)]">
+                    {submit.data.message || `Saved "${submit.data.name}".`}
+                </p>
+            ) : null}
 
-        {filename ? (
-          <span className="text-xs text-muted-foreground">
-            Loaded from <span className="font-mono">{filename}</span>
-          </span>
-        ) : null}
-      </div>
+            {submit.isError ? (
+                <p role="alert" className="text-sm text-[var(--loss)]">
+                    {submit.error.message}
+                </p>
+            ) : null}
 
-      {mode === 'write' ? (
-        <div className="space-y-1.5">
-          <label htmlFor={sourceId} className="sr-only">
-            Strategy source code
-          </label>
-          <textarea
-            id={sourceId}
-            value={source}
-            onChange={(event) => {
-              setSource(event.target.value);
-              setFilename(null);
-            }}
-            spellCheck={false}
-            rows={20}
-            // Off by default in textareas, and mandatory for code.
-            className="w-full resize-y rounded-md border border-input bg-background p-3 font-mono text-xs leading-relaxed whitespace-pre outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          />
-        </div>
-      ) : (
-        <div
-          onClick={() => fileInputRef.current?.click()}
-          className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-md border border-dashed p-10 text-center transition-colors hover:bg-accent/40"
-        >
-          <FileUp className="size-7 text-muted-foreground" aria-hidden />
-          <p className="text-sm font-medium">Choose a .py file</p>
-          <p className="text-xs text-muted-foreground">
-            Up to 256 KB. It opens in the editor so you can check it before submitting.
-          </p>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".py,text/x-python"
-            onChange={handleFile}
-            className="sr-only"
-          />
-        </div>
-      )}
-
-      {error ? (
-        <p id={errorId} role="alert" className="text-sm text-[var(--loss)]">
-          {error}
-        </p>
-      ) : null}
-
-      {submit.isSuccess ? (
-        <p role="status" className="text-sm text-[var(--profit)]">
-          {submit.data.message || `Saved "${submit.data.name}".`}
-        </p>
-      ) : null}
-
-      {submit.isError ? (
-        <p role="alert" className="text-sm text-[var(--loss)]">
-          {submit.error.message}
-        </p>
-      ) : null}
-
-      <div className="flex items-center gap-2">
-        <Button type="submit" disabled={submit.isPending}>
-          {submit.isPending ? <Loader2 className="mr-2 size-4 animate-spin" aria-hidden /> : null}
-          Save strategy
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          onClick={() => {
-            setSource(TEMPLATE);
-            setFilename(null);
-            setError(null);
-          }}
-        >
-          Reset to template
-        </Button>
-      </div>
-    </form>
-  );
+            <div className="flex items-center gap-2">
+                <Button type="submit" disabled={submit.isPending}>
+                    {submit.isPending ? (
+                        <Loader2 className="mr-2 size-4 animate-spin" aria-hidden />
+                    ) : null}
+                    Save strategy
+                </Button>
+                <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => {
+                        setSource(TEMPLATE);
+                        setFilename(null);
+                        setError(null);
+                    }}
+                >
+                    Reset to template
+                </Button>
+            </div>
+        </form>
+    );
 }
 
 function ModeTab({
-  active,
-  onClick,
-  icon: Icon,
-  children,
+    active,
+    onClick,
+    icon: Icon,
+    children,
 }: {
-  active: boolean;
-  onClick: () => void;
-  icon: typeof FileUp;
-  children: string;
+    active: boolean;
+    onClick: () => void;
+    icon: typeof FileUp;
+    children: string;
 }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={cn(
-        'flex items-center gap-1.5 rounded px-3 py-1.5 text-sm transition-colors',
-        active ? 'bg-accent font-medium text-accent-foreground' : 'text-muted-foreground hover:text-foreground',
-      )}
-    >
-      <Icon className="size-4" aria-hidden />
-      {children}
-    </button>
-  );
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            aria-pressed={active}
+            className={cn(
+                'flex items-center gap-1.5 rounded px-3 py-1.5 text-sm transition-colors',
+                active
+                    ? 'bg-accent text-accent-foreground font-medium'
+                    : 'text-muted-foreground hover:text-foreground',
+            )}
+        >
+            <Icon className="size-4" aria-hidden />
+            {children}
+        </button>
+    );
 }

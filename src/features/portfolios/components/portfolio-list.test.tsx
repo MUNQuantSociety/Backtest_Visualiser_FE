@@ -14,105 +14,105 @@ import { PortfolioList } from './portfolio-list';
  * it to `true`. See the fuller note in `backtest-list.test.tsx`.
  */
 vi.mock('@/config/env', () => ({
-  env: { apiBaseUrl: '/api', apiTimeout: 30_000, useFixtures: false, isDev: false, isProd: true },
+    env: { apiBaseUrl: '/api', apiTimeout: 30_000, useFixtures: false, isDev: false, isProd: true },
 }));
 
 vi.mock('@/lib/api-client', async (importOriginal) => {
-  const actual = await importOriginal<typeof ApiClientModule>();
-  return { ...actual, apiClient: { ...actual.apiClient, get: vi.fn() } };
+    const actual = await importOriginal<typeof ApiClientModule>();
+    return { ...actual, apiClient: { ...actual.apiClient, get: vi.fn() } };
 });
 
 const get = vi.mocked(apiClient.get);
 
 function makeSummary(overrides: Partial<PortfolioSummary> = {}): PortfolioSummary {
-  return {
-    id: '1',
-    name: 'Volatility Momentum',
-    strategyClass: 'VolMomentum',
-    state: 'running',
-    tickers: ['AAPL', 'NVDA'],
-    allocationWeight: 0.2,
-    totalValue: 224_500,
-    cash: 26_940,
-    dayPnl: 1_240.5,
-    totalPnl: 24_500,
-    totalReturn: 0.1225,
-    lastTickAt: '2026-07-29T13:30:00Z',
-    ...overrides,
-  };
+    return {
+        id: '1',
+        name: 'Volatility Momentum',
+        strategyClass: 'VolMomentum',
+        state: 'running',
+        tickers: ['AAPL', 'NVDA'],
+        allocationWeight: 0.2,
+        totalValue: 224_500,
+        cash: 26_940,
+        dayPnl: 1_240.5,
+        totalPnl: 24_500,
+        totalReturn: 0.1225,
+        lastTickAt: '2026-07-29T13:30:00Z',
+        ...overrides,
+    };
 }
 
 beforeEach(() => {
-  vi.resetAllMocks();
+    vi.resetAllMocks();
 });
 
 describe('PortfolioList', () => {
-  it('renders a card per portfolio with formatted figures', async () => {
-    get.mockResolvedValue({
-      items: [makeSummary(), makeSummary({ id: '2', name: 'Mean Reversion' })],
-      total: 2,
-      page: 1,
-      pageSize: 25,
+    it('renders a card per portfolio with formatted figures', async () => {
+        get.mockResolvedValue({
+            items: [makeSummary(), makeSummary({ id: '2', name: 'Mean Reversion' })],
+            total: 2,
+            page: 1,
+            pageSize: 25,
+        });
+
+        renderWithProviders(<PortfolioList />);
+
+        expect(await screen.findByText('Volatility Momentum')).toBeInTheDocument();
+        expect(screen.getByText('Mean Reversion')).toBeInTheDocument();
+        // Gains carry an explicit sign so they are unambiguous at a glance.
+        expect(screen.getAllByText('+12.25%')).toHaveLength(2);
     });
 
-    renderWithProviders(<PortfolioList />);
+    it('distinguishes a halted engine from a merely stopped one', async () => {
+        get.mockResolvedValue({
+            items: [
+                makeSummary({ id: '5', state: 'halted' }),
+                makeSummary({ id: '6', name: 'Screener', state: 'stopped' }),
+            ],
+            total: 2,
+            page: 1,
+            pageSize: 25,
+        });
 
-    expect(await screen.findByText('Volatility Momentum')).toBeInTheDocument();
-    expect(screen.getByText('Mean Reversion')).toBeInTheDocument();
-    // Gains carry an explicit sign so they are unambiguous at a glance.
-    expect(screen.getAllByText('+12.25%')).toHaveLength(2);
-  });
+        renderWithProviders(<PortfolioList />);
 
-  it('distinguishes a halted engine from a merely stopped one', async () => {
-    get.mockResolvedValue({
-      items: [
-        makeSummary({ id: '5', state: 'halted' }),
-        makeSummary({ id: '6', name: 'Screener', state: 'stopped' }),
-      ],
-      total: 2,
-      page: 1,
-      pageSize: 25,
+        expect(await screen.findByText('Halted')).toBeInTheDocument();
+        expect(screen.getByText('Stopped')).toBeInTheDocument();
     });
 
-    renderWithProviders(<PortfolioList />);
+    it('caps the rendered cards when a limit is given', async () => {
+        get.mockResolvedValue({
+            items: [
+                makeSummary({ id: '1', name: 'One' }),
+                makeSummary({ id: '2', name: 'Two' }),
+                makeSummary({ id: '3', name: 'Three' }),
+            ],
+            total: 3,
+            page: 1,
+            pageSize: 25,
+        });
 
-    expect(await screen.findByText('Halted')).toBeInTheDocument();
-    expect(screen.getByText('Stopped')).toBeInTheDocument();
-  });
+        renderWithProviders(<PortfolioList limit={2} />);
 
-  it('caps the rendered cards when a limit is given', async () => {
-    get.mockResolvedValue({
-      items: [
-        makeSummary({ id: '1', name: 'One' }),
-        makeSummary({ id: '2', name: 'Two' }),
-        makeSummary({ id: '3', name: 'Three' }),
-      ],
-      total: 3,
-      page: 1,
-      pageSize: 25,
+        expect(await screen.findByText('One')).toBeInTheDocument();
+        expect(screen.getByText('Two')).toBeInTheDocument();
+        expect(screen.queryByText('Three')).not.toBeInTheDocument();
     });
 
-    renderWithProviders(<PortfolioList limit={2} />);
+    it('shows the error message when the request fails', async () => {
+        get.mockRejectedValue(new ApiError('Engine unreachable', 503, 'HTTP_503'));
 
-    expect(await screen.findByText('One')).toBeInTheDocument();
-    expect(screen.getByText('Two')).toBeInTheDocument();
-    expect(screen.queryByText('Three')).not.toBeInTheDocument();
-  });
+        renderWithProviders(<PortfolioList />);
 
-  it('shows the error message when the request fails', async () => {
-    get.mockRejectedValue(new ApiError('Engine unreachable', 503, 'HTTP_503'));
+        expect(await screen.findByText('Could not load portfolios')).toBeInTheDocument();
+        expect(screen.getByText('Engine unreachable')).toBeInTheDocument();
+    });
 
-    renderWithProviders(<PortfolioList />);
+    it('explains an empty result rather than rendering a bare grid', async () => {
+        get.mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 25 });
 
-    expect(await screen.findByText('Could not load portfolios')).toBeInTheDocument();
-    expect(screen.getByText('Engine unreachable')).toBeInTheDocument();
-  });
+        renderWithProviders(<PortfolioList />);
 
-  it('explains an empty result rather than rendering a bare grid', async () => {
-    get.mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 25 });
-
-    renderWithProviders(<PortfolioList />);
-
-    expect(await screen.findByText('No portfolios configured')).toBeInTheDocument();
-  });
+        expect(await screen.findByText('No portfolios configured')).toBeInTheDocument();
+    });
 });

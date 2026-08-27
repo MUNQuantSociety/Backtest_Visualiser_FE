@@ -8,26 +8,26 @@ import { useTheme } from '@/lib/ui-store';
  * user's preference is "system".
  */
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const theme = useTheme();
+    const theme = useTheme();
 
-  useEffect(() => {
-    const root = document.documentElement;
-    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    useEffect(() => {
+        const root = document.documentElement;
+        const media = window.matchMedia('(prefers-color-scheme: dark)');
 
-    const apply = () => {
-      const isDark = theme === 'dark' || (theme === 'system' && media.matches);
-      root.classList.toggle('dark', isDark);
-      root.style.colorScheme = isDark ? 'dark' : 'light';
-    };
+        const apply = () => {
+            const isDark = theme === 'dark' || (theme === 'system' && media.matches);
+            root.classList.toggle('dark', isDark);
+            root.style.colorScheme = isDark ? 'dark' : 'light';
+        };
 
-    apply();
+        apply();
 
-    if (theme !== 'system') return;
-    media.addEventListener('change', apply);
-    return () => {
-      media.removeEventListener('change', apply);
-    };
-  }, [theme]);
+        if (theme !== 'system') return;
+        media.addEventListener('change', apply);
+        return () => {
+            media.removeEventListener('change', apply);
+        };
+    }, [theme]);
 
-  return children;
+    return children;
 }

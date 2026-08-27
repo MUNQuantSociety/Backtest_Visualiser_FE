@@ -8,21 +8,21 @@ import { useSystemStatus } from './system-api';
 import type { ServiceState } from './types';
 
 const statePresentation: Record<
-  ServiceState,
-  { label: string; dot: string; variant: BadgeProps['variant'] }
+    ServiceState,
+    { label: string; dot: string; variant: BadgeProps['variant'] }
 > = {
-  up: { label: 'Up', dot: 'bg-[var(--profit)]', variant: 'profit' },
-  degraded: { label: 'Degraded', dot: 'bg-[var(--warning)]', variant: 'outline' },
-  down: { label: 'Down', dot: 'bg-[var(--loss)]', variant: 'loss' },
+    up: { label: 'Up', dot: 'bg-[var(--profit)]', variant: 'profit' },
+    degraded: { label: 'Degraded', dot: 'bg-[var(--warning)]', variant: 'outline' },
+    down: { label: 'Down', dot: 'bg-[var(--loss)]', variant: 'loss' },
 };
 
 const relativeFormat = new Intl.RelativeTimeFormat('en-US', { numeric: 'auto' });
 
 function heartbeatLabel(iso: string | null): string {
-  if (iso === null) return 'no heartbeat';
-  const secondsAgo = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
-  if (secondsAgo < 60) return relativeFormat.format(-secondsAgo, 'second');
-  return relativeFormat.format(-Math.round(secondsAgo / 60), 'minute');
+    if (iso === null) return 'no heartbeat';
+    const secondsAgo = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
+    if (secondsAgo < 60) return relativeFormat.format(-secondsAgo, 'second');
+    return relativeFormat.format(-Math.round(secondsAgo / 60), 'minute');
 }
 
 /**
@@ -32,64 +32,68 @@ function heartbeatLabel(iso: string | null): string {
  * degraded sentiment daemon is a very different night from a dead executor.
  */
 export function ServerStatusCard() {
-  const { data, isPending, isError, error } = useSystemStatus();
+    const { data, isPending, isError, error } = useSystemStatus();
 
-  return (
-    <Card>
-      <CardHeader className="flex-row items-start justify-between space-y-0 pb-3">
-        <div>
-          <CardTitle className="text-base">Server status</CardTitle>
-          {data ? (
-            <p className="mt-1 text-xs text-muted-foreground">
-              v{data.version} · up {formatDuration(data.uptimeSeconds / 86_400)} ·{' '}
-              {data.marketOpen ? 'market open' : 'market closed'}
-            </p>
-          ) : null}
-        </div>
-        {data ? (
-          <Badge variant={statePresentation[data.state].variant}>
-            {statePresentation[data.state].label}
-          </Badge>
-        ) : null}
-      </CardHeader>
-
-      <CardContent>
-        {isPending ? <Skeleton className="h-40" /> : null}
-
-        {isError ? (
-          <p className="py-6 text-center text-sm text-muted-foreground">
-            Could not reach the engine. {error.message}
-          </p>
-        ) : null}
-
-        {data ? (
-          <ul className="space-y-2">
-            {data.services.map((service) => (
-              <li key={service.name} className="flex items-start gap-3 text-sm">
-                <span
-                  className={cn(
-                    'mt-1.5 size-2 shrink-0 rounded-full',
-                    statePresentation[service.state].dot,
-                  )}
-                  aria-hidden
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-baseline justify-between gap-2">
-                    <span className="font-medium">{service.label}</span>
-                    <span className="shrink-0 text-xs text-muted-foreground">
-                      {heartbeatLabel(service.lastHeartbeatAt)}
-                    </span>
-                  </div>
-                  {service.detail ? (
-                    <p className="truncate text-xs text-muted-foreground">{service.detail}</p>
-                  ) : null}
-                  <span className="sr-only">{statePresentation[service.state].label}</span>
+    return (
+        <Card>
+            <CardHeader className="flex-row items-start justify-between space-y-0 pb-3">
+                <div>
+                    <CardTitle className="text-base">Server status</CardTitle>
+                    {data ? (
+                        <p className="text-muted-foreground mt-1 text-xs">
+                            v{data.version} · up {formatDuration(data.uptimeSeconds / 86_400)} ·{' '}
+                            {data.marketOpen ? 'market open' : 'market closed'}
+                        </p>
+                    ) : null}
                 </div>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-      </CardContent>
-    </Card>
-  );
+                {data ? (
+                    <Badge variant={statePresentation[data.state].variant}>
+                        {statePresentation[data.state].label}
+                    </Badge>
+                ) : null}
+            </CardHeader>
+
+            <CardContent>
+                {isPending ? <Skeleton className="h-40" /> : null}
+
+                {isError ? (
+                    <p className="text-muted-foreground py-6 text-center text-sm">
+                        Could not reach the engine. {error.message}
+                    </p>
+                ) : null}
+
+                {data ? (
+                    <ul className="space-y-2">
+                        {data.services.map((service) => (
+                            <li key={service.name} className="flex items-start gap-3 text-sm">
+                                <span
+                                    className={cn(
+                                        'mt-1.5 size-2 shrink-0 rounded-full',
+                                        statePresentation[service.state].dot,
+                                    )}
+                                    aria-hidden
+                                />
+                                <div className="min-w-0 flex-1">
+                                    <div className="flex items-baseline justify-between gap-2">
+                                        <span className="font-medium">{service.label}</span>
+                                        <span className="text-muted-foreground shrink-0 text-xs">
+                                            {heartbeatLabel(service.lastHeartbeatAt)}
+                                        </span>
+                                    </div>
+                                    {service.detail ? (
+                                        <p className="text-muted-foreground truncate text-xs">
+                                            {service.detail}
+                                        </p>
+                                    ) : null}
+                                    <span className="sr-only">
+                                        {statePresentation[service.state].label}
+                                    </span>
+                                </div>
+                            </li>
+                        ))}
+                    </ul>
+                ) : null}
+            </CardContent>
+        </Card>
+    );
 }

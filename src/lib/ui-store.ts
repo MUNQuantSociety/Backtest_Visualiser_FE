@@ -14,53 +14,53 @@ import { STORAGE_KEYS } from '@/config/constants';
 export type Theme = 'light' | 'dark' | 'system';
 
 interface UiState {
-  theme: Theme;
-  sidebarCollapsed: boolean;
-  /** IDs currently pinned for side-by-side comparison. */
-  comparisonIds: string[];
+    theme: Theme;
+    sidebarCollapsed: boolean;
+    /** IDs currently pinned for side-by-side comparison. */
+    comparisonIds: string[];
 
-  setTheme: (theme: Theme) => void;
-  toggleSidebar: () => void;
-  toggleComparison: (id: string) => void;
-  clearComparison: () => void;
+    setTheme: (theme: Theme) => void;
+    toggleSidebar: () => void;
+    toggleComparison: (id: string) => void;
+    clearComparison: () => void;
 }
 
 export const useUiStore = create<UiState>()(
-  persist(
-    (set) => ({
-      theme: 'system',
-      sidebarCollapsed: false,
-      comparisonIds: [],
+    persist(
+        (set) => ({
+            theme: 'system',
+            sidebarCollapsed: false,
+            comparisonIds: [],
 
-      setTheme: (theme) => {
-        set({ theme });
-      },
+            setTheme: (theme) => {
+                set({ theme });
+            },
 
-      toggleSidebar: () => {
-        set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed }));
-      },
+            toggleSidebar: () => {
+                set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed }));
+            },
 
-      toggleComparison: (id) => {
-        set((state) => ({
-          comparisonIds: state.comparisonIds.includes(id)
-            ? state.comparisonIds.filter((existing) => existing !== id)
-            : [...state.comparisonIds, id],
-        }));
-      },
+            toggleComparison: (id) => {
+                set((state) => ({
+                    comparisonIds: state.comparisonIds.includes(id)
+                        ? state.comparisonIds.filter((existing) => existing !== id)
+                        : [...state.comparisonIds, id],
+                }));
+            },
 
-      clearComparison: () => {
-        set({ comparisonIds: [] });
-      },
-    }),
-    {
-      name: STORAGE_KEYS.theme,
-      // Comparison selections are per-session; only persist real preferences.
-      partialize: (state) => ({
-        theme: state.theme,
-        sidebarCollapsed: state.sidebarCollapsed,
-      }),
-    },
-  ),
+            clearComparison: () => {
+                set({ comparisonIds: [] });
+            },
+        }),
+        {
+            name: STORAGE_KEYS.theme,
+            // Comparison selections are per-session; only persist real preferences.
+            partialize: (state) => ({
+                theme: state.theme,
+                sidebarCollapsed: state.sidebarCollapsed,
+            }),
+        },
+    ),
 );
 
 /* Selector hooks. Subscribing to one slice stops every consumer from
