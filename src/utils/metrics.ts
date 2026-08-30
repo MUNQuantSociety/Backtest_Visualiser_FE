@@ -194,3 +194,263 @@ export function payoffRatio(pnls: readonly number[]): number {
   if (avgLoss === 0) return averageWin(pnls) > 0 ? Number.POSITIVE_INFINITY : 0;
   return averageWin(pnls) / avgLoss;
 }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * APPEND THIS TO: src/utils/metrics.ts
+ *
+ * Nothing here is new maths — it is the derivations the nine new analytics
+ * charts need, kept in metrics.ts with the rest so they can be unit-tested
+ * without rendering. Follows the file's existing rules: pure functions, no React,
+ * no imports from features, sample stdDev (n-1), 252 periods, 2% risk-free.
+ *
+ * `TRADING_DAYS_PER_YEAR` and `DEFAULT_RISK_FREE_RATE` are already imported at
+ * the top of metrics.ts — no import changes required.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * Sharpe over a trailing window. Positions before the window fills are `null`
+ * rather than 0 — a Sharpe of zero is a real result and must not be faked.
+ *
+ * The headline Sharpe is one number for a whole run, which cannot tell a
+ * steadily good strategy from one that earned everything in a single quarter.
+ */
+export function rollingSharpe(
+  returns: readonly number[],
+  window = 63,
+  periodsPerYear = TRADING_DAYS_PER_YEAR,
+): (number | null)[] {
+  return returns.map((_, index) =>
+    index < window - 1
+      ? null
+      : sharpeRatio(
+          returns.slice(index - window + 1, index + 1),
+          DEFAULT_RISK_FREE_RATE,
+          periodsPerYear,
+        ),
+  );
+}
+
+/** Annualised volatility over a trailing window. Leading positions are `null`. */
+export function rollingVolatility(
+  returns: readonly number[],
+  window = 63,
+  periodsPerYear = TRADING_DAYS_PER_YEAR,
+): (number | null)[] {
+  return returns.map((_, index) =>
+    index < window - 1
+      ? null
+      : stdDev(returns.slice(index - window + 1, index + 1)) * Math.sqrt(periodsPerYear),
+  );
+}
+
+export interface MonthlyReturnRow {
+  year: string;
+  /** Twelve entries, Jan–Dec. `null` where the run had no data that month. */
+  months: (number | null)[];
+  /** Year-to-date, compounded from the months present. */
+  ytd: number;
+}
+
+/**
+ * Calendar-month returns compounded from an equity curve.
+ *
+ * Compounded, not summed: a month is the product of its daily factors. Summing
+ * daily returns overstates a volatile month, and the error grows with vol —
+ * exactly the months a reader is scrutinising.
+ *
+ * Structurally typed so utils/ stays free of feature imports; pass
+ * `detail.equityCurve` directly.
+ */
+export function monthlyReturns(
+  points: readonly { date: string; equity: number }[],
+): MonthlyReturnRow[] {
+  if (points.length < 2) return [];
+
+  const factorByMonth = new Map<string, number>();
+  for (let i = 1; i < points.length; i += 1) {
+    const previous = points[i - 1];
+    const current = points[i];
+    if (!previous || !current || previous.equity === 0) continue;
+    const key = current.date.slice(0, 7);
+    factorByMonth.set(key, (factorByMonth.get(key) ?? 1) * (current.equity / previous.equity));
+  }
+
+  const rows = new Map<string, MonthlyReturnRow>();
+  for (const [key, factor] of factorByMonth) {
+    const year = key.slice(0, 4);
+    const monthIndex = Number(key.slice(5, 7)) - 1;
+    const row = rows.get(year) ?? { year, months: Array.from({ length: 12 }, () => null), ytd: 0 };
+    row.months[monthIndex] = factor - 1;
+    rows.set(year, row);
+  }
+
+  return [...rows.values()].map((row) => ({
+    ...row,
+    // Explicit type argument: `months` is `(number | null)[]`, so without it
+    // TypeScript infers a nullable accumulator from the element type and
+    // ignores the numeric seed.
+    ytd:
+      row.months.reduce<number>((acc, value) => (value === null ? acc : acc * (1 + value)), 1) - 1,
+  }));
+}
+
+export interface Regression {
+  /** Intercept, in the same period units as the inputs. Annualise for display. */
+  alpha: number;
+  beta: number;
+  /** Coefficient of determination, in [0, 1]. */
+  r2: number;
+}
+
+/**
+ * Ordinary least squares of `ys` on `xs`.
+ *
+ * Beta near 1 with a high R² means an equity curve is the benchmark wearing a
+ * different name, however good the Sharpe looks — which no scalar on the
+ * tearsheet reveals.
+ */
+export function ols(xs: readonly number[], ys: readonly number[]): Regression {
+  const n = Math.min(xs.length, ys.length);
+  if (n < 2) return { alpha: 0, beta: 0, r2: 0 };
+
+  const xSlice = xs.slice(0, n);
+  const ySlice = ys.slice(0, n);
+  const mx = mean(xSlice);
+  const my = mean(ySlice);
+
+  let sxy = 0;
+  let sxx = 0;
+  let syy = 0;
+  for (let i = 0; i < n; i += 1) {
+    const dx = (xSlice[i] ?? 0) - mx;
+    const dy = (ySlice[i] ?? 0) - my;
+    sxy += dx * dy;
+    sxx += dx * dx;
+    syy += dy * dy;
+  }
+
+  const beta = sxx === 0 ? 0 : sxy / sxx;
+  return {
+    beta,
+    alpha: my - beta * mx,
+    r2: sxx === 0 || syy === 0 ? 0 : (sxy * sxy) / (sxx * syy),
+  };
+}
+
+/** Linear-interpolated quantile. `quantile(returns, 0.05)` is the 95% VaR. */
+export function quantile(values: readonly number[], p: number): number {
+  const sorted = [...values].filter(Number.isFinite).sort((a, b) => a - b);
+  if (sorted.length === 0) return 0;
+
+  const position = (sorted.length - 1) * p;
+  const low = Math.floor(position);
+  const high = Math.ceil(position);
+  const lowValue = sorted[low] ?? 0;
+  if (low === high) return lowValue;
+  return lowValue + ((sorted[high] ?? lowValue) - lowValue) * (position - low);
+}
+
+/** Normal probability density — the overlay on the return distribution. */
+export function normalPdf(x: number, mu: number, sigma: number): number {
+  if (sigma === 0) return 0;
+  return Math.exp(-((x - mu) ** 2) / (2 * sigma * sigma)) / (sigma * Math.sqrt(2 * Math.PI));
+}
+
+export interface DrawdownEpisode {
+  /** Negative ratio at the trough. */
+  depth: number;
+  peakDate: string;
+  valleyDate: string;
+  /** Null while the episode has not made a new high. */
+  recoveryDate: string | null;
+  /** Peak → recovery, in bars. Peak → last bar when still underwater. */
+  lengthBars: number;
+  /** Trough → new high, in bars. Null while underwater. */
+  recoveryBars: number | null;
+  ongoing: boolean;
+}
+
+/**
+ * Distinct peak-to-trough-to-recovery episodes, deepest first.
+ *
+ * `maxDrawdown()` collapses this to one number and hides what actually decides
+ * whether a strategy is holdable: how long the hole lasted. Two runs with an
+ * identical −18% can be a three-week dip and a nine-month grind.
+ *
+ * An episode that never recovers is flagged `ongoing` with a null recovery —
+ * unknown, not zero.
+ */
+export function drawdownEpisodes(
+  points: readonly { date: string; equity: number }[],
+  limit = 5,
+): DrawdownEpisode[] {
+  if (points.length < 2) return [];
+
+  interface Open {
+    peakIndex: number;
+    valleyIndex: number;
+    recoveryIndex: number | null;
+    depth: number;
+  }
+
+  const episodes: Open[] = [];
+  let peakIndex = 0;
+  let peak = points[0]?.equity ?? 0;
+  let valleyIndex: number | null = null;
+  let valley = Number.POSITIVE_INFINITY;
+
+  for (let i = 1; i < points.length; i += 1) {
+    const value = points[i]?.equity ?? 0;
+
+    if (value >= peak) {
+      if (valleyIndex !== null) {
+        episodes.push({
+          peakIndex,
+          valleyIndex,
+          recoveryIndex: i,
+          depth: peak === 0 ? 0 : valley / peak - 1,
+        });
+        valleyIndex = null;
+        valley = Number.POSITIVE_INFINITY;
+      }
+      peak = value;
+      peakIndex = i;
+    } else if (value < valley) {
+      valley = value;
+      valleyIndex = i;
+    }
+  }
+
+  if (valleyIndex !== null) {
+    episodes.push({
+      peakIndex,
+      valleyIndex,
+      recoveryIndex: null,
+      depth: peak === 0 ? 0 : valley / peak - 1,
+    });
+  }
+
+  return episodes
+    .sort((a, b) => a.depth - b.depth)
+    .slice(0, limit)
+    .map((episode) => ({
+      depth: episode.depth,
+      peakDate: points[episode.peakIndex]?.date ?? '',
+      valleyDate: points[episode.valleyIndex]?.date ?? '',
+      recoveryDate:
+        episode.recoveryIndex === null ? null : (points[episode.recoveryIndex]?.date ?? null),
+      lengthBars: (episode.recoveryIndex ?? points.length - 1) - episode.peakIndex,
+      recoveryBars:
+        episode.recoveryIndex === null ? null : episode.recoveryIndex - episode.valleyIndex,
+      ongoing: episode.recoveryIndex === null,
+    }));
+}
+
+/** Bars a trade was open. Null while the position is still open. */
+export function holdingBars(entryDate: string, exitDate: string | null): number | null {
+  if (exitDate === null) return null;
+  const entry = new Date(entryDate).getTime();
+  const exit = new Date(exitDate).getTime();
+  if (Number.isNaN(entry) || Number.isNaN(exit)) return null;
+  return Math.max(0, Math.round((exit - entry) / 86_400_000));
+}
