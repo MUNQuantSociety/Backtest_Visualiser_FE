@@ -4,6 +4,8 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { defineConfig, loadEnv } from 'vite';
 
+import { clientLoggerPlugin } from './tools/client-logger-plugin';
+
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   // Only VITE_-prefixed vars are exposed to the client; loadEnv here is used
@@ -11,11 +13,14 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
 
   return {
-    plugins: [react(), tailwindcss()],
+    plugins: [react(), tailwindcss(), clientLoggerPlugin()],
 
     resolve: {
       alias: {
         '@': fileURLToPath(new URL('./src', import.meta.url)),
+        // Demo dataset at the repo root. Aliased so the import reads as a
+        // data source rather than a relative crawl out of src/.
+        '@data': fileURLToPath(new URL('./mock-data', import.meta.url)),
       },
     },
 
@@ -48,6 +53,13 @@ export default defineConfig(({ mode }) => {
       rollupOptions: {
         output: {
           manualChunks(id) {
+            // The demo dataset is ~570 KB of JSON behind a dynamic import. Left
+            // to default chunking it gets folded into the backtests feature
+            // chunk, which the dashboard loads on first paint — so every user
+            // would download it even though only the offline fallback and
+            // VITE_USE_FIXTURES ever read it. Its own chunk means it is fetched
+            // only when something actually asks for it.
+            if (id.includes('mock-data')) return 'mock-data';
             if (!id.includes('node_modules')) return undefined;
             if (/[\\/](react|react-dom|react-router|scheduler)[\\/]/.test(id)) {
               return 'vendor-react';

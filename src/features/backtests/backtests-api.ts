@@ -1,7 +1,8 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { env } from '@/config/env';
-import { apiClient } from '@/lib/api-client';
+import { ApiError, apiClient } from '@/lib/api-client';
+import { createLogger } from '@/lib/logger';
 
 import { fixtureBacktest, fixtureBacktests } from './fixtures';
 import {
@@ -15,7 +16,13 @@ import {
  * Transport layer for the backtests feature. Every function returns parsed,
  * validated data — callers get a `BacktestDetail`, never a raw `unknown`.
  * No React here: these stay trivially unit-testable and reusable outside hooks.
+ *
+ * Demo data comes from `mock-data/backtests.json` via `./fixtures`, either
+ * because `VITE_USE_FIXTURES=true` forces it or because the backend could not
+ * be reached at all.
  */
+
+const log = createLogger('backtests');
 
 /** Fake latency, so loading states are visible in the demo instead of flashing. */
 const FIXTURE_DELAY_MS = 220;
@@ -25,46 +32,92 @@ async function withFixtureDelay<T>(value: T): Promise<T> {
   return value;
 }
 
+/**
+ * True when nothing was listening at the other end.
+ *
+ * Two shapes, because it depends on how the app is talking to the API. Called
+ * directly, an absent server is a network failure and `ApiError` reports status
+ * 0. Called through the Vite dev proxy — the default — the proxy answers on the
+ * server's behalf with a 502, so the browser gets a real response and status 0
+ * never happens. Both have to count or the fallback would never fire in dev,
+ * which is the one place it exists for.
+ *
+ * 4xx is excluded on purpose: a backend that *is* running and is returning 404
+ * or 422 has a bug worth seeing, and quietly swapping in demo data would turn
+ * it into charts full of plausible fiction.
+ */
+const GATEWAY_STATUSES = new Set([502, 503, 504]);
+
+function isUnreachable(error: unknown): boolean {
+  if (!(error instanceof ApiError)) return false;
+  return error.status === 0 || GATEWAY_STATUSES.has(error.status);
+}
+
+/**
+ * Only ever in dev.
+ *
+ * A production deployment hitting a 502 should show its error state, not serve
+ * fabricated numbers to someone who thinks they are looking at real results.
+ */
+function canFallBack(error: unknown): boolean {
+  return env.isDev && isUnreachable(error);
+}
+
+/** Filtering and paging applied locally, so the demo exercises the same
+ *  round trip the real endpoint will: query in, filtered page out. */
+async function mockBacktestList(filters: BacktestFilters) {
+  const all = await fixtureBacktests();
+  const search = filters.search?.toLowerCase();
+
+  const items = all.filter((item) => {
+    if (filters.status && item.status !== filters.status) return false;
+    if (filters.strategyId && item.strategyId !== filters.strategyId) return false;
+    if (
+      search &&
+      !`${item.name} ${item.symbol} ${item.strategyName}`.toLowerCase().includes(search)
+    ) {
+      return false;
+    }
+    return true;
+  });
+
+  const pageSize = filters.pageSize ?? items.length;
+  const page = filters.page ?? 1;
+
+  return withFixtureDelay(
+    backtestListResponseSchema.parse({
+      items: items.slice((page - 1) * pageSize, page * pageSize),
+      total: items.length,
+      page,
+      pageSize,
+    }),
+  );
+}
+
 export async function fetchBacktests(filters: BacktestFilters = {}) {
-  if (env.useFixtures) {
-    const all = fixtureBacktests();
-    const search = filters.search?.toLowerCase();
+  if (env.useFixtures) return mockBacktestList(filters);
 
-    // Filtering happens here rather than in the component so the demo exercises
-    // the same round trip the real endpoint will: query in, filtered page out.
-    const items = all.filter((item) => {
-      if (filters.status && item.status !== filters.status) return false;
-      if (filters.strategyId && item.strategyId !== filters.strategyId) return false;
-      if (search && !`${item.name} ${item.symbol} ${item.strategyName}`.toLowerCase().includes(search)) {
-        return false;
-      }
-      return true;
-    });
-
-    const pageSize = filters.pageSize ?? items.length;
-    const page = filters.page ?? 1;
-
-    return withFixtureDelay(
-      backtestListResponseSchema.parse({
-        items: items.slice((page - 1) * pageSize, page * pageSize),
-        total: items.length,
-        page,
-        pageSize,
-      }),
-    );
+  try {
+    const data = await apiClient.get<unknown>('/backtests', { params: filters });
+    return backtestListResponseSchema.parse(data);
+  } catch (error) {
+    if (!canFallBack(error)) throw error;
+    log.warn('backend unreachable, serving mock-data/backtests.json', { endpoint: '/backtests' });
+    return mockBacktestList(filters);
   }
-
-  const data = await apiClient.get<unknown>('/backtests', { params: filters });
-  return backtestListResponseSchema.parse(data);
 }
 
 export async function fetchBacktest(id: string): Promise<BacktestDetail> {
-  if (env.useFixtures) {
-    return withFixtureDelay(backtestDetailSchema.parse(fixtureBacktest(id)));
-  }
+  if (env.useFixtures) return withFixtureDelay(await fixtureBacktest(id));
 
-  const data = await apiClient.get<unknown>(`/backtests/${encodeURIComponent(id)}`);
-  return backtestDetailSchema.parse(data);
+  try {
+    const data = await apiClient.get<unknown>(`/backtests/${encodeURIComponent(id)}`);
+    return backtestDetailSchema.parse(data);
+  } catch (error) {
+    if (!canFallBack(error)) throw error;
+    log.warn('backend unreachable, serving mock-data/backtests.json', { id });
+    return withFixtureDelay(await fixtureBacktest(id));
+  }
 }
 
 export async function deleteBacktest(id: string): Promise<void> {

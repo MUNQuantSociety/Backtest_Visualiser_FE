@@ -31,7 +31,9 @@ function formatValue(row: TearsheetRow): string {
         ? formatSigned(row.value, (n) => formatCurrency(n))
         : formatCurrency(row.value);
     case 'percent':
-      return row.signed ? formatSigned(row.value, (n) => formatPercent(n)) : formatPercent(row.value);
+      return row.signed
+        ? formatSigned(row.value, (n) => formatPercent(n))
+        : formatPercent(row.value);
     case 'integer':
       return formatNumber(row.value, 0);
     case 'ratio':

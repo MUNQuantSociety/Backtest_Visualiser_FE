@@ -32,7 +32,12 @@ const ROWS: readonly Row[] = [
     format: (v) => formatSigned(v, (n) => formatPercent(n)),
     better: 'high',
   },
-  { label: 'Sharpe', value: (d) => d.metrics.sharpe, format: (v) => formatNumber(v), better: 'high' },
+  {
+    label: 'Sharpe',
+    value: (d) => d.metrics.sharpe,
+    format: (v) => formatNumber(v),
+    better: 'high',
+  },
   {
     label: 'Sortino',
     value: (d) => d.metrics.sortino,

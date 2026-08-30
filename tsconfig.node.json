@@ -18,7 +18,13 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true,
 
-    "types": ["node"]
+    "types": ["node"],
+
+    /* The generator in tools/ reaches into src/ for the fixture blueprints and
+       the shared metrics maths, so this project has to resolve "@/" too. */
+    "paths": {
+      "@/*": ["./src/*"]
+    }
   },
-  "include": ["vite.config.ts", "vitest.config.ts", "eslint.config.js"]
+  "include": ["vite.config.ts", "vitest.config.ts", "eslint.config.js", "tools/**/*.ts"]
 }

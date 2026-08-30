@@ -1,6 +1,14 @@
-import axios, { AxiosError, type AxiosInstance, type AxiosRequestConfig } from 'axios';
+import axios, {
+  AxiosError,
+  type AxiosInstance,
+  type AxiosRequestConfig,
+  type InternalAxiosRequestConfig,
+} from 'axios';
 
 import { env } from '@/config/env';
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('api');
 
 /**
  * A normalised error shape. Every failure the UI sees is an ApiError, so
@@ -70,6 +78,20 @@ function toApiError(error: unknown): ApiError {
   );
 }
 
+/** Carries the send timestamp so the response side can report a duration. */
+interface TimedConfig extends InternalAxiosRequestConfig {
+  startedAt?: number;
+}
+
+function describe(config: { method?: string | undefined; url?: string | undefined }): string {
+  return `${(config.method ?? 'get').toUpperCase()} ${config.url ?? '(no url)'}`;
+}
+
+function elapsedMs(config: TimedConfig | undefined): number | undefined {
+  if (config?.startedAt === undefined) return undefined;
+  return Math.round(performance.now() - config.startedAt);
+}
+
 function createApiClient(): AxiosInstance {
   const instance = axios.create({
     baseURL: env.apiBaseUrl,
@@ -80,9 +102,35 @@ function createApiClient(): AxiosInstance {
     withCredentials: true,
   });
 
+  instance.interceptors.request.use((config) => {
+    (config as TimedConfig).startedAt = performance.now();
+    // `config.params` is typed `any`; widen to `unknown` so it cannot spread.
+    const params: unknown = config.params;
+    log.debug(`→ ${describe(config)}`, params === undefined ? undefined : { params });
+    return config;
+  });
+
   instance.interceptors.response.use(
-    (response) => response,
-    (error: unknown) => Promise.reject(toApiError(error)),
+    (response) => {
+      const ms = elapsedMs(response.config as TimedConfig);
+      log.info(`← ${String(response.status)} ${describe(response.config)}`, { ms });
+      return response;
+    },
+    (error: unknown) => {
+      const apiError = toApiError(error);
+      const config =
+        error instanceof AxiosError ? (error.config as TimedConfig | undefined) : undefined;
+
+      log.error(`✗ ${config ? describe(config) : 'request failed'}`, {
+        status: apiError.status,
+        code: apiError.code,
+        message: apiError.message,
+        retryable: apiError.isRetryable,
+        ms: elapsedMs(config),
+      });
+
+      return Promise.reject(apiError);
+    },
   );
 
   return instance;

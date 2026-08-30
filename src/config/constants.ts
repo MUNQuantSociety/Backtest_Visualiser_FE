@@ -34,7 +34,6 @@ export type Timeframe = (typeof TIMEFRAMES)[number];
 /** localStorage keys, namespaced so they never collide with other apps on the origin. */
 export const STORAGE_KEYS = {
   theme: 'bv:theme',
-  sidebarCollapsed: 'bv:sidebar-collapsed',
   comparisonSet: 'bv:comparison-set',
 } as const;
 
