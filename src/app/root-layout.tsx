@@ -1,12 +1,25 @@
-import { Suspense } from 'react';
-import { Outlet } from 'react-router';
+import { Suspense, useEffect } from 'react';
+import { Outlet, useLocation } from 'react-router';
 
 import { ErrorBoundary } from '@/components/common/error-boundary';
+import { createLogger } from '@/lib/logger';
 
 import { AppShell } from './shell';
 
+const log = createLogger('route');
+
 /** Chrome that persists across every route, plus per-route error isolation. */
 export function RootLayout() {
+  const location = useLocation();
+
+  // Logged from the layout rather than the router: this fires after the route
+  // has actually rendered, so a line here means the page really did mount.
+  useEffect(() => {
+    log.info(`navigated to ${location.pathname}`, {
+      ...(location.search ? { search: location.search } : {}),
+    });
+  }, [location.pathname, location.search]);
+
   return (
     <AppShell>
       <ErrorBoundary>

@@ -1,5 +1,14 @@
 import { useMemo } from 'react';
-import { Bar, BarChart, Cell, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import {
+  Bar,
+  BarChart,
+  Cell,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 
 import type { Trade } from '@/features/backtests';
 import { formatCompact, formatCurrency, formatNumber } from '@/utils/format';

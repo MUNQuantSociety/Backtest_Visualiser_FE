@@ -15,12 +15,10 @@ export type Theme = 'light' | 'dark' | 'system';
 
 interface UiState {
   theme: Theme;
-  sidebarCollapsed: boolean;
   /** IDs currently pinned for side-by-side comparison. */
   comparisonIds: string[];
 
   setTheme: (theme: Theme) => void;
-  toggleSidebar: () => void;
   toggleComparison: (id: string) => void;
   clearComparison: () => void;
 }
@@ -29,15 +27,10 @@ export const useUiStore = create<UiState>()(
   persist(
     (set) => ({
       theme: 'system',
-      sidebarCollapsed: false,
       comparisonIds: [],
 
       setTheme: (theme) => {
         set({ theme });
-      },
-
-      toggleSidebar: () => {
-        set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed }));
       },
 
       toggleComparison: (id) => {
@@ -57,7 +50,6 @@ export const useUiStore = create<UiState>()(
       // Comparison selections are per-session; only persist real preferences.
       partialize: (state) => ({
         theme: state.theme,
-        sidebarCollapsed: state.sidebarCollapsed,
       }),
     },
   ),
@@ -67,5 +59,3 @@ export const useUiStore = create<UiState>()(
    re-rendering when an unrelated field changes. */
 export const useTheme = () => useUiStore((state) => state.theme);
 export const useSetTheme = () => useUiStore((state) => state.setTheme);
-export const useSidebarCollapsed = () => useUiStore((state) => state.sidebarCollapsed);
-export const useToggleSidebar = () => useUiStore((state) => state.toggleSidebar);

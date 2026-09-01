@@ -2,6 +2,9 @@ import { AlertTriangle } from 'lucide-react';
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 
 import { Button } from '@/components/ui/button';
+import { createLogger } from '@/lib/logger';
+
+const log = createLogger('react');
 
 interface Props {
   children: ReactNode;
@@ -28,7 +31,10 @@ export class ErrorBoundary extends Component<Props, State> {
 
   override componentDidCatch(error: Error, info: ErrorInfo): void {
     this.props.onError?.(error, info);
-    console.error('Uncaught render error:', error, info.componentStack);
+    log.error('render error caught by boundary', {
+      error,
+      componentStack: info.componentStack,
+    });
   }
 
   private readonly reset = (): void => {

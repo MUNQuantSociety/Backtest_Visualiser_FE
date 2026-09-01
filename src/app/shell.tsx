@@ -6,19 +6,17 @@ import {
   GitCompareArrows,
   LayoutDashboard,
   LogOut,
-  Menu,
   ScrollText,
   Settings,
   type LucideIcon,
 } from 'lucide-react';
-import { type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { NavLink } from 'react-router';
 
 import { paths } from '@/app/paths';
 import logo from '@/assets/logo_dark.svg';
 import { Button } from '@/components/ui/button';
 import { APP_NAME, PRODUCT_NAMES } from '@/config/constants';
-import { useSidebarCollapsed, useToggleSidebar } from '@/lib/ui-store';
 import { cn } from '@/lib/utils';
 
 interface NavItem {
@@ -62,6 +60,15 @@ const sections: readonly NavSection[] = [
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
+  /*
+   * Hover state lives here rather than inside `Sidebar` because the header
+   * carries the top of the rail's right border. Kept local to `Sidebar` it
+   * would widen on hover while the header's block stayed 64px, and the divider
+   * would visibly jog at the header seam for as long as the pointer rested
+   * there. Both read the same flag, so the line stays straight.
+   */
+  const [navExpanded, setNavExpanded] = useState(false);
+
   return (
     <div className="min-h-dvh">
       <a
@@ -79,10 +86,10 @@ export function AppShell({ children }: { children: ReactNode }) {
        * collapsed. Full width means the true middle, and a fixed one.
        */}
       <div className="flex min-h-dvh flex-col">
-        <AppHeader />
+        <AppHeader navExpanded={navExpanded} />
 
         <div className="flex min-h-0 flex-1">
-          <Sidebar />
+          <Sidebar expanded={navExpanded} onExpandedChange={setNavExpanded} />
           <div className="flex min-w-0 flex-1 flex-col">
             <TopNav />
             <main id="main" className="mx-auto w-full max-w-[1600px] flex-1 space-y-6 p-6">
@@ -96,47 +103,30 @@ export function AppShell({ children }: { children: ReactNode }) {
 }
 
 /**
- * Top bar: navigation toggle on the left, wordmark centred, account on the right.
+ * Top bar: wordmark centred, account on the right.
  *
  * The wordmark is absolutely positioned rather than laid out between the two
  * side slots. Centring it with flex would measure it against whatever happens
- * to sit either side, so it would drift every time the burger appeared or the
- * button label changed width — and "Log out" is wider than the burger, so it
- * would never actually be centred. Absolute keeps it locked to the true middle
+ * to sit either side, so it would drift every time a control appeared or a
+ * button label changed width. Absolute keeps it locked to the true middle
  * regardless of what flanks it.
  */
-function AppHeader() {
-  const collapsed = useSidebarCollapsed();
-  const toggleSidebar = useToggleSidebar();
-
+function AppHeader({ navExpanded }: { navExpanded: boolean }) {
   return (
     <header className="sticky top-0 z-50 flex h-14 shrink-0 items-center border-b bg-card/95 backdrop-blur">
       {/*
-       * Mirrors the sidebar's width and carries the same right border, so the
-       * rail's vertical divider runs unbroken from the top of the page rather
-       * than starting below the header. It tracks the collapse with the same
-       * transition, so the line never lurches out of alignment mid-animation.
-       *
-       * The burger lives in here rather than in the rail itself: a row of its
-       * own at the top of the sidebar cost 56px of height to show one icon.
+       * Mirrors the rail's width and carries the same right border, so the
+       * divider runs unbroken from the top of the page rather than starting
+       * below the header. It tracks the hover with the same duration, so the
+       * line never lurches out of alignment mid-animation.
        */}
       <div
+        aria-hidden
         className={cn(
-          'hidden h-full shrink-0 items-center border-r transition-[width] duration-200 md:flex',
-          collapsed ? 'w-16 justify-center px-2' : 'w-56 px-4',
+          'hidden h-full shrink-0 border-r transition-[width] duration-200 md:block',
+          navExpanded ? 'w-56' : 'w-16',
         )}
-      >
-        <button
-          type="button"
-          onClick={toggleSidebar}
-          aria-expanded={!collapsed}
-          aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'}
-          title={collapsed ? 'Expand navigation' : 'Collapse navigation'}
-          className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-        >
-          <Menu className="size-4" aria-hidden />
-        </button>
-      </div>
+      />
 
       {/* Absolute against the header, which spans the full width — so this is
           the viewport's centre, not the centre of the space left over beside
@@ -210,58 +200,96 @@ function TopNav() {
   );
 }
 
-/**
- * Collapses to an icon rail rather than disappearing.
- *
- * Hiding it outright would reproduce the bug `TopNav` exists to fix — no
- * navigation at all — so collapsed still shows every destination, just without
- * labels. The state is persisted by `useUiStore`, so the choice survives a
- * reload.
- */
-function Sidebar() {
-  const collapsed = useSidebarCollapsed();
+interface SidebarProps {
+  expanded: boolean;
+  onExpandedChange: (expanded: boolean) => void;
+}
 
+/**
+ * A permanent 64px icon rail that widens to show labels while hovered.
+ *
+ * The rail is laid out in normal flow, so opening it *pushes* the content
+ * column rather than covering it — the page is narrower while it is open. The
+ * cost is that the content reflows on every hover: `main` and every chart in it
+ * re-measure, and both chart libraries re-run their `ResizeObserver` callbacks
+ * for the whole 200ms transition. Overlaying instead would leave the content
+ * still, at the price of hiding the left edge of it while open.
+ *
+ * It never hides entirely: that would reproduce the gap `TopNav` exists to fill
+ * (no navigation at all), so every destination stays reachable as an icon.
+ */
+function Sidebar({ expanded, onExpandedChange }: SidebarProps) {
   return (
     <aside
+      onMouseEnter={() => {
+        onExpandedChange(true);
+      }}
+      onMouseLeave={() => {
+        onExpandedChange(false);
+      }}
+      // Hover alone would strand keyboard users: tabbing into the rail would
+      // move focus through links whose labels are clipped out of sight. Focus
+      // opens it too. `*Capture` because focus/blur do not bubble.
+      onFocusCapture={() => {
+        onExpandedChange(true);
+      }}
+      onBlurCapture={(event) => {
+        // Only collapse once focus has left the rail entirely, not while it
+        // is moving between two links inside it.
+        if (!event.currentTarget.contains(event.relatedTarget)) {
+          onExpandedChange(false);
+        }
+      }}
       className={cn(
-        // `overflow-hidden` is load-bearing: the labels are laid out at their
-        // full width for the whole 200ms transition, so without it they spill
-        // out of the narrowing rail and across the page on every toggle.
-        'hidden shrink-0 overflow-hidden border-r bg-card transition-[width] duration-200 md:block',
-        collapsed ? 'w-16' : 'w-56',
+        // Pinned below the 56px header so navigation stays put while the page
+        // scrolls. `self-start` is what makes `sticky` work at all: as a flex
+        // child the rail would otherwise stretch to the full height of the row,
+        // leaving nothing to stick — it would scroll away with the content.
+        // The explicit height then bounds it to the viewport, and `overflow-y`
+        // lets the list scroll inside itself once it outgrows a short window.
+        'sticky top-14 hidden h-[calc(100dvh-3.5rem)] shrink-0 self-start overflow-y-auto md:block',
+        // `overflow-x-hidden` is load-bearing: labels are laid out at full
+        // width for the whole 200ms transition, so without it they spill
+        // across the page every time the rail narrows.
+        'overflow-x-hidden border-r bg-card transition-[width] duration-200',
+        expanded ? 'w-56' : 'w-16',
       )}
     >
-      {/* Nav starts straight away — the wordmark and the toggle both live in
-          `AppHeader`, so there is nothing to reserve a header row for. */}
       <nav className="space-y-6 p-3" aria-label="Main">
-        {sections.map((section, sectionIndex) => (
+        {sections.map((section) => (
           <div key={section.heading}>
-            {collapsed ? (
-              // A rule instead of the heading: the grouping is load-bearing
-              // (simulated vs real money) so it must not vanish entirely.
-              // Skipped on the first group, where it would double up with the
-              // header's own bottom border.
-              sectionIndex === 0 ? null : (
-                <div className="mx-2 mb-1.5 border-t" role="presentation" />
-              )
-            ) : (
-              <p className="px-3 pb-1.5 text-[0.6875rem] font-semibold tracking-wider whitespace-nowrap text-muted-foreground uppercase">
-                {section.heading}
-              </p>
-            )}
+            {/*
+             * Held in the layout at all times and only faded, rather than
+             * swapped for a divider when narrow. Removing it from flow would
+             * shift every link down the instant the pointer arrived, so the
+             * item under the cursor would not be the one that got clicked.
+             * Collapsed, the blank row it leaves is what separates the two
+             * groups — and the grouping matters here, since it is the line
+             * between simulated and real money.
+             */}
+            <p
+              className={cn(
+                'px-3 pb-1.5 text-[0.6875rem] font-semibold tracking-wider whitespace-nowrap text-muted-foreground uppercase transition-opacity duration-200',
+                expanded ? 'opacity-100' : 'opacity-0',
+              )}
+            >
+              {section.heading}
+            </p>
             <ul className="space-y-1">
               {section.items.map(({ to, label, icon: Icon, end }) => (
                 <li key={to}>
                   <NavLink
                     to={to}
                     end={end}
-                    title={collapsed ? label : undefined}
                     className={({ isActive }) =>
                       cn(
-                        // `whitespace-nowrap` stops labels wrapping to two lines
-                        // while the rail is mid-transition.
-                        'flex items-center rounded-md py-2 text-sm whitespace-nowrap transition-colors',
-                        collapsed ? 'justify-center px-2' : 'gap-2.5 px-3',
+                        // `whitespace-nowrap` stops labels wrapping to two
+                        // lines while the rail is mid-transition.
+                        'flex items-center gap-3 rounded-md py-2 text-sm whitespace-nowrap transition-[padding,background-color,color] duration-200',
+                        // Collapsed, px-6 puts the 16px icon dead centre of
+                        // the 64px rail (24 + 8 = 32). The icons must not
+                        // drift sideways as the panel opens.
+                        expanded ? 'px-3' : 'px-6',
                         isActive
                           ? 'bg-accent font-medium text-accent-foreground'
                           : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground',
@@ -269,7 +297,9 @@ function Sidebar() {
                     }
                   >
                     <Icon className="size-4 shrink-0" aria-hidden />
-                    {collapsed ? <span className="sr-only">{label}</span> : label}
+                    {/* Always rendered, merely clipped — so screen readers
+                          and the accessibility tree always have the label. */}
+                    {label}
                   </NavLink>
                 </li>
               ))}
