@@ -6,7 +6,7 @@ import { ChartContainer } from '@/components/charts/chart-container';
 import { EmptyState } from '@/components/common/empty-state';
 import { PageHeader } from '@/components/common/page-header';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { useBacktest } from '@/features/backtests';
+import { RunStatusBanner, useBacktest } from '@/features/backtests';
 import {
   BetaScatter,
   DailyPnlBars,
@@ -88,6 +88,10 @@ export default function BacktestDetailPage() {
         }
       />
 
+      {/* Above the metrics on purpose: for an unfinished or failed run every
+          panel below is empty, and this is the explanation for why. */}
+      {data ? <RunStatusBanner run={data} /> : null}
+
       <MetricsGrid metrics={data?.metrics} isLoading={isPending} />
 
       <div
@@ -107,7 +111,7 @@ export default function BacktestDetailPage() {
             className={cn(
               'cursor-pointer rounded-sm px-3.5 py-1.5 text-sm transition-colors',
               active === tab.id
-                ? 'bg-accent font-medium text-accent-foreground'
+                ? 'bg-selected font-medium text-selected-foreground'
                 : 'text-muted-foreground hover:text-foreground',
             )}
           >

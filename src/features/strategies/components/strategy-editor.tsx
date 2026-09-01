@@ -2,6 +2,7 @@ import { AlertTriangle, CircleCheck, CircleX, FileUp, Loader2, PencilLine } from
 import { useId, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 
 import { Button } from '@/components/ui/button';
+import { env } from '@/config/env';
 import { cn } from '@/lib/utils';
 
 import { useCheckStrategy, useSubmitStrategy } from '../strategies-api';
@@ -315,11 +316,21 @@ export function StrategyEditor() {
 }
 
 /**
- * The verdict, and every reason behind it.
+ * The verdict. The reasons behind it are for developers only.
  *
- * Rendered as a list rather than a single sentence because the backend answers
- * with a list: a file with three problems should show three problems, so one
- * round trip is enough to fix all of them.
+ * The check answers one question for a member writing a strategy: will this run
+ * here, yes or no. It deliberately does not tell them how to fix it. The
+ * per-line diagnostics name internals (the import allowlist, the `OnData`
+ * signature, `super().__init__`) and reading them as instructions leads someone
+ * to edit their strategy to satisfy a scanner rather than to express an idea.
+ * A member who gets "not compatible" should ask a dev, and the dev has the
+ * detail.
+ *
+ * "Developer" here means a development build. That is a UI gate, not a security
+ * boundary: the issues are still in the response body, so anyone who opens the
+ * network tab can read them. That is the right level for this. The detail is
+ * not secret, it is just noise aimed at the wrong reader, and a backend that
+ * withheld it would also withhold it from the dev debugging in production.
  */
 function CompatibilityPanel({ result }: { result: StrategyCheckResult }) {
   const tone =
@@ -363,12 +374,16 @@ function CompatibilityPanel({ result }: { result: StrategyCheckResult }) {
         </div>
       </div>
 
-      {result.issues.length > 0 ? (
-        <IssueList title="Fix before running" issues={result.issues} className="text-[var(--loss)]" />
+      {env.isDev && result.issues.length > 0 ? (
+        <IssueList title="Issues (dev only)" issues={result.issues} className="text-[var(--loss)]" />
       ) : null}
 
-      {result.warnings.length > 0 ? (
-        <IssueList title="Worth a look" issues={result.warnings} className="text-muted-foreground" />
+      {env.isDev && result.warnings.length > 0 ? (
+        <IssueList
+          title="Warnings (dev only)"
+          issues={result.warnings}
+          className="text-muted-foreground"
+        />
       ) : null}
     </div>
   );
@@ -421,7 +436,9 @@ function ModeTab({
       aria-pressed={active}
       className={cn(
         'flex items-center gap-1.5 rounded px-3 py-1.5 text-sm transition-colors',
-        active ? 'bg-accent font-medium text-accent-foreground' : 'text-muted-foreground hover:text-foreground',
+        active
+          ? 'bg-selected font-medium text-selected-foreground'
+          : 'text-muted-foreground hover:text-foreground',
       )}
     >
       <Icon className="size-4" aria-hidden />

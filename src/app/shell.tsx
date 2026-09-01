@@ -6,6 +6,7 @@ import {
   GitCompareArrows,
   LayoutDashboard,
   LogOut,
+  Menu,
   ScrollText,
   Settings,
   type LucideIcon,
@@ -59,15 +60,55 @@ const sections: readonly NavSection[] = [
   },
 ];
 
+/**
+ * The rail's open state, remembered between visits.
+ *
+ * It is a deliberate choice the member made by clicking the button, not a
+ * transient hover, so forgetting it on every reload would make them re-make it
+ * on every reload. Reads and writes are guarded: a private window, blocked
+ * site data, or a thumbnail capture all throw on `localStorage` access rather
+ * than returning null.
+ */
+const NAV_STORAGE_KEY = 'mqs.nav-expanded';
+
+function readStoredNavExpanded(): boolean {
+  try {
+    const stored = localStorage.getItem(NAV_STORAGE_KEY);
+    // Open by default: the labels are the point of a fixed rail, and someone
+    // who wants the width back has a button to take it.
+    return stored === null ? true : stored === 'true';
+  } catch {
+    return true;
+  }
+}
+
+function storeNavExpanded(expanded: boolean): void {
+  try {
+    localStorage.setItem(NAV_STORAGE_KEY, String(expanded));
+  } catch {
+    // Not being able to remember the preference is not worth breaking a click.
+  }
+}
+
+/** The id the header's button points at, so the two stay in step. */
+const SIDEBAR_ID = 'app-sidebar';
+
 export function AppShell({ children }: { children: ReactNode }) {
   /*
-   * Hover state lives here rather than inside `Sidebar` because the header
-   * carries the top of the rail's right border. Kept local to `Sidebar` it
-   * would widen on hover while the header's block stayed 64px, and the divider
-   * would visibly jog at the header seam for as long as the pointer rested
-   * there. Both read the same flag, so the line stays straight.
+   * The open flag lives here rather than inside `Sidebar` because the header
+   * carries the top of the rail's right border. Kept local to `Sidebar` the
+   * rail would widen while the header's block stayed 64px, and the divider
+   * would visibly jog at the header seam. Both read the same flag, so the line
+   * stays straight. The header also owns the button that flips it.
    */
-  const [navExpanded, setNavExpanded] = useState(false);
+  const [navExpanded, setNavExpanded] = useState(readStoredNavExpanded);
+
+  function toggleNav() {
+    setNavExpanded((open) => {
+      storeNavExpanded(!open);
+      return !open;
+    });
+  }
 
   return (
     <div className="min-h-dvh">
@@ -86,10 +127,10 @@ export function AppShell({ children }: { children: ReactNode }) {
        * collapsed. Full width means the true middle, and a fixed one.
        */}
       <div className="flex min-h-dvh flex-col">
-        <AppHeader navExpanded={navExpanded} />
+        <AppHeader navExpanded={navExpanded} onToggleNav={toggleNav} />
 
         <div className="flex min-h-0 flex-1">
-          <Sidebar expanded={navExpanded} onExpandedChange={setNavExpanded} />
+          <Sidebar expanded={navExpanded} />
           <div className="flex min-w-0 flex-1 flex-col">
             <TopNav />
             <main id="main" className="mx-auto w-full max-w-[1600px] flex-1 space-y-6 p-6">
@@ -111,22 +152,49 @@ export function AppShell({ children }: { children: ReactNode }) {
  * button label changed width. Absolute keeps it locked to the true middle
  * regardless of what flanks it.
  */
-function AppHeader({ navExpanded }: { navExpanded: boolean }) {
+function AppHeader({
+  navExpanded,
+  onToggleNav,
+}: {
+  navExpanded: boolean;
+  onToggleNav: () => void;
+}) {
   return (
     <header className="sticky top-0 z-50 flex h-14 shrink-0 items-center border-b bg-card/95 backdrop-blur">
       {/*
        * Mirrors the rail's width and carries the same right border, so the
        * divider runs unbroken from the top of the page rather than starting
-       * below the header. It tracks the hover with the same duration, so the
-       * line never lurches out of alignment mid-animation.
+       * below the header. It animates over the same duration as the rail, so
+       * the line never lurches out of alignment mid-toggle.
        */}
       <div
-        aria-hidden
         className={cn(
-          'hidden h-full shrink-0 border-r transition-[width] duration-200 md:block',
+          'hidden h-full shrink-0 items-center border-r transition-[width] duration-200 md:flex',
           navExpanded ? 'w-56' : 'w-16',
         )}
-      />
+      >
+        {/*
+         * The button sits in the rail's own column rather than beside the
+         * wordmark, so it lines up with the thing it controls at both widths.
+         * `justify-center` when collapsed keeps it on the same centre line as
+         * the icons below it, which is the axis the eye follows down the rail.
+         */}
+        <div className={cn('flex w-full', navExpanded ? 'px-3' : 'justify-center')}>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onToggleNav}
+            aria-expanded={navExpanded}
+            aria-controls={SIDEBAR_ID}
+            // The icon carries no text, so the control needs a name of its
+            // own. It says what the click will do, not what the state is.
+            aria-label={navExpanded ? 'Collapse navigation' : 'Expand navigation'}
+            title={navExpanded ? 'Collapse navigation' : 'Expand navigation'}
+          >
+            <Menu className="size-5" aria-hidden />
+          </Button>
+        </div>
+      </div>
 
       {/* Absolute against the header, which spans the full width — so this is
           the viewport's centre, not the centre of the space left over beside
@@ -183,7 +251,7 @@ function TopNav() {
                     cn(
                       'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm whitespace-nowrap transition-colors',
                       isActive
-                        ? 'bg-accent font-medium text-accent-foreground'
+                        ? 'bg-selected font-medium text-selected-foreground'
                         : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground',
                     )
                   }
@@ -202,44 +270,28 @@ function TopNav() {
 
 interface SidebarProps {
   expanded: boolean;
-  onExpandedChange: (expanded: boolean) => void;
 }
 
 /**
- * A permanent 64px icon rail that widens to show labels while hovered.
+ * A permanent 64px icon rail that widens to show labels, toggled by the burger
+ * button in the header.
  *
- * The rail is laid out in normal flow, so opening it *pushes* the content
- * column rather than covering it — the page is narrower while it is open. The
- * cost is that the content reflows on every hover: `main` and every chart in it
- * re-measure, and both chart libraries re-run their `ResizeObserver` callbacks
- * for the whole 200ms transition. Overlaying instead would leave the content
- * still, at the price of hiding the left edge of it while open.
+ * It used to widen on hover and collapse again the moment the pointer left.
+ * Two problems with that, and they are why it is a button now. The rail is laid
+ * out in normal flow, so its width change *pushes* the content column: every
+ * accidental pass of the cursor reflowed `main`, and both chart libraries re-ran
+ * their `ResizeObserver` callbacks across the whole 200ms transition. And a
+ * width that answers to the pointer cannot be chosen: a member who wanted the
+ * labels could not keep them, and one who wanted the room could not keep that
+ * either. A click settles it, and the choice is remembered.
  *
  * It never hides entirely: that would reproduce the gap `TopNav` exists to fill
  * (no navigation at all), so every destination stays reachable as an icon.
  */
-function Sidebar({ expanded, onExpandedChange }: SidebarProps) {
+function Sidebar({ expanded }: SidebarProps) {
   return (
     <aside
-      onMouseEnter={() => {
-        onExpandedChange(true);
-      }}
-      onMouseLeave={() => {
-        onExpandedChange(false);
-      }}
-      // Hover alone would strand keyboard users: tabbing into the rail would
-      // move focus through links whose labels are clipped out of sight. Focus
-      // opens it too. `*Capture` because focus/blur do not bubble.
-      onFocusCapture={() => {
-        onExpandedChange(true);
-      }}
-      onBlurCapture={(event) => {
-        // Only collapse once focus has left the rail entirely, not while it
-        // is moving between two links inside it.
-        if (!event.currentTarget.contains(event.relatedTarget)) {
-          onExpandedChange(false);
-        }
-      }}
+      id={SIDEBAR_ID}
       className={cn(
         // Pinned below the 56px header so navigation stays put while the page
         // scrolls. `self-start` is what makes `sticky` work at all: as a flex
@@ -281,6 +333,15 @@ function Sidebar({ expanded, onExpandedChange }: SidebarProps) {
                   <NavLink
                     to={to}
                     end={end}
+                    /*
+                     * Only while collapsed, and only as a hint. Hovering used
+                     * to widen the rail, which is how you learned what an icon
+                     * meant; now that a click owns the width, eight unlabelled
+                     * icons would be the only thing on offer. The real label is
+                     * the link text below, which stays in the accessibility
+                     * tree at both widths.
+                     */
+                    title={expanded ? undefined : label}
                     className={({ isActive }) =>
                       cn(
                         // `whitespace-nowrap` stops labels wrapping to two
@@ -291,7 +352,7 @@ function Sidebar({ expanded, onExpandedChange }: SidebarProps) {
                         // drift sideways as the panel opens.
                         expanded ? 'px-3' : 'px-6',
                         isActive
-                          ? 'bg-accent font-medium text-accent-foreground'
+                          ? 'bg-selected font-medium text-selected-foreground'
                           : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground',
                       )
                     }

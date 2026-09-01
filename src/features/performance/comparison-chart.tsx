@@ -34,6 +34,13 @@ export function ComparisonChart({ backtests }: ComparisonChartProps) {
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Line'>[]>([]);
   const palette = useChartPalette();
+  /*
+   * The palette as it stood on the first render, for the create-once effect
+   * below. Reading `palette` there directly would make the chart a dependency
+   * of the theme and rebuild the whole thing on every light/dark flip; the
+   * theme effect further down is what keeps colours current.
+   */
+  const paletteRef = useRef(palette);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -44,6 +51,17 @@ export function ComparisonChart({ backtests }: ComparisonChartProps) {
       layout: {
         background: { type: ColorType.Solid, color: 'transparent' },
         attributionLogo: false,
+        // The library defaults `textColor` to a near-black (#191919), so every
+        // axis label painted before the theme effect first runs is black text
+        // on a dark card. Set it here as well as there.
+        textColor: paletteRef.current.mutedText,
+      },
+      // Crosshair readouts are canvas text, and the library picks black or
+      // white from the label background's luminance. Pinning the background to
+      // the card colour is what makes that choice come out white.
+      crosshair: {
+        vertLine: { labelBackgroundColor: paletteRef.current.background },
+        horzLine: { labelBackgroundColor: paletteRef.current.background },
       },
       rightPriceScale: { scaleMargins: { top: 0.1, bottom: 0.1 } },
       timeScale: { fixLeftEdge: true, fixRightEdge: true },
@@ -61,6 +79,10 @@ export function ComparisonChart({ backtests }: ComparisonChartProps) {
   useEffect(() => {
     chartRef.current?.applyOptions({
       layout: { textColor: palette.mutedText },
+      crosshair: {
+        vertLine: { labelBackgroundColor: palette.background },
+        horzLine: { labelBackgroundColor: palette.background },
+      },
       grid: { vertLines: { color: palette.grid }, horzLines: { color: palette.grid } },
       rightPriceScale: { borderColor: palette.grid },
       timeScale: { borderColor: palette.grid },
@@ -87,6 +109,16 @@ export function ComparisonChart({ backtests }: ComparisonChartProps) {
         priceLineVisible: false,
         lastValueVisible: true,
         title: backtest.name,
+        /*
+         * The name-and-value badge on the price scale, not a price line: that
+         * is already off. Its background otherwise defaults to the series
+         * colour, and the library derives the label's text colour from that
+         * background's luminance, so every one of these light series colours
+         * produced dark text that was hard to read. Pinning the badge to the
+         * card colour is what makes the text come out white; the series stays
+         * identifiable by the line, which keeps its own colour.
+         */
+        priceLineColor: palette.background,
       });
 
       const points: LineData<Time>[] = backtest.equityCurve.map((point) => ({

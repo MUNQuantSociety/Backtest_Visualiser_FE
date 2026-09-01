@@ -90,6 +90,11 @@ export function RollingVolatilityChart({
             color: palette.text,
             fontSize: 12,
           }}
+          // Recharts colours each tooltip row from the series colour and
+          // falls back to `#000` when there is none to take. A bar coloured
+          // by a `<Cell>` has none, so those rows rendered pure black on the
+          // dark tooltip. `itemStyle` is spread after that fallback, so it wins.
+          itemStyle={{ color: palette.text }}
         />
         <Legend wrapperStyle={{ fontSize: 12, color: palette.mutedText }} />
         <Line

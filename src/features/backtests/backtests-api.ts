@@ -8,8 +8,14 @@ import { fixtureBacktest, fixtureBacktests } from './fixtures';
 import {
   backtestDetailSchema,
   backtestListResponseSchema,
+  backtestSummarySchema,
+  coverageResponseSchema,
+  isInFlight,
   type BacktestDetail,
   type BacktestFilters,
+  type BacktestRunRequest,
+  type BacktestSummary,
+  type CoverageResponse,
 } from './types';
 
 /**
@@ -120,6 +126,41 @@ export async function fetchBacktest(id: string): Promise<BacktestDetail> {
   }
 }
 
+/**
+ * Launches a run. The endpoint answers 202 with the row it just created.
+ *
+ * No fixture branch and no unreachable-backend fallback, unlike the readers
+ * above. Both exist so a demo can *show* results without a backend; there is no
+ * honest way to fake having *started* something, and a fabricated queued row
+ * would sit there forever pretending to make progress.
+ */
+export async function submitBacktest(request: BacktestRunRequest): Promise<BacktestSummary> {
+  if (env.useFixtures) {
+    throw new ApiError(
+      'Running a backtest needs the backend. Set VITE_USE_FIXTURES=false and start the API.',
+      0,
+      'FIXTURES_ENABLED',
+    );
+  }
+
+  const data = await apiClient.post<unknown>('/backtests', request);
+  return backtestSummarySchema.parse(data);
+}
+
+/**
+ * How far the market data goes for one strategy's universe.
+ *
+ * The run form needs this before it can offer a date: coverage ends weeks
+ * behind the calendar, so a picker bounded by today produces an empty window
+ * and a run that fails for a reason the author did not cause.
+ */
+export async function fetchCoverage(strategyKey: string): Promise<CoverageResponse> {
+  const data = await apiClient.get<unknown>('/market-data/coverage', {
+    params: { strategyKey },
+  });
+  return coverageResponseSchema.parse(data);
+}
+
 export async function deleteBacktest(id: string): Promise<void> {
   if (env.useFixtures) return withFixtureDelay(undefined);
 
@@ -133,7 +174,17 @@ export const backtestKeys = {
   details: () => [...backtestKeys.all, 'detail'] as const,
   detail: (id: string) => [...backtestKeys.details(), id] as const,
   trades: (id: string) => [...backtestKeys.detail(id), 'trades'] as const,
+  coverage: (strategyKey: string) => [...backtestKeys.all, 'coverage', strategyKey] as const,
 } as const;
+
+/**
+ * How often to re-ask about a run that has not finished.
+ *
+ * A backtest is minutes of work, so this is about keeping a progress bar
+ * honest, not about catching the finish instantly. Anything much faster would
+ * be polling a database for no added information.
+ */
+const IN_FLIGHT_POLL_MS = 3_000;
 
 export function useBacktests(filters: BacktestFilters = {}) {
   return useQuery({
@@ -142,6 +193,11 @@ export function useBacktests(filters: BacktestFilters = {}) {
     // Keeps the previous page on screen while the next one loads instead of
     // flashing a skeleton on every pagination click.
     placeholderData: (previous) => previous,
+    // Only while something on this page can still change. A list of finished
+    // runs is static, and polling it would be a request per interval forever.
+    refetchInterval: (query) =>
+      query.state.data?.items.some((run) => isInFlight(run.status)) ? IN_FLIGHT_POLL_MS : false,
+    refetchIntervalInBackground: false,
   });
 }
 
@@ -150,8 +206,47 @@ export function useBacktest(id: string | undefined) {
     queryKey: backtestKeys.detail(id ?? ''),
     queryFn: () => fetchBacktest(id ?? ''),
     enabled: Boolean(id),
-    // A completed backtest never changes, so cache it for the session.
+    /*
+     * A finished backtest never changes, so it stays cached for the session.
+     * That does not stop an unfinished one from updating: `refetchInterval`
+     * fetches regardless of staleness, so the two settings do not fight.
+     *
+     * `staleTime` is deliberately a constant rather than a function of the
+     * run's status. The function form is accepted by this version and silently
+     * stops `refetchInterval` from ever being armed, which had a running run
+     * frozen at 10% on screen until a hard reload. Checked against the running
+     * app: a constant here plus the callback below polls, updates, and stops on
+     * its own when the run finishes.
+     */
     staleTime: Number.POSITIVE_INFINITY,
+    refetchInterval: (query) =>
+      query.state.data && isInFlight(query.state.data.status) ? IN_FLIGHT_POLL_MS : false,
+    refetchIntervalInBackground: false,
+  });
+}
+
+/** Coverage for one strategy. Disabled until a strategy is actually chosen. */
+export function useCoverage(strategyKey: string | undefined) {
+  return useQuery({
+    queryKey: backtestKeys.coverage(strategyKey ?? ''),
+    queryFn: () => fetchCoverage(strategyKey ?? ''),
+    enabled: Boolean(strategyKey) && !env.useFixtures,
+    // Coverage moves when the data loader runs, which is not during a sitting.
+    staleTime: 5 * 60 * 1_000,
+  });
+}
+
+export function useSubmitBacktest() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: submitBacktest,
+    onSuccess: (summary) => {
+      // The new row belongs at the top of every list, and its detail is
+      // already worth fetching: the user is about to watch it run.
+      queryClient.setQueryData(backtestKeys.detail(summary.id), undefined);
+      void queryClient.invalidateQueries({ queryKey: backtestKeys.lists() });
+    },
   });
 }
 

@@ -59,6 +59,13 @@ export function EquityCurveChart({
   const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const benchmarkSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const palette = useChartPalette();
+  /*
+   * The palette as it stood on the first render, for the create-once effect
+   * below. Reading `palette` there directly would make the chart a dependency
+   * of the theme and rebuild the whole thing on every light/dark flip; the
+   * theme effect further down is what keeps colours current.
+   */
+  const paletteRef = useRef(palette);
 
   // Create the chart once, on mount.
   useEffect(() => {
@@ -70,6 +77,21 @@ export function EquityCurveChart({
       layout: {
         background: { type: ColorType.Solid, color: 'transparent' },
         attributionLogo: false,
+        /*
+         * Set at creation, not only in the theme effect below. The library
+         * defaults `textColor` to a near-black (#191919), so every axis label
+         * painted before that effect first runs is black text on a dark card.
+         */
+        textColor: paletteRef.current.mutedText,
+      },
+      /*
+       * The crosshair readouts are drawn to canvas, and the library picks
+       * black or white text from the label background's luminance. Pinning the
+       * background to the card colour is what makes that choice come out white.
+       */
+      crosshair: {
+        vertLine: { labelBackgroundColor: paletteRef.current.background },
+        horzLine: { labelBackgroundColor: paletteRef.current.background },
       },
       rightPriceScale: { scaleMargins: { top: 0.1, bottom: 0.1 } },
       timeScale: { fixLeftEdge: true, fixRightEdge: true },
@@ -128,6 +150,10 @@ export function EquityCurveChart({
 
     chart.applyOptions({
       layout: { textColor: palette.mutedText },
+      crosshair: {
+        vertLine: { labelBackgroundColor: palette.background },
+        horzLine: { labelBackgroundColor: palette.background },
+      },
       grid: {
         vertLines: { color: palette.grid },
         horzLines: { color: palette.grid },
@@ -141,6 +167,14 @@ export function EquityCurveChart({
       lineColor: primary,
       topColor: withAlpha(primary, 0.35),
       bottomColor: withAlpha(primary, 0),
+      /*
+       * The last-value badge on the price scale, not a price line: that is
+       * already off. Its background otherwise defaults to the series colour,
+       * and the library picks the label's text colour by luminance, so a light
+       * series line produced black digits that were hard to read against it.
+       * Pinning the badge to the card colour is what makes those digits white.
+       */
+      priceLineColor: palette.background,
     });
     benchmarkSeriesRef.current?.applyOptions({ color: tertiary });
 
@@ -153,6 +187,9 @@ export function EquityCurveChart({
       bottomLineColor: palette.loss,
       bottomFillColor1: withAlpha(palette.loss, 0.05),
       bottomFillColor2: withAlpha(palette.loss, 0.4),
+      // Same reason as the equity badge above: the drawdown percentage was
+      // black on the loss colour.
+      priceLineColor: palette.background,
     });
   }, [palette]);
 

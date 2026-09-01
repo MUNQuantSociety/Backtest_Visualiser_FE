@@ -37,6 +37,13 @@ export function CompositionChart({ data }: CompositionChartProps) {
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Area'>[]>([]);
   const palette = useChartPalette();
+  /*
+   * The palette as it stood on the first render, for the create-once effect
+   * below. Reading `palette` there directly would make the chart a dependency
+   * of the theme and rebuild the whole thing on every light/dark flip; the
+   * theme effect further down is what keeps colours current.
+   */
+  const paletteRef = useRef(palette);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -47,6 +54,17 @@ export function CompositionChart({ data }: CompositionChartProps) {
       layout: {
         background: { type: ColorType.Solid, color: 'transparent' },
         attributionLogo: false,
+        // The library defaults `textColor` to a near-black (#191919), so every
+        // axis label painted before the theme effect first runs is black text
+        // on a dark card. Set it here as well as there.
+        textColor: paletteRef.current.mutedText,
+      },
+      // Crosshair readouts are canvas text, and the library picks black or
+      // white from the label background's luminance. Pinning the background to
+      // the card colour is what makes that choice come out white.
+      crosshair: {
+        vertLine: { labelBackgroundColor: paletteRef.current.background },
+        horzLine: { labelBackgroundColor: paletteRef.current.background },
       },
       rightPriceScale: { scaleMargins: { top: 0.1, bottom: 0 } },
       timeScale: { fixLeftEdge: true, fixRightEdge: true },
@@ -67,6 +85,10 @@ export function CompositionChart({ data }: CompositionChartProps) {
 
     chart.applyOptions({
       layout: { textColor: palette.mutedText },
+      crosshair: {
+        vertLine: { labelBackgroundColor: palette.background },
+        horzLine: { labelBackgroundColor: palette.background },
+      },
       grid: { vertLines: { color: palette.grid }, horzLines: { color: palette.grid } },
       rightPriceScale: { borderColor: palette.grid },
       timeScale: { borderColor: palette.grid },

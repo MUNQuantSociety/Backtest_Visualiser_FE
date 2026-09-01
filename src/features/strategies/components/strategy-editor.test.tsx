@@ -11,9 +11,20 @@ import { StrategyEditor } from './strategy-editor';
  * `VITE_USE_FIXTURES=true` the check short-circuits to the "nothing was
  * checked" answer and never makes a request.
  */
-vi.mock('@/config/env', () => ({
-  env: { apiBaseUrl: '/api', apiTimeout: 30_000, useFixtures: false, isDev: false, isProd: true },
+/*
+ * `isDev` is mutable because the panel shows different things to a member and
+ * to a developer, and both halves of that rule are worth pinning.
+ */
+/* `vi.hoisted` because `vi.mock` is lifted above ordinary declarations. */
+const testEnv = vi.hoisted(() => ({
+  apiBaseUrl: '/api',
+  apiTimeout: 30_000,
+  useFixtures: false,
+  isDev: false,
+  isProd: true,
 }));
+
+vi.mock('@/config/env', () => ({ env: testEnv }));
 
 /** Stubbed at the transport, so the Zod parse stays inside the tested path. */
 vi.mock('@/lib/api-client', async (importOriginal) => {
@@ -25,6 +36,7 @@ const post = vi.mocked(apiClient.post);
 
 beforeEach(() => {
   vi.resetAllMocks();
+  testEnv.isDev = false;
 });
 
 async function clickCheck() {
@@ -58,7 +70,7 @@ describe('StrategyEditor compatibility check', () => {
     expect((body as { source: string }).source).toContain('def OnData(self, context');
   });
 
-  it('lists every problem with its line, and does not submit anything', async () => {
+  function mockIncompatible() {
     post.mockResolvedValue({
       status: 'incompatible',
       ok: false,
@@ -70,6 +82,29 @@ describe('StrategyEditor compatibility check', () => {
       warnings: [],
       message: '2 problems to fix before this can run here.',
     });
+  }
+
+  it('gives a member the verdict and none of the diagnostics', async () => {
+    mockIncompatible();
+
+    renderWithProviders(<StrategyEditor />);
+    await clickCheck();
+
+    expect(await screen.findByText(/not compatible/i)).toBeInTheDocument();
+
+    // The per-line detail names internals and reads as instructions. A member
+    // who gets "not compatible" should ask a dev, not edit to satisfy a scanner.
+    expect(screen.queryByText("importing 'os' is not allowed.")).not.toBeInTheDocument();
+    expect(screen.queryByText('L1')).not.toBeInTheDocument();
+
+    // One request, to the check endpoint. A failed check must not create a draft.
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(post.mock.calls[0]?.[0]).toBe('/strategies/check');
+  });
+
+  it('gives a developer every problem with its line', async () => {
+    testEnv.isDev = true;
+    mockIncompatible();
 
     renderWithProviders(<StrategyEditor />);
     await clickCheck();
@@ -79,10 +114,6 @@ describe('StrategyEditor compatibility check', () => {
     expect(screen.getByText('MyStrategy.on_data should be spelled OnData.')).toBeInTheDocument();
     expect(screen.getByText('L1')).toBeInTheDocument();
     expect(screen.getByText('L12')).toBeInTheDocument();
-
-    // One request, to the check endpoint. A failed check must not create a draft.
-    expect(post).toHaveBeenCalledTimes(1);
-    expect(post.mock.calls[0]?.[0]).toBe('/strategies/check');
   });
 
   it('shows a warning without calling the file incompatible', async () => {
@@ -95,6 +126,7 @@ describe('StrategyEditor compatibility check', () => {
       message: 'MyStrategy is compatible with the engine. 1 warning worth reading.',
     });
 
+    testEnv.isDev = true;
     renderWithProviders(<StrategyEditor />);
     await clickCheck();
 

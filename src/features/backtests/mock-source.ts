@@ -294,8 +294,37 @@ function metricsFor(curve: readonly EquityPoint[], closed: readonly Trade[]): Pe
 }
 
 /** A running backtest is only part-way through its window. */
+const RUNNING_DAYS = 148;
+const FULL_DAYS = 250;
+
 function dayCountFor(blueprint: Blueprint): number {
-  return blueprint.status === 'running' ? 148 : 250;
+  return blueprint.status === 'running' ? RUNNING_DAYS : FULL_DAYS;
+}
+
+/**
+ * Progress consistent with the curve the same blueprint produces.
+ *
+ * Derived rather than picked, so a running demo run cannot claim 80% while its
+ * equity curve stops at 59% of the window.
+ */
+function progressFor(blueprint: Blueprint): number | null {
+  switch (blueprint.status) {
+    case 'completed':
+      return 100;
+    case 'running':
+      return Math.round((RUNNING_DAYS / FULL_DAYS) * 100);
+    case 'queued':
+      return 0;
+    // A failed run stopped somewhere unknown; claiming a figure would invent one.
+    case 'failed':
+      return null;
+  }
+}
+
+function errorMessageFor(blueprint: Blueprint): string | null {
+  return blueprint.status === 'failed'
+    ? 'Strategy raised on the first bar: KeyError on ticker not present in the loaded window.'
+    : null;
 }
 
 function detailFor(blueprint: Blueprint): BacktestDetail {
@@ -312,6 +341,8 @@ function detailFor(blueprint: Blueprint): BacktestDetail {
     symbol: blueprint.symbol,
     timeframe: blueprint.timeframe,
     status: blueprint.status,
+    progressPct: progressFor(blueprint),
+    errorMessage: errorMessageFor(blueprint),
     startDate: curve[0]?.date ?? START_DATE,
     endDate: last?.date ?? START_DATE,
     createdAt: `${curve[0]?.date ?? START_DATE}T09:30:00Z`,

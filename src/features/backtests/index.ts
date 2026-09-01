@@ -8,19 +8,28 @@
 
 export { BacktestCard } from './backtest-card';
 export { BacktestList } from './backtest-list';
+export { RunBacktestForm } from './run-backtest-form';
+export { RunStatusBanner } from './run-status';
 export {
   fetchBacktests,
+  fetchCoverage,
+  submitBacktest,
   useBacktest,
   useBacktestDetails,
   useBacktests,
+  useCoverage,
   useDeleteBacktest,
+  useSubmitBacktest,
 } from './backtests-api';
 export { backtestKeys } from './backtests-api';
+export { isInFlight } from './types';
 export type {
   BacktestDetail,
   BacktestFilters,
+  BacktestRunRequest,
   BacktestStatus,
   BacktestSummary,
+  CoverageResponse,
   EquityPoint,
   PerformanceMetrics,
   Trade,

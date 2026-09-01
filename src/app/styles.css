@@ -19,6 +19,9 @@
   --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
+  --color-brand: var(--brand);
+  --color-selected: var(--selected);
+  --color-selected-foreground: var(--selected-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
@@ -74,6 +77,22 @@
   --muted-foreground: oklch(0.55 0.016 195);
   --accent: oklch(0.965 0.008 195);
   --accent-foreground: oklch(0.22 0.016 195);
+
+  /*
+   * The logo's cyan-teal, #3AFFE5, measured as oklch(0.902 0.152 181.4).
+   * `--selected` is the pair used by anything that reads as "this one is the
+   * current tab": the shell's navigation, the detail page's tab row, the
+   * editor's write/upload toggle, the compare page's chips. It is kept apart
+   * from `--accent`, which is the neutral hover wash on every button and menu
+   * row in the app; tinting that would turn every hover cyan.
+   *
+   * On white the logo colour is too pale to read as text, so light mode keeps
+   * the hue and darkens it. Dark mode uses the logo colour as-is.
+   */
+  --brand: oklch(0.902 0.152 181.4);
+  --selected: oklch(0.955 0.035 181.4);
+  --selected-foreground: oklch(0.42 0.055 181.4);
+
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.985 0 0);
   --border: oklch(0.915 0.011 195);
@@ -112,6 +131,16 @@
   --muted-foreground: oklch(0.72 0.018 195);
   --accent: oklch(0.27 0.03 195);
   --accent-foreground: oklch(0.98 0.004 195);
+
+  /* See the light block. A tint of the logo colour rather than a slab of it,
+     and the text pulled back off the logo's full strength too: navigation is
+     meant to be findable, not to outshout the charts the page exists for. The
+     hue is the logo's throughout, which is what makes the selection read as
+     cyan rather than as grey. */
+  --brand: oklch(0.902 0.152 181.4);
+  --selected: oklch(0.28 0.04 181.4);
+  --selected-foreground: oklch(0.78 0.095 181.4);
+
   --destructive: oklch(0.65 0.2 25);
   --destructive-foreground: oklch(0.98 0.004 195);
   --border: oklch(0.31 0.032 195);

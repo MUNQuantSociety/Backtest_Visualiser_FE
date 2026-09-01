@@ -1,8 +1,14 @@
 import { useSearchParams } from 'react-router';
 
 import { PageHeader } from '@/components/common/page-header';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { DEFAULT_PAGE_SIZE } from '@/config/constants';
-import { BacktestList, type BacktestFilters, type BacktestStatus } from '@/features/backtests';
+import {
+  BacktestList,
+  RunBacktestForm,
+  type BacktestFilters,
+  type BacktestStatus,
+} from '@/features/backtests';
 
 const STATUSES: BacktestStatus[] = ['queued', 'running', 'completed', 'failed'];
 
@@ -25,6 +31,19 @@ export default function BacktestsPage() {
   return (
     <>
       <PageHeader title="Backtests" description="Every run, newest first." />
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">New run</CardTitle>
+          <CardDescription>
+            Pick a strategy and a window, and it runs against historical data.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <RunBacktestForm />
+        </CardContent>
+      </Card>
+
       <BacktestList filters={filters} />
     </>
   );

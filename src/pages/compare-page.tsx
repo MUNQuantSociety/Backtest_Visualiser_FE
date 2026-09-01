@@ -107,7 +107,7 @@ export default function ComparePage() {
                 className={cn(
                   'flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm transition-colors',
                   isActive
-                    ? 'border-transparent bg-accent text-accent-foreground'
+                    ? 'border-transparent bg-selected text-selected-foreground'
                     : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground',
                   atLimit && 'cursor-not-allowed opacity-40',
                 )}
