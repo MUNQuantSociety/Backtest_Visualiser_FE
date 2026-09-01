@@ -8,6 +8,7 @@
 
 export { BacktestCard } from './backtest-card';
 export { BacktestList } from './backtest-list';
+export { RunBacktestDialog } from './run-backtest-dialog';
 export { RunBacktestForm } from './run-backtest-form';
 export { RunStatusBanner } from './run-status';
 export {

@@ -1,7 +1,12 @@
 import { ChartContainer } from '@/components/charts/chart-container';
 import { PageHeader } from '@/components/common/page-header';
 import { StatTile } from '@/components/common/stat-tile';
-import { BacktestList, useBacktestDetails, useBacktests } from '@/features/backtests';
+import {
+  BacktestList,
+  RunBacktestDialog,
+  useBacktestDetails,
+  useBacktests,
+} from '@/features/backtests';
 import { ComparisonChart, PnlHistogram, RiskReturnScatter } from '@/features/performance';
 import { formatNumber, formatPercent, formatSigned } from '@/utils/format';
 import { mean } from '@/utils/metrics';
@@ -38,7 +43,11 @@ export default function DashboardPage() {
 
   return (
     <>
-      <PageHeader title="Dashboard" description="Recent backtest runs and headline performance." />
+      <PageHeader
+        title="Dashboard"
+        description="Recent backtest runs and headline performance."
+        actions={<RunBacktestDialog />}
+      />
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatTile label="Runs" value={formatNumber(runs.length, 0)} isLoading={isPending} />
