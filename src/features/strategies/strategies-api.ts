@@ -6,9 +6,12 @@ import { apiClient } from '@/lib/api-client';
 
 import { fixtureStrategyBlueprints } from './fixtures';
 import {
+  strategyCheckResultSchema,
   strategyListResponseSchema,
   strategySubmissionResultSchema,
   type Strategy,
+  type StrategyCheckRequest,
+  type StrategyCheckResult,
   type StrategySubmission,
   type StrategySubmissionResult,
 } from './types';
@@ -64,6 +67,48 @@ export async function fetchStrategies(): Promise<Strategy[]> {
 
 export function useStrategies() {
   return useQuery({ queryKey: strategyKeys.lists(), queryFn: fetchStrategies });
+}
+
+/**
+ * Asks the backend whether this source would run on the engine.
+ *
+ * A pre-flight, not a submission: nothing is stored and nothing is executed.
+ * The backend reads the source with `ast` and answers in a millisecond. It is
+ * what turns "banned import on line 3" from something a student discovers when
+ * a validation backtest fails minutes later into something they see before
+ * they submit.
+ *
+ * A verdict of "incompatible" is a *successful* request and comes back 200, so
+ * it is returned rather than thrown. Only a real failure (the server being
+ * unreachable, or source over the size limit) rejects, and reaches the caller
+ * as the usual `ApiError`.
+ */
+export async function checkStrategy(request: StrategyCheckRequest): Promise<StrategyCheckResult> {
+  if (env.useFixtures) {
+    // There is no backend to ask, and guessing would be worse than useless:
+    // the check exists precisely so nobody has to guess. Say so instead.
+    return withFixtureDelay(
+      strategyCheckResultSchema.parse({
+        status: 'unchecked',
+        ok: false,
+        className: null,
+        issues: [],
+        warnings: [],
+        message:
+          'Nothing was checked: the app is running on fixtures. Set VITE_USE_FIXTURES=false to check against the engine.',
+      }),
+    );
+  }
+
+  const data = await apiClient.post<unknown>('/strategies/check', request);
+  return strategyCheckResultSchema.parse(data);
+}
+
+export function useCheckStrategy() {
+  // No cache and no invalidation: the answer is a pure function of the source
+  // in the textarea, and caching it would mean showing a verdict for code the
+  // author has since edited.
+  return useMutation({ mutationFn: checkStrategy });
 }
 
 /**

@@ -88,6 +88,54 @@ export const strategySubmissionSchema = z.object({
 });
 export type StrategySubmission = z.infer<typeof strategySubmissionSchema>;
 
+/**
+ * One reason a file would not run here, tied to the line that causes it.
+ *
+ * `line` is 0 when the problem is the file as a whole (no strategy class in
+ * it, for instance), which the editor renders without a line number.
+ */
+export const compatibilityIssueSchema = z.object({
+  line: z.number().int(),
+  message: z.string(),
+});
+export type CompatibilityIssue = z.infer<typeof compatibilityIssueSchema>;
+
+/**
+ * The verdict on a piece of source.
+ *
+ * `unchecked` never comes off the wire: the backend answers `compatible` or
+ * `incompatible` and nothing else. It is produced client-side in fixture mode,
+ * where there is no backend to ask, so the UI can say "nothing was checked"
+ * instead of implying a pass.
+ */
+export const compatibilityStatusSchema = z.enum(['compatible', 'incompatible', 'unchecked']);
+export type CompatibilityStatus = z.infer<typeof compatibilityStatusSchema>;
+
+/** What the source needs to be checked, and nothing that identifies it yet. */
+export const strategyCheckRequestSchema = z.object({
+  source: z.string().min(1, 'Add some code, or upload a file.'),
+  filename: z.string().nullable().default(null),
+});
+export type StrategyCheckRequest = z.infer<typeof strategyCheckRequestSchema>;
+
+/**
+ * The answer to "would this run here?".
+ *
+ * Incompatible source still arrives as HTTP 200: the check ran and its answer
+ * is no. `ok` and `issues` carry the verdict; a status code could only carry
+ * one problem, and the point of the check is to report all of them at once.
+ */
+export const strategyCheckResultSchema = z.object({
+  status: compatibilityStatusSchema,
+  ok: z.boolean(),
+  className: z.string().nullable().default(null),
+  issues: z.array(compatibilityIssueSchema).default([]),
+  /** Reported, never disqualifying: `ok` can be true with warnings present. */
+  warnings: z.array(compatibilityIssueSchema).default([]),
+  message: z.string().default(''),
+});
+export type StrategyCheckResult = z.infer<typeof strategyCheckResultSchema>;
+
 export const strategySubmissionResultSchema = z.object({
   id: z.string(),
   name: z.string(),

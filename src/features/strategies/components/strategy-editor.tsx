@@ -1,36 +1,80 @@
-import { FileUp, Loader2, PencilLine } from 'lucide-react';
+import { AlertTriangle, CircleCheck, CircleX, FileUp, Loader2, PencilLine } from 'lucide-react';
 import { useId, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
-import { useSubmitStrategy } from '../strategies-api';
-import { MAX_SOURCE_BYTES, strategySubmissionSchema } from '../types';
+import { useCheckStrategy, useSubmitStrategy } from '../strategies-api';
+import {
+  MAX_SOURCE_BYTES,
+  strategyCheckRequestSchema,
+  strategySubmissionSchema,
+  type CompatibilityIssue,
+  type StrategyCheckResult,
+} from '../types';
 
 /**
  * Starter code, in MQSMaster's own idiom rather than generic pseudocode.
  *
  * A blank textarea makes the author guess the contract — which base class, what
- * `on_data` returns, where the tickers come from. This answers all three, and
- * it is the fastest way to teach the shape of a strategy to a new member.
+ * the engine calls, where the tickers come from. This answers all three, and it
+ * is the fastest way to teach the shape of a strategy to a new member.
+ *
+ * It is written against the vendored engine rather than from memory, because
+ * the compatibility check below reads the same contract: a template that fails
+ * the check the moment the page loads teaches the wrong thing twice.
+ * `OnData(self, context)` is the exact spelling the engine calls, and the
+ * universe comes from `self.tickers` (the backend generates the config) rather
+ * than from a class attribute.
  */
-const TEMPLATE = `from mqs.base import BasePortfolio
+const TEMPLATE = `import logging
+
+from engine.strategies.order_interface import StrategyContext
+from engine.strategies.portfolio_BASE.strategy import BasePortfolio
 
 
 class MyStrategy(BasePortfolio):
     """One sentence on what edge this is trying to capture."""
 
-    TICKERS = ["AAPL", "MSFT", "NVDA"]
-    INTERVAL = 60          # bar size in minutes
-    LOOKBACK_DAYS = 90     # history loaded before the first bar
+    def __init__(
+        self,
+        db_connector,
+        executor,
+        debug=False,
+        config_dict=None,
+        backtest_start_date=None,
+        order_manager=None,
+    ):
+        # BasePortfolio is what reads the config: self.tickers, self.lookback_days
+        # and the indicator machinery all come out of this call.
+        super().__init__(
+            db_connector, executor, debug, config_dict, backtest_start_date, order_manager
+        )
+        self.logger = logging.getLogger(self.__class__.__name__)
 
-    def on_data(self, bars):
-        """Called once per bar. Return target weights keyed by ticker.
+        # "attribute_name": ("IndicatorName", {parameters})
+        self.RegisterIndicatorSet({
+            "fast_sma": ("SimpleMovingAverage", {"period": 20}),
+            "slow_sma": ("SimpleMovingAverage", {"period": 50}),
+        })
 
-        Weights should sum to <= 1.0; the remainder is held as cash.
-        """
-        weight = 1 / len(self.TICKERS)
-        return {ticker: weight for ticker in self.TICKERS}
+    def OnData(self, context: StrategyContext):
+        """Called once per bar. Trade through \`context\`; return nothing."""
+        for ticker in self.tickers:
+            asset = context.Market[ticker]
+            fast = self.fast_sma[ticker]
+            slow = self.slow_sma[ticker]
+
+            # Indicators need their full period before they mean anything.
+            if not (asset.Exists and fast.IsReady and slow.IsReady):
+                continue
+
+            holding = context.Portfolio.positions.get(ticker, 0)
+
+            if fast.Current > slow.Current and holding <= 0:
+                context.buy(ticker, confidence=1.0)
+            elif fast.Current < slow.Current and holding > 0:
+                context.sell(ticker, confidence=1.0)
 `;
 
 const ACCEPTED_EXTENSIONS = ['.py'];
@@ -47,6 +91,17 @@ export function StrategyEditor() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const submit = useSubmitStrategy();
+  const check = useCheckStrategy();
+
+  /*
+   * The verdict belongs to the exact text it was computed from. Holding the
+   * source alongside it means a single edit retires the answer, instead of a
+   * green tick sitting above code that has changed since it was checked, which
+   * is the one way this feature could actively mislead someone.
+   */
+  const [checkedSource, setCheckedSource] = useState<string | null>(null);
+  const verdict: StrategyCheckResult | null =
+    check.data && checkedSource === source ? check.data : null;
 
   const nameId = useId();
   const descriptionId = useId();
@@ -84,6 +139,19 @@ export function StrategyEditor() {
       if (!name) setName(file.name.replace(/\.py$/i, ''));
     };
     reader.readAsText(file);
+  }
+
+  function handleCheck() {
+    setError(null);
+
+    const parsed = strategyCheckRequestSchema.safeParse({ source, filename });
+    if (!parsed.success) {
+      setError(parsed.error.issues[0]?.message ?? 'Add some code, or upload a file.');
+      return;
+    }
+
+    setCheckedSource(source);
+    check.mutate(parsed.data);
   }
 
   function handleSubmit(event: FormEvent) {
@@ -195,6 +263,14 @@ export function StrategyEditor() {
         </p>
       ) : null}
 
+      {verdict ? <CompatibilityPanel result={verdict} /> : null}
+
+      {check.isError ? (
+        <p role="alert" className="text-sm text-[var(--loss)]">
+          The check could not run: {check.error.message}
+        </p>
+      ) : null}
+
       {submit.isSuccess ? (
         <p role="status" className="text-sm text-[var(--profit)]">
           {submit.data.message || `Saved "${submit.data.name}".`}
@@ -212,6 +288,16 @@ export function StrategyEditor() {
           {submit.isPending ? <Loader2 className="mr-2 size-4 animate-spin" aria-hidden /> : null}
           Save strategy
         </Button>
+        {/*
+          Offered rather than enforced. Saving already runs the same scan on the
+          backend and answers 422 when it fails, so gating the form on a check
+          would only make the slow path mandatory. This is the fast answer for
+          anyone who wants it first.
+        */}
+        <Button type="button" variant="outline" onClick={handleCheck} disabled={check.isPending}>
+          {check.isPending ? <Loader2 className="mr-2 size-4 animate-spin" aria-hidden /> : null}
+          Check compatibility
+        </Button>
         <Button
           type="button"
           variant="ghost"
@@ -225,6 +311,95 @@ export function StrategyEditor() {
         </Button>
       </div>
     </form>
+  );
+}
+
+/**
+ * The verdict, and every reason behind it.
+ *
+ * Rendered as a list rather than a single sentence because the backend answers
+ * with a list: a file with three problems should show three problems, so one
+ * round trip is enough to fix all of them.
+ */
+function CompatibilityPanel({ result }: { result: StrategyCheckResult }) {
+  const tone =
+    result.status === 'compatible'
+      ? {
+          icon: CircleCheck,
+          border: 'border-[var(--profit)]/40',
+          text: 'text-[var(--profit)]',
+          label: 'Compatible',
+        }
+      : result.status === 'incompatible'
+        ? {
+            icon: CircleX,
+            border: 'border-[var(--loss)]/40',
+            text: 'text-[var(--loss)]',
+            label: 'Not compatible',
+          }
+        // `unchecked`: fixture mode, where there is no backend to ask. Neutral
+        // on purpose: it is neither a pass nor a complaint about the code.
+        : {
+            icon: AlertTriangle,
+            border: 'border-input',
+            text: 'text-muted-foreground',
+            label: 'Not checked',
+          };
+
+  const Icon = tone.icon;
+
+  return (
+    <div role="status" className={cn('space-y-3 rounded-md border p-3', tone.border)}>
+      <div className="flex items-start gap-2">
+        <Icon className={cn('mt-0.5 size-4 shrink-0', tone.text)} aria-hidden />
+        <div className="space-y-0.5">
+          <p className={cn('text-sm font-medium', tone.text)}>
+            {tone.label}
+            {result.className ? (
+              <span className="font-mono font-normal text-muted-foreground"> · {result.className}</span>
+            ) : null}
+          </p>
+          <p className="text-sm text-muted-foreground">{result.message}</p>
+        </div>
+      </div>
+
+      {result.issues.length > 0 ? (
+        <IssueList title="Fix before running" issues={result.issues} className="text-[var(--loss)]" />
+      ) : null}
+
+      {result.warnings.length > 0 ? (
+        <IssueList title="Worth a look" issues={result.warnings} className="text-muted-foreground" />
+      ) : null}
+    </div>
+  );
+}
+
+function IssueList({
+  title,
+  issues,
+  className,
+}: {
+  title: string;
+  issues: CompatibilityIssue[];
+  className: string;
+}) {
+  return (
+    <div className="space-y-1">
+      <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{title}</p>
+      <ul className="space-y-1">
+        {issues.map((issue) => (
+          <li key={`${String(issue.line)}-${issue.message}`} className="flex gap-2 text-sm">
+            {/* Line 0 means "the file", not the first line, so no number. */}
+            {issue.line > 0 ? (
+              <span className="shrink-0 font-mono text-xs text-muted-foreground tabular-nums">
+                L{issue.line}
+              </span>
+            ) : null}
+            <span className={className}>{issue.message}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
