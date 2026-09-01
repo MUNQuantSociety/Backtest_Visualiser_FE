@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ApiError, apiClient } from '@/lib/api-client';
 import type * as ApiClientModule from '@/lib/api-client';
-import { renderWithProviders, screen, userEvent } from '@/test/test-utils';
+import { renderWithProviders, screen, userEvent, waitFor } from '@/test/test-utils';
 
 import { StrategyEditor } from './strategy-editor';
 
@@ -29,14 +29,26 @@ vi.mock('@/config/env', () => ({ env: testEnv }));
 /** Stubbed at the transport, so the Zod parse stays inside the tested path. */
 vi.mock('@/lib/api-client', async (importOriginal) => {
   const actual = await importOriginal<typeof ApiClientModule>();
-  return { ...actual, apiClient: { ...actual.apiClient, post: vi.fn() } };
+  return { ...actual, apiClient: { ...actual.apiClient, get: vi.fn(), post: vi.fn() } };
 });
 
+const get = vi.mocked(apiClient.get);
 const post = vi.mocked(apiClient.post);
+
+const SERVED_TEMPLATE = [
+  'from engine.strategies.portfolio_BASE.strategy import BasePortfolio',
+  '',
+  '',
+  'class ServedByTheBackend(BasePortfolio):',
+  '    def OnData(self, context):',
+  '        pass',
+  '',
+].join('\n');
 
 beforeEach(() => {
   vi.resetAllMocks();
   testEnv.isDev = false;
+  get.mockResolvedValue({ filename: 'strategy.py', source: SERVED_TEMPLATE });
 });
 
 async function clickCheck() {
@@ -161,5 +173,61 @@ describe('StrategyEditor compatibility check', () => {
     await clickCheck();
 
     expect(await screen.findByText(/could not run/i)).toBeInTheDocument();
+  });
+});
+
+describe('StrategyEditor starter code', () => {
+  it('opens with the template the backend serves', async () => {
+    renderWithProviders(<StrategyEditor />);
+
+    const editor = await screen.findByLabelText(/strategy source code/i);
+    await waitFor(() => {
+      expect(editor).toHaveValue(SERVED_TEMPLATE);
+    });
+    expect(get).toHaveBeenCalledWith('/strategies/template');
+  });
+
+  it('falls back to the bundled copy when the request fails', async () => {
+    // An empty editor is worse than a slightly stale example.
+    get.mockRejectedValue(new ApiError('Could not reach the server.', 0, 'NETWORK_ERROR'));
+
+    renderWithProviders(<StrategyEditor />);
+
+    const editor = await screen.findByLabelText(/strategy source code/i);
+    await waitFor(() => {
+      expect((editor as HTMLTextAreaElement).value).toContain('def OnData(self, context');
+    });
+  });
+
+  it('does not overwrite an edit when the template arrives late', async () => {
+    let release: (value: unknown) => void = () => undefined;
+    get.mockReturnValue(new Promise((resolve) => (release = resolve)));
+
+    renderWithProviders(<StrategyEditor />);
+    const editor = await screen.findByLabelText(/strategy source code/i);
+
+    await userEvent.clear(editor);
+    await userEvent.type(editor, '# mine');
+
+    release({ filename: 'strategy.py', source: SERVED_TEMPLATE });
+    await waitFor(() => {
+      expect(get).toHaveBeenCalled();
+    });
+
+    // The whole reason the source is derived rather than synced in an effect.
+    expect(editor).toHaveValue('# mine');
+  });
+
+  it('resets back to the served template, not the fallback', async () => {
+    renderWithProviders(<StrategyEditor />);
+    const editor = await screen.findByLabelText(/strategy source code/i);
+    await waitFor(() => {
+      expect(editor).toHaveValue(SERVED_TEMPLATE);
+    });
+
+    await userEvent.type(editor, '# scribble');
+    await userEvent.click(screen.getByRole('button', { name: /reset to template/i }));
+
+    expect(editor).toHaveValue(SERVED_TEMPLATE);
   });
 });

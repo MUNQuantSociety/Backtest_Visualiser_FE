@@ -111,6 +111,20 @@ export type CompatibilityIssue = z.infer<typeof compatibilityIssueSchema>;
 export const compatibilityStatusSchema = z.enum(['compatible', 'incompatible', 'unchecked']);
 export type CompatibilityStatus = z.infer<typeof compatibilityStatusSchema>;
 
+/**
+ * Starter source for the editor.
+ *
+ * Fetched rather than kept in the client. The contract it teaches (which base
+ * class, what the engine calls, where the tickers come from) belongs to the
+ * engine, and a copy here drifts from it. The previous copy did exactly that:
+ * it was written against a base class that never existed.
+ */
+export const strategyTemplateSchema = z.object({
+  filename: z.string(),
+  source: z.string().min(1),
+});
+export type StrategyTemplate = z.infer<typeof strategyTemplateSchema>;
+
 /** What the source needs to be checked, and nothing that identifies it yet. */
 export const strategyCheckRequestSchema = z.object({
   source: z.string().min(1, 'Add some code, or upload a file.'),

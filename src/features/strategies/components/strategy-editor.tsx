@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { env } from '@/config/env';
 import { cn } from '@/lib/utils';
 
-import { useCheckStrategy, useSubmitStrategy } from '../strategies-api';
+import { useCheckStrategy, useStrategyTemplate, useSubmitStrategy } from '../strategies-api';
 import {
   MAX_SOURCE_BYTES,
   strategyCheckRequestSchema,
@@ -15,20 +15,18 @@ import {
 } from '../types';
 
 /**
- * Starter code, in MQSMaster's own idiom rather than generic pseudocode.
+ * Fallback starter code, reached only when the real one cannot be fetched.
  *
- * A blank textarea makes the author guess the contract — which base class, what
- * the engine calls, where the tickers come from. This answers all three, and it
- * is the fastest way to teach the shape of a strategy to a new member.
+ * `GET /strategies/template` is the source of truth. It lives beside the check
+ * that judges it, with a test asserting it passes. This copy exists so the
+ * editor is never empty when the backend is unreachable, and it is deliberately
+ * the same text: a fallback teaching a different contract is worse than none.
  *
- * It is written against the vendored engine rather than from memory, because
- * the compatibility check below reads the same contract: a template that fails
- * the check the moment the page loads teaches the wrong thing twice.
- * `OnData(self, context)` is the exact spelling the engine calls, and the
- * universe comes from `self.tickers` (the backend generates the config) rather
- * than from a class attribute.
+ * Keeping a copy here is what went wrong before. The previous one was written
+ * from memory against a base class that never existed, and nothing caught it
+ * because nothing compared the two.
  */
-const TEMPLATE = `import logging
+const FALLBACK_TEMPLATE = `import logging
 
 from engine.strategies.order_interface import StrategyContext
 from engine.strategies.portfolio_BASE.strategy import BasePortfolio
@@ -86,13 +84,22 @@ export function StrategyEditor() {
   const [mode, setMode] = useState<Mode>('write');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [source, setSource] = useState(TEMPLATE);
   const [filename, setFilename] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const submit = useSubmitStrategy();
   const check = useCheckStrategy();
+  const template = useStrategyTemplate();
+
+  /*
+   * What the author has typed or uploaded, or null while they are still
+   * looking at the starter code. Derived rather than seeded into state, so the
+   * fetched template replaces the fallback when it arrives without an effect,
+   * and without ever overwriting an edit in progress.
+   */
+  const [sourceOverride, setSourceOverride] = useState<string | null>(null);
+  const source = sourceOverride ?? template.data?.source ?? FALLBACK_TEMPLATE;
 
   /*
    * The verdict belongs to the exact text it was computed from. Holding the
@@ -123,7 +130,7 @@ export function StrategyEditor() {
     // Checked before reading, so an enormous file is rejected rather than
     // pulled into memory first.
     if (file.size > MAX_SOURCE_BYTES) {
-      setError('That file is too large — strategies are capped at 256 KB.');
+      setError('That file is too large. Strategies are capped at 256 KB.');
       return;
     }
 
@@ -132,7 +139,7 @@ export function StrategyEditor() {
       setError(`Could not read ${file.name}.`);
     };
     reader.onload = () => {
-      setSource(typeof reader.result === 'string' ? reader.result : '');
+      setSourceOverride(typeof reader.result === 'string' ? reader.result : '');
       setFilename(file.name);
       // Uploading drops you into the editor rather than submitting blind, so
       // the author sees what is about to be sent under their name.
@@ -202,7 +209,7 @@ export function StrategyEditor() {
         </div>
       </div>
 
-      {/* Two ways in, one payload out — upload reads into the same editor. */}
+      {/* Two ways in, one payload out: upload reads into the same editor. */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex rounded-md border p-0.5">
           <ModeTab active={mode === 'write'} onClick={() => { setMode('write'); }} icon={PencilLine}>
@@ -229,7 +236,7 @@ export function StrategyEditor() {
             id={sourceId}
             value={source}
             onChange={(event) => {
-              setSource(event.target.value);
+              setSourceOverride(event.target.value);
               setFilename(null);
             }}
             spellCheck={false}
@@ -303,7 +310,8 @@ export function StrategyEditor() {
           type="button"
           variant="ghost"
           onClick={() => {
-            setSource(TEMPLATE);
+            // Back to the derived starter code, whichever one that is.
+            setSourceOverride(null);
             setFilename(null);
             setError(null);
           }}

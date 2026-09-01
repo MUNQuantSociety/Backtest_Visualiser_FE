@@ -5,10 +5,12 @@ export { StrategyList } from './components/strategy-list';
 export {
   checkStrategy,
   fetchStrategies,
+  fetchStrategyTemplate,
   strategyKeys,
   submitStrategy,
   useCheckStrategy,
   useStrategies,
+  useStrategyTemplate,
   useSubmitStrategy,
 } from './strategies-api';
 export type {
@@ -18,5 +20,6 @@ export type {
   Strategy,
   StrategyCheckResult,
   StrategyStatus,
+  StrategyTemplate,
   StrategySubmission,
 } from './types';

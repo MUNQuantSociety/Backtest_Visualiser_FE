@@ -7,11 +7,13 @@ import { apiClient } from '@/lib/api-client';
 import { fixtureStrategyBlueprints } from './fixtures';
 import {
   strategyCheckResultSchema,
+  strategyTemplateSchema,
   strategyListResponseSchema,
   strategySubmissionResultSchema,
   type Strategy,
   type StrategyCheckRequest,
   type StrategyCheckResult,
+  type StrategyTemplate,
   type StrategySubmission,
   type StrategySubmissionResult,
 } from './types';
@@ -27,6 +29,7 @@ async function withFixtureDelay<T>(value: T): Promise<T> {
 export const strategyKeys = {
   all: ['strategies'] as const,
   lists: () => [...strategyKeys.all, 'list'] as const,
+  template: () => [...strategyKeys.all, 'template'] as const,
 } as const;
 
 /**
@@ -67,6 +70,32 @@ export async function fetchStrategies(): Promise<Strategy[]> {
 
 export function useStrategies() {
   return useQuery({ queryKey: strategyKeys.lists(), queryFn: fetchStrategies });
+}
+
+/**
+ * The starter strategy the editor opens with.
+ *
+ * Served by the backend, beside the check that judges it, so the two cannot
+ * disagree. The editor keeps a local copy as a fallback for when this cannot
+ * be fetched, because an empty editor is worse than a slightly stale example.
+ */
+export async function fetchStrategyTemplate(): Promise<StrategyTemplate> {
+  const data = await apiClient.get<unknown>('/strategies/template');
+  return strategyTemplateSchema.parse(data);
+}
+
+export function useStrategyTemplate() {
+  return useQuery({
+    queryKey: strategyKeys.template(),
+    queryFn: fetchStrategyTemplate,
+    // No backend to ask in fixture mode; the caller falls back.
+    enabled: !env.useFixtures,
+    // It changes when the engine does, which is not during a sitting.
+    staleTime: Number.POSITIVE_INFINITY,
+    // One failure is enough to fall back. Retrying delays the editor for a
+    // file the caller already has a copy of.
+    retry: false,
+  });
 }
 
 /**
