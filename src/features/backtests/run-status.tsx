@@ -56,7 +56,7 @@ export function RunStatusBanner({ run }: { run: BacktestDetail | BacktestSummary
         <p className="text-sm font-medium">
           {running ? 'Running' : 'Queued'}
           {progress !== null ? (
-            <span className="ml-1.5 font-normal text-muted-foreground tabular-nums">
+            <span className="tabular ml-1.5 font-normal text-muted-foreground">
               {Math.round(progress)}%
             </span>
           ) : null}

@@ -27,7 +27,9 @@ export type ChartToken =
   | 'chart-2'
   | 'chart-3'
   | 'chart-4'
-  | 'chart-5';
+  | 'chart-5'
+  | 'series-ink'
+  | 'series-benchmark';
 
 /** One reused scratch context; creating a canvas per colour is needless churn. */
 let scratch: CanvasRenderingContext2D | null | undefined;
@@ -105,6 +107,12 @@ export interface ChartPalette {
   loss: string;
   /** For components that carry no directional meaning, e.g. a cash band. */
   neutral: string;
+  /** The strategy's own equity line — ink (foreground), not a series colour,
+      so the curve the page exists for never competes with the profit / loss /
+      drawdown signals drawn around it. */
+  ink: string;
+  /** The benchmark line: mid grey, drawn dashed. */
+  benchmark: string;
   series: [string, string, string, string, string];
 }
 
@@ -117,6 +125,8 @@ export function readChartPalette(): ChartPalette {
     profit: resolveToken('profit'),
     loss: resolveToken('loss'),
     neutral: resolveToken('neutral'),
+    ink: resolveToken('series-ink'),
+    benchmark: resolveToken('series-benchmark'),
     series: [
       resolveToken('chart-1'),
       resolveToken('chart-2'),

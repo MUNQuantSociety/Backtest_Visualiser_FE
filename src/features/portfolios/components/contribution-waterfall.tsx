@@ -117,7 +117,7 @@ export function ContributionWaterfall({
           contentStyle={{
             background: palette.background,
             border: `1px solid ${palette.grid}`,
-            borderRadius: 8,
+            borderRadius: 6,
             color: palette.text,
             fontSize: 12,
           }}
