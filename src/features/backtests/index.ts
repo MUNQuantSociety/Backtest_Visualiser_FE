@@ -29,6 +29,7 @@ export {
   chipSummary,
   compareContext,
   compareMetricRows,
+  defaultComparison,
   deltaTone,
   describeComparison,
   parameterRows,

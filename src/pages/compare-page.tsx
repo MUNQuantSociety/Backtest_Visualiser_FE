@@ -1,5 +1,5 @@
 import { Check, Link2, Printer, X } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 
 import { paths } from '@/app/paths';
@@ -14,11 +14,13 @@ import {
   chipParts,
   compareContext,
   compareMetricRows,
+  defaultComparison,
   deltaTone,
   describeComparison,
   parameterRows,
   RunPickerDialog,
   useBacktestDetails,
+  useBacktests,
   winnerIndex,
   type BacktestDetail,
 } from '@/features/backtests';
@@ -74,6 +76,18 @@ export default function ComparePage() {
   }
 
   const { data: details, isPending } = useBacktestDetails(ids);
+
+  // No runs in the URL: open on a sensible pair rather than an empty page,
+  // and put it in the URL so the link is the comparison from the start.
+  const wantsDefault = ids.length === 0;
+  const { data: runList, isPending: listPending } = useBacktests({ pageSize: 100 });
+  const defaultKey = wantsDefault && runList ? defaultComparison(runList.items).join(',') : '';
+  useEffect(() => {
+    if (wantsDefault && defaultKey) {
+      setSearchParams({ runs: defaultKey }, { replace: true });
+    }
+  }, [wantsDefault, defaultKey, setSearchParams]);
+
   // Selection order, not fetch order, so a run does not change letter when
   // another finishes loading.
   const ordered = ids.flatMap((id) => {
@@ -92,6 +106,7 @@ export default function ComparePage() {
   );
 
   if (ids.length === 0) {
+    const settling = listPending || Boolean(defaultKey);
     return (
       <>
         <PageHeader
@@ -99,18 +114,28 @@ export default function ComparePage() {
           description="Pick two to four runs and every gap between them is explained below."
           actions={picker}
         />
-        <EmptyState
-          title="Nothing to compare yet"
-          description="Add runs here, or tick them in the Library and press Compare."
-          action={
-            <Link
-              to={paths.library}
-              className="text-sm text-selected-foreground underline-offset-4 hover:underline"
-            >
-              Open the Library →
-            </Link>
-          }
-        />
+        {settling ? (
+          <div className="space-y-5">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Skeleton className="h-16" />
+              <Skeleton className="h-16" />
+            </div>
+            <Skeleton className="h-72" />
+          </div>
+        ) : (
+          <EmptyState
+            title="Nothing to compare yet"
+            description="Add runs here, or tick them in the Library and press Compare."
+            action={
+              <Link
+                to={paths.library}
+                className="text-sm text-selected-foreground underline-offset-4 hover:underline"
+              >
+                Open the Library →
+              </Link>
+            }
+          />
+        )}
       </>
     );
   }

@@ -2,7 +2,7 @@ import { formatCompact, formatNumber, formatPercent, formatSigned } from '@/util
 import { toReturns } from '@/utils/metrics';
 
 import { regressOnBenchmark } from './book';
-import type { BacktestDetail } from './types';
+import type { BacktestDetail, BacktestSummary } from './types';
 
 /**
  * The Compare page's numbers, as plain data.
@@ -271,4 +271,29 @@ export function describeComparison(context: CompareContext, count: number): stri
     !sameUniverse && 'universe',
   ].filter(Boolean);
   return `Runs differ in ${differences.join(' and ')}, so gaps below are not down to one parameter.`;
+}
+
+/**
+ * The pair the Compare page opens with when the URL names none.
+ *
+ * Two completed runs that share a strategy, universe and window, so what
+ * differs between them is parameters — the comparison the page is built for.
+ * The largest such group wins, best two by Sharpe. With no such pair it falls
+ * back to the two most recent completed runs, and to nothing below two.
+ */
+export function defaultComparison(runs: readonly BacktestSummary[]): string[] {
+  const completed = runs.filter((run) => run.status === 'completed');
+  const groups = new Map<string, BacktestSummary[]>();
+  for (const run of completed) {
+    const key = `${run.strategyId}|${run.symbol}|${run.startDate}|${run.endDate}`;
+    groups.set(key, [...(groups.get(key) ?? []), run]);
+  }
+  const bySharpe = (a: BacktestSummary, b: BacktestSummary) => b.sharpe - a.sharpe;
+  const candidates = [...groups.values()]
+    .filter((group) => group.length >= 2)
+    .map((group) => [...group].sort(bySharpe))
+    .sort((a, b) => b.length - a.length || (b[0]?.sharpe ?? 0) - (a[0]?.sharpe ?? 0));
+  const pick =
+    candidates[0] ?? [...completed].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return pick.length >= 2 ? pick.slice(0, 2).map((run) => run.id) : [];
 }

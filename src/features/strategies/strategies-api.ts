@@ -73,15 +73,20 @@ async function fixtureStrategies(): Promise<Strategy[]> {
 
     const strategies = fixtureStrategyBlueprints().map((blueprint) => {
       const runs = backtests.filter((run) => run.strategyId === blueprint.id);
-      const sharpes = runs.map((run) => run.sharpe);
-      const returns = runs.map((run) => run.totalReturn);
+      // A failed run's Sharpe over its first bars is not a "best"; only finished runs count.
+      const finished = runs.filter((run) => run.status === 'completed');
+      const sharpes = finished.map((run) => run.sharpe);
+      const returns = finished.map((run) => run.totalReturn);
 
       return {
         ...blueprint,
         runCount: runs.length,
         bestSharpe: sharpes.length > 0 ? Math.max(...sharpes) : null,
         bestReturn: returns.length > 0 ? Math.max(...returns) : null,
-        lastRunAt: runs.length > 0 ? (runs[runs.length - 1]?.createdAt ?? null) : null,
+        lastRunAt: runs.reduce<string | null>(
+          (latest, run) => (latest === null || run.createdAt > latest ? run.createdAt : latest),
+          null,
+        ),
       };
     });
 

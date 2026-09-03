@@ -4,6 +4,7 @@ import {
   chipSummary,
   compareContext,
   compareMetricRows,
+  defaultComparison,
   deltaTone,
   describeComparison,
   parameterRows,
@@ -138,5 +139,34 @@ describe('compareMetricRows / chipSummary', () => {
 
   it('summarises a run the way the chip shows it', () => {
     expect(chipSummary(A)).toBe('2023-01-03 → 2024-12-31 · 1d · lb 20 · z 1.5 / 0.4 · $1M · 5 bps');
+  });
+});
+
+describe('defaultComparison', () => {
+  const summary = (id: string, overrides: Partial<BacktestDetail> = {}) =>
+    detail({ id, ...overrides });
+
+  it('prefers the best two runs that share strategy, universe and window', () => {
+    const runs = [
+      summary('a', { sharpe: 1.1, createdAt: '2026-09-02T00:00:00Z' }),
+      summary('b', { sharpe: 1.8 }),
+      summary('c', { sharpe: 1.4 }),
+      summary('other', { strategyId: 'x', sharpe: 9, createdAt: '2026-09-03T00:00:00Z' }),
+    ];
+    expect(defaultComparison(runs)).toEqual(['b', 'c']);
+  });
+
+  it('falls back to the two most recent completed runs', () => {
+    const runs = [
+      summary('old', { strategyId: 'x', createdAt: '2026-08-01T00:00:00Z' }),
+      summary('new', { strategyId: 'y', createdAt: '2026-09-01T00:00:00Z' }),
+      summary('mid', { strategyId: 'z', createdAt: '2026-08-15T00:00:00Z' }),
+      summary('running', { strategyId: 'y', status: 'running', createdAt: '2026-09-02T00:00:00Z' }),
+    ];
+    expect(defaultComparison(runs)).toEqual(['new', 'mid']);
+  });
+
+  it('is empty below two completed runs', () => {
+    expect(defaultComparison([summary('a'), summary('b', { status: 'failed' })])).toEqual([]);
   });
 });
