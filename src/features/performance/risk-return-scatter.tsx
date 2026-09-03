@@ -12,11 +12,17 @@ import {
 } from 'recharts';
 
 import type { BacktestSummary } from '@/features/backtests';
+import { seriesColor } from '@/lib/chart-theme';
 import { formatNumber, formatPercent } from '@/utils/format';
 import { useChartPalette } from '@/utils/use-chart-palette';
 
 interface RiskReturnScatterProps {
   backtests: readonly BacktestSummary[];
+  /**
+   * Colour dots by a category — the strategy, on the dashboard — using the
+   * series palette index returned. Undefined falls back to sign colouring.
+   */
+  colorIndexFor?: ((backtest: BacktestSummary) => number | undefined) | undefined;
 }
 
 /**
@@ -31,11 +37,12 @@ interface RiskReturnScatterProps {
  * already, so the chart needs only the list payload and not a detail fetch per
  * point, and drawdown is what actually ends funds.
  */
-export function RiskReturnScatter({ backtests }: RiskReturnScatterProps) {
+export function RiskReturnScatter({ backtests, colorIndexFor }: RiskReturnScatterProps) {
   const palette = useChartPalette();
 
   const points = backtests.map((backtest) => ({
     name: backtest.name,
+    colorIndex: colorIndexFor?.(backtest),
     // Plotted as a positive magnitude so the axis reads left-to-right as
     // "safer to riskier"; the sign is restored in the tooltip.
     risk: Math.abs(backtest.maxDrawdown),
@@ -110,9 +117,16 @@ export function RiskReturnScatter({ backtests }: RiskReturnScatterProps) {
           {points.map((point) => (
             <Cell
               key={point.name}
-              fill={point.return >= 0 ? palette.profit : palette.loss}
-              fillOpacity={0.65}
-              stroke={point.return >= 0 ? palette.profit : palette.loss}
+              fill={
+                point.colorIndex === undefined
+                  ? point.return >= 0
+                    ? palette.profit
+                    : palette.loss
+                  : seriesColor(palette, point.colorIndex)
+              }
+              fillOpacity={0.75}
+              stroke={palette.background}
+              strokeWidth={1}
             />
           ))}
           <LabelList

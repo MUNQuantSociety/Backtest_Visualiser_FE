@@ -12,7 +12,7 @@ export { DrawdownChart } from './drawdown-chart';
 export { EquityCurveChart } from './equity-curve-chart';
 export { MetricsGrid } from './metrics-grid';
 export { MetricsTable } from './metrics-table';
-export { ComparisonChart } from './comparison-chart';
+export { ComparisonChart, type ComparisonSeries } from './comparison-chart';
 export { ComparisonTable } from './comparison-table';
 export { PnlHistogram } from './pnl-histogram';
 export { RiskReturnScatter } from './risk-return-scatter';

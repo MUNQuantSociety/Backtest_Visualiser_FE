@@ -4,6 +4,7 @@ import {
   averageLoss,
   averageWin,
   cagr,
+  correlation,
   histogram,
   maxDrawdown,
   payoffRatio,
@@ -148,5 +149,26 @@ describe('averageWin / averageLoss / payoffRatio', () => {
   it('is Infinity when nothing lost money, and 0 with no trades', () => {
     expect(payoffRatio([10, 20])).toBe(Number.POSITIVE_INFINITY);
     expect(payoffRatio([])).toBe(0);
+  });
+});
+
+describe('correlation', () => {
+  it('is 1 for a series against itself and -1 against its negation', () => {
+    const xs = [1, 2, 4, 3, 5];
+    expect(correlation(xs, xs)).toBeCloseTo(1, 10);
+    expect(
+      correlation(
+        xs,
+        xs.map((x) => -x),
+      ),
+    ).toBeCloseTo(-1, 10);
+  });
+
+  it('is 0 when either side is flat rather than NaN', () => {
+    expect(correlation([1, 1, 1], [1, 2, 3])).toBe(0);
+  });
+
+  it('uses only the overlapping length', () => {
+    expect(correlation([1, 2, 3, 100], [1, 2, 3])).toBeCloseTo(1, 10);
   });
 });

@@ -13,6 +13,8 @@ interface StatTileProps {
   tone?: Tone | undefined;
   hint?: string | undefined;
   isLoading?: boolean | undefined;
+  /** `dense` for six-up KPI rows, where the default size wraps dates. */
+  size?: 'default' | 'dense' | undefined;
   className?: string | undefined;
 }
 
@@ -28,6 +30,7 @@ export function StatTile({
   tone = 'neutral',
   hint,
   isLoading = false,
+  size = 'default',
   className,
 }: StatTileProps) {
   return (
@@ -37,7 +40,15 @@ export function StatTile({
         {isLoading ? (
           <Skeleton className="mt-2 h-7 w-24" />
         ) : (
-          <p className={cn('tabular mt-1 text-2xl font-semibold', toneClass[tone])}>{value}</p>
+          <p
+            className={cn(
+              'tabular mt-1 font-semibold whitespace-nowrap',
+              size === 'dense' ? 'text-xl' : 'text-2xl',
+              toneClass[tone],
+            )}
+          >
+            {value}
+          </p>
         )}
         {hint ? <p className="mt-1 text-xs text-muted-foreground">{hint}</p> : null}
       </CardContent>

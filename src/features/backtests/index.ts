@@ -8,6 +8,21 @@
 
 export { BacktestCard } from './backtest-card';
 export { BacktestList } from './backtest-list';
+export {
+  alphaRows,
+  benchmarkCurve,
+  bestRunByStrategy,
+  bookCurve,
+  returnCorrelation,
+  sliceToPeriod,
+  summariseBook,
+  universeRows,
+  type AlphaRow,
+  type BookStrategy,
+  type BookSummary,
+  type UniverseRow,
+} from './book';
+export { RecentRunsTable } from './recent-runs-table';
 export { RunBacktestDialog } from './run-backtest-dialog';
 export { RunBacktestForm } from './run-backtest-form';
 export { RunStatusBanner } from './run-status';
