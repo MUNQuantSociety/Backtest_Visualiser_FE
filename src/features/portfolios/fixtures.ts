@@ -1,10 +1,13 @@
 import type {
+  AttributionReport,
   CompositionSeries,
   CorrelationMatrix,
   EquitySamplePoint,
   Execution,
+  MasterEquityPoint,
   PortfolioDetail,
   PortfolioSummary,
+  RiskReport,
 } from './types';
 
 /**
@@ -247,6 +250,8 @@ export function fixtureEquity(id: string, days: number): EquitySamplePoint[] {
   return equityWalk(id, days);
 }
 
+const FILL_REASONS = ['signal', 'rebalance', 'stop', 'target', 'roll'] as const;
+
 export function fixtureExecutions(id: string): Execution[] {
   const blueprint = BLUEPRINTS.find((candidate) => candidate.id === id);
   if (!blueprint) return [];
@@ -270,6 +275,7 @@ export function fixtureExecutions(id: string): Execution[] {
       executedAt: new Date(Date.now() - minutesAgo * 60_000).toISOString(),
       algo: blueprint.omsEnabled ? ('TWAP' as const) : null,
       parentOrderId: blueprint.omsEnabled ? `parent-${id}-${String(Math.floor(index / 4))}` : null,
+      reason: FILL_REASONS[Math.floor(random() * FILL_REASONS.length)] ?? null,
     };
   });
 }
@@ -350,4 +356,126 @@ export function fixtureComposition(id: string, days: number): CompositionSeries 
   });
 
   return { timestamps, cash, holdings, downsampled: true };
+}
+
+/** Sector for every ticker the blueprints trade. */
+const SECTORS: Readonly<Record<string, string>> = {
+  AAPL: 'Technology',
+  MSFT: 'Technology',
+  NVDA: 'Technology',
+  AMD: 'Technology',
+  TSLA: 'Consumer Disc.',
+  AMZN: 'Consumer Disc.',
+  JPM: 'Financials',
+  BAC: 'Financials',
+  GS: 'Financials',
+  MS: 'Financials',
+  XOM: 'Energy',
+  CVX: 'Energy',
+  COP: 'Energy',
+  SLB: 'Energy',
+  SPY: 'Index',
+  QQQ: 'Index',
+  IWM: 'Index',
+  TLT: 'Rates',
+  GLD: 'Commodities',
+  META: 'Communication',
+  GOOGL: 'Communication',
+  NFLX: 'Communication',
+  UNH: 'Health Care',
+  JNJ: 'Health Care',
+  PFE: 'Health Care',
+  LLY: 'Health Care',
+  ABBV: 'Health Care',
+};
+
+export function sectorOf(ticker: string): string {
+  return SECTORS[ticker] ?? 'Other';
+}
+
+const round = (value: number, places: number) => {
+  const factor = 10 ** places;
+  return Math.round(value * factor) / factor;
+};
+
+/** The sleeves that actually carry capital — the master book. */
+function tradingBlueprints(): readonly Blueprint[] {
+  return BLUEPRINTS.filter((blueprint) => blueprint.allocationWeight > 0);
+}
+
+/**
+ * Sector exposure from the fixture positions, with synthetic shorts and MTD
+ * attribution — the fixture book is long-only, and a table with an empty
+ * SHORT column teaches nobody what the real one looks like.
+ */
+export function fixtureAttribution(): AttributionReport {
+  const details = tradingBlueprints().map((blueprint) => fixturePortfolio(blueprint.id));
+  const nav = details.reduce((sum, detail) => sum + detail.totalValue, 0);
+  const longBySector = new Map<string, number>();
+  for (const detail of details) {
+    for (const position of detail.positions) {
+      const sector = sectorOf(position.ticker);
+      longBySector.set(sector, (longBySector.get(sector) ?? 0) + position.marketValue);
+    }
+  }
+  const random = makeRandom(97);
+  const sectors = [...longBySector.entries()]
+    .map(([sector, longNotional]) => {
+      const long = nav === 0 ? 0 : longNotional / nav;
+      const short = round(random() * 0.09, 3);
+      return {
+        sector,
+        long: round(long, 4),
+        short,
+        net: round(long - short, 4),
+        mtdAttributionBps: Math.round(random() * 110 - 45),
+      };
+    })
+    .sort((a, b) => b.net - a.net);
+  const tickerSectors = Object.fromEntries(
+    BLUEPRINTS.flatMap((blueprint) => blueprint.tickers).map((ticker) => [
+      ticker,
+      sectorOf(ticker),
+    ]),
+  );
+  return { asOf: new Date().toISOString(), sectors, tickerSectors };
+}
+
+export function fixtureRisk(): RiskReport {
+  const attribution = fixtureAttribution();
+  const gross = attribution.sectors.reduce((sum, sector) => sum + sector.long + sector.short, 0);
+  const net = attribution.sectors.reduce((sum, sector) => sum + sector.net, 0);
+  const details = tradingBlueprints().map((blueprint) => fixturePortfolio(blueprint.id));
+  const nav = details.reduce((sum, detail) => sum + detail.totalValue, 0);
+  const maxNameWeight = Math.max(
+    0,
+    ...details.flatMap((detail) => detail.positions.map((position) => position.marketValue / nav)),
+  );
+  return {
+    asOf: new Date().toISOString(),
+    var95: 0.0138,
+    var99: 0.0221,
+    expectedShortfall95: 0.0184,
+    grossExposure: round(gross, 4),
+    netExposure: round(net, 4),
+    leverage: round(gross, 2),
+    betaToSpy: 0.42,
+    maxNameWeight: round(maxNameWeight, 4),
+    lookbackDays: 250,
+  };
+}
+
+/**
+ * Master NAV: the trading sleeves' walks summed date by date, beside the same
+ * starting capital held in SPY — a slower walk with less noise.
+ */
+export function fixtureMasterEquity(days: number): MasterEquityPoint[] {
+  const walks = tradingBlueprints().map((blueprint) => equityWalk(blueprint.id, days));
+  const spy = makeRandom(seedFrom('spy'));
+  let benchmark = walks.reduce((sum, walk) => sum + (walk[0]?.equity ?? 0), 0);
+  return (walks[0] ?? []).map((point, index) => {
+    const equity = walks.reduce((sum, walk) => sum + (walk[index]?.equity ?? 0), 0);
+    if (index > 0) benchmark *= 1 + 0.0004 + (spy() + spy() - 1) * 0.007;
+    return { date: point.date, equity: round(equity, 2), benchmark: round(benchmark, 2) };
+  });
 }

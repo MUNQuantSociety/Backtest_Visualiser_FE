@@ -2,7 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { env } from '@/config/env';
 import { fetchBacktests } from '@/features/backtests';
-import { apiClient } from '@/lib/api-client';
+import { ApiError, apiClient } from '@/lib/api-client';
+import { createLogger } from '@/lib/logger';
 
 import { fixtureStrategyBlueprints } from './fixtures';
 import {
@@ -40,32 +41,62 @@ export const strategyKeys = {
  * own runs disagree with. The live endpoint is expected to return them
  * precomputed — the client should not be fetching every run to render a list.
  */
+const log = createLogger('strategies');
+
+/**
+ * Same rule as the backtests feature: only in dev, and only when nothing
+ * answered at all (status 0) or the Vite proxy answered for an absent server
+ * (502/503/504). A 4xx from a running backend still surfaces as an error.
+ */
+const UNREACHABLE = new Set([0, 502, 503, 504]);
+
+function canFallBack(error: unknown): boolean {
+  return env.isDev && error instanceof ApiError && UNREACHABLE.has(error.status);
+}
+
 export async function fetchStrategies(): Promise<Strategy[]> {
-  if (env.useFixtures) {
+  if (env.useFixtures) return fixtureStrategies();
+
+  try {
+    const data = await apiClient.get<unknown>('/strategies');
+    return strategyListResponseSchema.parse(data).items;
+  } catch (error) {
+    if (!canFallBack(error)) throw error;
+    log.warn('backend unreachable, serving strategy fixtures');
+    return fixtureStrategies();
+  }
+}
+
+async function fixtureStrategies(): Promise<Strategy[]> {
+  {
     const { items: backtests } = await fetchBacktests();
 
     const strategies = fixtureStrategyBlueprints().map((blueprint) => {
       const runs = backtests.filter((run) => run.strategyId === blueprint.id);
-      const sharpes = runs.map((run) => run.sharpe);
-      const returns = runs.map((run) => run.totalReturn);
+      // A failed run's Sharpe over its first bars is not a "best"; only finished runs count.
+      const finished = runs.filter((run) => run.status === 'completed');
+      const sharpes = finished.map((run) => run.sharpe);
+      const returns = finished.map((run) => run.totalReturn);
 
       return {
         ...blueprint,
         runCount: runs.length,
         bestSharpe: sharpes.length > 0 ? Math.max(...sharpes) : null,
         bestReturn: returns.length > 0 ? Math.max(...returns) : null,
-        lastRunAt: runs.length > 0 ? (runs[runs.length - 1]?.createdAt ?? null) : null,
+        lastRunAt: runs.reduce<string | null>(
+          (latest, run) => (latest === null || run.createdAt > latest ? run.createdAt : latest),
+          null,
+        ),
       };
     });
 
-    return withFixtureDelay(strategyListResponseSchema.parse({
-      items: strategies,
-      total: strategies.length,
-    }).items);
+    return withFixtureDelay(
+      strategyListResponseSchema.parse({
+        items: strategies,
+        total: strategies.length,
+      }).items,
+    );
   }
-
-  const data = await apiClient.get<unknown>('/strategies');
-  return strategyListResponseSchema.parse(data).items;
 }
 
 export function useStrategies() {

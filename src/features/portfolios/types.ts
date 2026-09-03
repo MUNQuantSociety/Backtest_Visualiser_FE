@@ -79,6 +79,8 @@ export const executionSchema = z.object({
   /** Absent when the trade bypassed the OMS. */
   algo: z.enum(['TWAP', 'VWAP', 'MARKET']).nullable().default(null),
   parentOrderId: z.string().nullable().default(null),
+  /** Why the engine traded — `signal`, `rebalance`, `stop` — when it says. */
+  reason: z.string().nullable().default(null),
 });
 export type Execution = z.infer<typeof executionSchema>;
 
@@ -183,6 +185,65 @@ export const correlationMatrixSchema = z.object({
   lookbackDays: z.number().int().positive(),
 });
 export type CorrelationMatrix = z.infer<typeof correlationMatrixSchema>;
+
+/**
+ * Master-book NAV over time, with the same capital held passively in SPY.
+ * Structurally an `EquityPoint`, so the backtest equity chart draws it.
+ */
+export const masterEquityPointSchema = z.object({
+  date: z.string(),
+  equity: z.number(),
+  benchmark: z.number().nullable().default(null),
+});
+export type MasterEquityPoint = z.infer<typeof masterEquityPointSchema>;
+
+export const masterEquitySchema = z.object({
+  points: z.array(masterEquityPointSchema),
+  downsampled: z.boolean().default(false),
+});
+export type MasterEquity = z.infer<typeof masterEquitySchema>;
+
+/** One sector's exposure as a share of NAV, and what it did this month. */
+export const sectorExposureSchema = z.object({
+  sector: z.string(),
+  /** Long and short notional as ratios of NAV; both non-negative. */
+  long: z.number().nonnegative(),
+  short: z.number().nonnegative(),
+  /** `long - short`, as a ratio of NAV. */
+  net: z.number(),
+  /** What the sector added or cost this month, in basis points of NAV. */
+  mtdAttributionBps: z.number(),
+});
+export type SectorExposure = z.infer<typeof sectorExposureSchema>;
+
+/**
+ * `GET /live/attribution` — sector exposure and month-to-date attribution.
+ * Not built yet; the fixture is the contract the backend is being asked to meet.
+ */
+export const attributionReportSchema = z.object({
+  asOf: z.string(),
+  sectors: z.array(sectorExposureSchema),
+  /** Ticker → sector, so positions can be grouped without a second lookup. */
+  tickerSectors: z.record(z.string(), z.string()),
+});
+export type AttributionReport = z.infer<typeof attributionReportSchema>;
+
+/** `GET /live/risk` — the book's risk report. Ratios of NAV unless stated. */
+export const riskReportSchema = z.object({
+  asOf: z.string(),
+  /** One-day value at risk, as a positive share of NAV. */
+  var95: z.number().nonnegative(),
+  var99: z.number().nonnegative(),
+  expectedShortfall95: z.number().nonnegative(),
+  grossExposure: z.number().nonnegative(),
+  netExposure: z.number(),
+  leverage: z.number().nonnegative(),
+  betaToSpy: z.number(),
+  /** Largest single-name weight. */
+  maxNameWeight: z.number().nonnegative(),
+  lookbackDays: z.number().int().positive(),
+});
+export type RiskReport = z.infer<typeof riskReportSchema>;
 
 /** Query parameters accepted by the execution log endpoint. */
 export interface ExecutionFilters {

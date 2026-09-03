@@ -1,7 +1,9 @@
 /** Public surface of the strategies feature. */
 
+export { NewStrategyDialog } from './components/new-strategy-dialog';
 export { StrategyEditor } from './components/strategy-editor';
-export { StrategyList } from './components/strategy-list';
+export { StrategyPicker } from './components/strategy-picker';
+export { isStrategyFilter, strategyColorIndex, type StrategyFilter } from './strategy-filter';
 export {
   checkStrategy,
   fetchStrategies,

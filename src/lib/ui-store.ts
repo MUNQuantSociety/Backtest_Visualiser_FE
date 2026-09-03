@@ -13,12 +13,17 @@ import { STORAGE_KEYS } from '@/config/constants';
 
 export type Theme = 'light' | 'dark' | 'system';
 
+/** How far back the dashboard's book panels look. */
+export type DashboardPeriod = '1y' | '2y' | '5y' | 'max';
+
 interface UiState {
   theme: Theme;
+  dashboardPeriod: DashboardPeriod;
   /** IDs currently pinned for side-by-side comparison. */
   comparisonIds: string[];
 
   setTheme: (theme: Theme) => void;
+  setDashboardPeriod: (period: DashboardPeriod) => void;
   toggleComparison: (id: string) => void;
   clearComparison: () => void;
 }
@@ -27,10 +32,15 @@ export const useUiStore = create<UiState>()(
   persist(
     (set) => ({
       theme: 'system',
+      dashboardPeriod: '2y',
       comparisonIds: [],
 
       setTheme: (theme) => {
         set({ theme });
+      },
+
+      setDashboardPeriod: (period) => {
+        set({ dashboardPeriod: period });
       },
 
       toggleComparison: (id) => {
@@ -50,6 +60,7 @@ export const useUiStore = create<UiState>()(
       // Comparison selections are per-session; only persist real preferences.
       partialize: (state) => ({
         theme: state.theme,
+        dashboardPeriod: state.dashboardPeriod,
       }),
     },
   ),
@@ -59,3 +70,5 @@ export const useUiStore = create<UiState>()(
    re-rendering when an unrelated field changes. */
 export const useTheme = () => useUiStore((state) => state.theme);
 export const useSetTheme = () => useUiStore((state) => state.setTheme);
+export const useDashboardPeriod = () => useUiStore((state) => state.dashboardPeriod);
+export const useSetDashboardPeriod = () => useUiStore((state) => state.setDashboardPeriod);

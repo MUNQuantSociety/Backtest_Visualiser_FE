@@ -155,10 +155,45 @@ export async function submitBacktest(request: BacktestRunRequest): Promise<Backt
  * and a run that fails for a reason the author did not cause.
  */
 export async function fetchCoverage(strategyKey: string): Promise<CoverageResponse> {
-  const data = await apiClient.get<unknown>('/market-data/coverage', {
-    params: { strategyKey },
+  if (env.useFixtures) return withFixtureDelay(await fixtureCoverage(strategyKey));
+
+  try {
+    const data = await apiClient.get<unknown>('/market-data/coverage', {
+      params: { strategyKey },
+    });
+    return coverageResponseSchema.parse(data);
+  } catch (error) {
+    if (!canFallBack(error)) throw error;
+    log.warn('backend unreachable, deriving coverage from mock-data/backtests.json', {
+      strategyKey,
+    });
+    return fixtureCoverage(strategyKey);
+  }
+}
+
+/**
+ * Coverage implied by the demo runs: the tickers a strategy's runs traded, and
+ * the span those runs cover. Derived rather than invented so the run dialog's
+ * date bounds agree with the curves it will show — and so the backtests
+ * feature need not import the strategies catalogue, which imports it back.
+ */
+async function fixtureCoverage(strategyKey: string): Promise<CoverageResponse> {
+  const runs = (await fixtureBacktests()).filter((run) => run.strategyId === strategyKey);
+  const tickers = [...new Set(runs.map((run) => run.symbol))];
+  const start = runs.reduce<string | null>(
+    (earliest, run) => (earliest === null || run.startDate < earliest ? run.startDate : earliest),
+    null,
+  );
+  const end = runs.reduce<string | null>(
+    (latest, run) => (latest === null || run.endDate > latest ? run.endDate : latest),
+    null,
+  );
+  return coverageResponseSchema.parse({
+    tickers: tickers.map((ticker) => ({ ticker, firstBar: start, lastBar: end })),
+    start,
+    end,
+    missing: [],
   });
-  return coverageResponseSchema.parse(data);
 }
 
 export async function deleteBacktest(id: string): Promise<void> {
@@ -230,7 +265,8 @@ export function useCoverage(strategyKey: string | undefined) {
   return useQuery({
     queryKey: backtestKeys.coverage(strategyKey ?? ''),
     queryFn: () => fetchCoverage(strategyKey ?? ''),
-    enabled: Boolean(strategyKey) && !env.useFixtures,
+    // Fixture mode derives coverage from the demo runs, so it stays enabled.
+    enabled: Boolean(strategyKey),
     // Coverage moves when the data loader runs, which is not during a sitting.
     staleTime: 5 * 60 * 1_000,
   });

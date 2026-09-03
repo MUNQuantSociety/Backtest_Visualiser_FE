@@ -8,6 +8,52 @@
 
 export { BacktestCard } from './backtest-card';
 export { BacktestList } from './backtest-list';
+export {
+  alignByDate,
+  alphaRows,
+  benchmarkCurve,
+  bestRunByStrategy,
+  bookCurve,
+  regressOnBenchmark,
+  returnCorrelation,
+  sliceToPeriod,
+  summariseBook,
+  universeRows,
+  type AlphaRow,
+  type BookStrategy,
+  type BookSummary,
+  type UniverseRow,
+} from './book';
+export {
+  chipParts,
+  chipSummary,
+  compareContext,
+  compareMetricRows,
+  defaultComparison,
+  deltaTone,
+  describeComparison,
+  parameterRows,
+  winnerIndex,
+  type ChipPart,
+  type CompareMetricRow,
+  type ParameterRow,
+} from './compare-model';
+export { RecentRunsTable } from './recent-runs-table';
+export { RunPickerDialog } from './run-picker-dialog';
+export {
+  isPageSize,
+  isRunSort,
+  isStatusFilter,
+  monthSpan,
+  PAGE_SIZES,
+  RUN_SORTS,
+  viewRuns,
+  type PageSize,
+  type RunSort,
+  type StatusFilter,
+} from './run-filters';
+export { RunsTable } from './runs-table';
+export { RunBacktestDialog } from './run-backtest-dialog';
 export { RunBacktestForm } from './run-backtest-form';
 export { RunStatusBanner } from './run-status';
 export {

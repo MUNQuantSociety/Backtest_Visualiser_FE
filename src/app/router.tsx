@@ -5,9 +5,8 @@ import { RootLayout } from '@/app/root-layout';
 /** Route patterns as react-router expects them (with `:params`). */
 export const routePatterns = {
   dashboard: '/',
-  backtests: '/backtests',
+  library: '/library',
   backtestDetail: '/backtests/:backtestId',
-  strategies: '/strategies',
   compare: '/compare',
 
   live: '/live',
@@ -30,10 +29,10 @@ export const router = createBrowserRouter([
         },
       },
       {
-        path: routePatterns.backtests,
+        path: routePatterns.library,
         lazy: async () => {
-          const BacktestsPage = await import('@/pages/backtests-page');
-          return { Component: BacktestsPage.default };
+          const LibraryPage = await import('@/pages/library-page');
+          return { Component: LibraryPage.default };
         },
       },
       {
@@ -48,13 +47,6 @@ export const router = createBrowserRouter([
         lazy: async () => {
           const ComparePage = await import('@/pages/compare-page');
           return { Component: ComparePage.default };
-        },
-      },
-      {
-        path: routePatterns.strategies,
-        lazy: async () => {
-          const StrategiesPage = await import('@/pages/strategies-page');
-          return { Component: StrategiesPage.default };
         },
       },
       {

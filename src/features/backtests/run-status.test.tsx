@@ -58,9 +58,7 @@ describe('RunStatusBanner', () => {
   });
 
   it('shows a queued run as queued rather than as broken', () => {
-    renderWithProviders(
-      <RunStatusBanner run={makeDetail({ status: 'queued', progressPct: 0 })} />,
-    );
+    renderWithProviders(<RunStatusBanner run={makeDetail({ status: 'queued', progressPct: 0 })} />);
 
     expect(screen.getByText('Queued')).toBeInTheDocument();
     expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '0');

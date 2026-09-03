@@ -25,23 +25,25 @@
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
+  /* Stronger hairline: pane dividers, chart zero lines, unchecked boxes.
+     In the handoff's token table but not its stylesheet — added here. */
+  --color-border-strong: var(--border-strong);
   --color-input: var(--input);
   --color-ring: var(--ring);
 
-  /* Domain tokens — always refer to gains/losses through these, never a raw
-     colour, so the whole app flips together if the convention changes. */
   --color-profit: var(--profit);
   --color-loss: var(--loss);
   --color-neutral: var(--neutral);
-
-  /* Semantic warning — distinct from `--loss` (a number moved the wrong way)
-     and from `--destructive` (an action that destroys something). This is
-     "degraded but running": a WARNING log line, a service missing heartbeats.
-     Borrowing a `--chart-N` series colour for it would tie an operational
-     meaning to a palette slot that exists to be reordered. */
   --color-warning: var(--warning);
 
-  /* Chart series palette, used by both Recharts and lightweight-charts. */
+  /* The strategy's own equity line and its benchmark. Ink, not a series
+     colour: the curve the page exists for should not compete with the
+     signal colours (profit / loss / drawdown) drawn around it. */
+  --color-series-ink: var(--series-ink);
+  --color-series-benchmark: var(--series-benchmark);
+
+  /* Series palette — the compare page only. Five hues, one lightness, one
+     chroma, so no run looks more important than another. */
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
@@ -53,110 +55,104 @@
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
 
-  --font-sans:
-    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
-  --font-mono: ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+  --font-sans: 'IBM Plex Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 }
 
+/*
+ * Neutrals are near-achromatic slate (chroma ≤ 0.015, hue 255). No tint:
+ * a P&L green beside a teal card is exactly the colour a trader misreads.
+ * Colour is spent only where a number has a sign.
+ */
 :root {
-  --radius: 0.625rem;
+  --radius: 0.5rem;
 
-  /* Faintly teal-tinted neutrals, so switching themes reads as one system
-     rather than "teal app" and "grey app". Signal colours stay untinted. */
-  --background: oklch(0.993 0.004 195);
-  --foreground: oklch(0.16 0.014 195);
+  --background: oklch(0.975 0.003 255);
+  --foreground: oklch(0.18 0.01 255);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.16 0.014 195);
+  --card-foreground: oklch(0.18 0.01 255);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.16 0.014 195);
-  --primary: oklch(0.55 0.19 258);
+  --popover-foreground: oklch(0.18 0.01 255);
+  --primary: oklch(0.45 0.1 245);
   --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.965 0.008 195);
-  --secondary-foreground: oklch(0.22 0.016 195);
-  --muted: oklch(0.965 0.008 195);
-  --muted-foreground: oklch(0.55 0.016 195);
-  --accent: oklch(0.965 0.008 195);
-  --accent-foreground: oklch(0.22 0.016 195);
+  --secondary: oklch(0.955 0.004 255);
+  --secondary-foreground: oklch(0.25 0.01 255);
+  --muted: oklch(0.955 0.004 255);
+  --muted-foreground: oklch(0.48 0.015 255);
+  --accent: oklch(0.955 0.004 255);
+  --accent-foreground: oklch(0.25 0.01 255);
 
-  /*
-   * The logo's cyan-teal, #3AFFE5, measured as oklch(0.902 0.152 181.4).
-   * `--selected` is the pair used by anything that reads as "this one is the
-   * current tab": the shell's navigation, the detail page's tab row, the
-   * editor's write/upload toggle, the compare page's chips. It is kept apart
-   * from `--accent`, which is the neutral hover wash on every button and menu
-   * row in the app; tinting that would turn every hover cyan.
-   *
-   * On white the logo colour is too pale to read as text, so light mode keeps
-   * the hue and darkens it. Dark mode uses the logo colour as-is.
-   */
+  /* The logo's #3AFFE5 survives only as `--brand`, for the mark itself.
+     Selection is a low-chroma steel blue, kept apart from `--accent`
+     (the neutral hover wash). */
   --brand: oklch(0.902 0.152 181.4);
-  --selected: oklch(0.955 0.035 181.4);
-  --selected-foreground: oklch(0.42 0.055 181.4);
+  --selected: oklch(0.94 0.02 240);
+  --selected-foreground: oklch(0.38 0.09 245);
 
-  --destructive: oklch(0.577 0.245 27.325);
+  --destructive: oklch(0.55 0.19 25);
   --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.915 0.011 195);
-  --input: oklch(0.915 0.011 195);
-  --ring: oklch(0.7 0.025 195);
+  --border: oklch(0.9 0.006 255);
+  --border-strong: oklch(0.82 0.008 255);
+  --input: oklch(0.9 0.006 255);
+  --ring: oklch(0.6 0.08 245);
 
-  --profit: oklch(0.62 0.17 152);
-  --loss: oklch(0.58 0.22 25);
-  --neutral: oklch(0.556 0 0);
-  --warning: oklch(0.62 0.15 65);
+  /* Green pushed toward sea, red toward vermilion: the pair stays
+     separable for deuteranopes and never reads as Christmas. */
+  --profit: oklch(0.55 0.13 160);
+  --loss: oklch(0.55 0.19 25);
+  --neutral: oklch(0.48 0.015 255);
+  --warning: oklch(0.66 0.14 75);
 
-  --chart-1: oklch(0.55 0.19 258);
-  --chart-2: oklch(0.62 0.17 152);
-  --chart-3: oklch(0.7 0.16 70);
-  --chart-4: oklch(0.6 0.19 305);
-  --chart-5: oklch(0.65 0.19 20);
+  --series-ink: oklch(0.18 0.01 255);
+  --series-benchmark: oklch(0.62 0.012 255);
+
+  --chart-1: oklch(0.55 0.12 245);
+  --chart-2: oklch(0.6 0.13 75);
+  --chart-3: oklch(0.55 0.13 330);
+  --chart-4: oklch(0.55 0.12 160);
+  --chart-5: oklch(0.55 0.15 25);
 }
 
 .dark {
-  /*
-   * Dim teal surfaces. Only the neutrals carry the hue — the signal colours
-   * below (profit, loss, chart series) stay untinted, because a P&L green that
-   * drifts toward the background hue is exactly the colour a trader misreads.
-   */
-  --background: oklch(0.17 0.021 195);
-  --foreground: oklch(0.98 0.004 195);
-  --card: oklch(0.21 0.025 195);
-  --card-foreground: oklch(0.98 0.004 195);
-  --popover: oklch(0.21 0.025 195);
-  --popover-foreground: oklch(0.98 0.004 195);
-  --primary: oklch(0.66 0.17 258);
-  --primary-foreground: oklch(0.17 0.021 195);
-  --secondary: oklch(0.27 0.03 195);
-  --secondary-foreground: oklch(0.98 0.004 195);
-  --muted: oklch(0.27 0.03 195);
-  --muted-foreground: oklch(0.72 0.018 195);
-  --accent: oklch(0.27 0.03 195);
-  --accent-foreground: oklch(0.98 0.004 195);
+  --background: oklch(0.145 0.006 255);
+  --foreground: oklch(0.93 0.005 255);
+  --card: oklch(0.185 0.007 255);
+  --card-foreground: oklch(0.93 0.005 255);
+  --popover: oklch(0.185 0.007 255);
+  --popover-foreground: oklch(0.93 0.005 255);
+  --primary: oklch(0.78 0.08 240);
+  --primary-foreground: oklch(0.145 0.006 255);
+  --secondary: oklch(0.23 0.008 255);
+  --secondary-foreground: oklch(0.93 0.005 255);
+  --muted: oklch(0.23 0.008 255);
+  --muted-foreground: oklch(0.62 0.012 255);
+  --accent: oklch(0.23 0.008 255);
+  --accent-foreground: oklch(0.93 0.005 255);
 
-  /* See the light block. A tint of the logo colour rather than a slab of it,
-     and the text pulled back off the logo's full strength too: navigation is
-     meant to be findable, not to outshout the charts the page exists for. The
-     hue is the logo's throughout, which is what makes the selection read as
-     cyan rather than as grey. */
   --brand: oklch(0.902 0.152 181.4);
-  --selected: oklch(0.28 0.04 181.4);
-  --selected-foreground: oklch(0.78 0.095 181.4);
+  --selected: oklch(0.235 0.022 240);
+  --selected-foreground: oklch(0.86 0.06 240);
 
-  --destructive: oklch(0.65 0.2 25);
-  --destructive-foreground: oklch(0.98 0.004 195);
-  --border: oklch(0.31 0.032 195);
-  --input: oklch(0.31 0.032 195);
-  --ring: oklch(0.58 0.04 195);
+  --destructive: oklch(0.62 0.17 22);
+  --destructive-foreground: oklch(0.145 0.006 255);
+  --border: oklch(0.26 0.008 255);
+  --border-strong: oklch(0.34 0.01 255);
+  --input: oklch(0.26 0.008 255);
+  --ring: oklch(0.6 0.06 240);
 
-  --profit: oklch(0.72 0.17 152);
-  --loss: oklch(0.68 0.2 25);
-  --neutral: oklch(0.708 0 0);
-  --warning: oklch(0.78 0.15 65);
+  --profit: oklch(0.74 0.13 160);
+  --loss: oklch(0.68 0.17 22);
+  --neutral: oklch(0.62 0.012 255);
+  --warning: oklch(0.8 0.13 80);
 
-  --chart-1: oklch(0.66 0.17 258);
-  --chart-2: oklch(0.72 0.17 152);
-  --chart-3: oklch(0.77 0.15 70);
-  --chart-4: oklch(0.7 0.18 305);
-  --chart-5: oklch(0.72 0.18 20);
+  --series-ink: oklch(0.93 0.005 255);
+  --series-benchmark: oklch(0.55 0.012 255);
+
+  --chart-1: oklch(0.78 0.08 240);
+  --chart-2: oklch(0.8 0.12 80);
+  --chart-3: oklch(0.75 0.1 330);
+  --chart-4: oklch(0.76 0.1 160);
+  --chart-5: oklch(0.72 0.12 20);
 }
 
 @layer base {
@@ -172,13 +168,26 @@
     @apply bg-background font-sans text-foreground antialiased;
   }
 
-  /* Numeric columns must line up — tabular figures everywhere we show money. */
+  /* Every number in the app — metric values, table cells, axis ticks — is
+     mono with tabular figures, so columns of digits line up and a 1 is as
+     wide as an 8. The font family lives on the class rather than being added
+     beside it at each call site, so a number can not be tabular-but-sans. */
   .tabular {
+    font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
     font-feature-settings: 'tnum';
   }
 
   :focus-visible {
     @apply ring-2 ring-ring ring-offset-2 ring-offset-background outline-none;
+  }
+
+  /* Recharts axis ticks are numbers, so they follow the same rule as every
+     other number. One rule on the library's own class rather than a
+     `fontFamily` in each of the ~20 `tick={{…}}` props: a chart added later
+     is mono without anyone remembering to say so. */
+  .recharts-cartesian-axis-tick-value {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
   }
 }

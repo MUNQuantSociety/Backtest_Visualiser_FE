@@ -1,7 +1,6 @@
 import {
   Activity,
   Briefcase,
-  ChartCandlestick,
   FlaskConical,
   GitCompareArrows,
   LayoutDashboard,
@@ -18,6 +17,7 @@ import { paths } from '@/app/paths';
 import logo from '@/assets/logo_dark.svg';
 import { Button } from '@/components/ui/button';
 import { APP_NAME, PRODUCT_NAMES } from '@/config/constants';
+import { env } from '@/config/env';
 import { cn } from '@/lib/utils';
 
 interface NavItem {
@@ -44,8 +44,7 @@ const sections: readonly NavSection[] = [
     heading: PRODUCT_NAMES.backtests,
     items: [
       { to: paths.dashboard, label: 'Dashboard', icon: LayoutDashboard, end: true },
-      { to: paths.strategies, label: 'Strategies', icon: FlaskConical, end: false },
-      { to: paths.backtests, label: 'Backtests', icon: ChartCandlestick, end: false },
+      { to: paths.library, label: 'Library', icon: FlaskConical, end: false },
       { to: paths.compare, label: 'Compare', icon: GitCompareArrows, end: false },
     ],
   },
@@ -208,6 +207,16 @@ function AppHeader({
       </div>
 
       <div className="ml-auto flex items-center gap-2 px-4">
+        {/* Said in the chrome, not only on the settings page: a person reading
+            a chart should not have to go looking to learn it is demo data. */}
+        {env.useFixtures ? (
+          <span
+            title="Serving fixture data. Set VITE_USE_FIXTURES=false to use the API."
+            className="tabular hidden rounded border border-border px-1.5 py-0.5 text-[11px] font-medium tracking-[0.06em] text-muted-foreground uppercase sm:inline-flex"
+          >
+            Fixtures
+          </span>
+        ) : null}
         {/*
          * Placeholder. There is no auth yet — no login route, no session, and
          * no protected routes — so this deliberately does nothing rather than

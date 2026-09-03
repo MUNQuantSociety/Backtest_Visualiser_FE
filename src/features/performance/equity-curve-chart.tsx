@@ -149,7 +149,13 @@ export function EquityCurveChart({
     if (!chart) return;
 
     chart.applyOptions({
-      layout: { textColor: palette.mutedText },
+      layout: {
+        textColor: palette.mutedText,
+        // Canvas text cannot inherit a font from CSS, so the mono token is
+        // read off :root and handed over — same face as every other number.
+        fontFamily: getComputedStyle(document.documentElement).getPropertyValue('--font-mono'),
+        fontSize: 11,
+      },
       crosshair: {
         vertLine: { labelBackgroundColor: palette.background },
         horzLine: { labelBackgroundColor: palette.background },
@@ -162,11 +168,18 @@ export function EquityCurveChart({
       timeScale: { borderColor: palette.grid },
     });
 
-    const [primary, , tertiary] = palette.series;
+    /*
+     * Ink, not a series colour. The strategy's own curve is the thing the page
+     * exists for, and drawing it in a palette hue made it compete with the
+     * profit / loss / drawdown signals around it — the reader's eye had to sort
+     * "the line" from "the colours that mean something". The benchmark drops
+     * to mid grey for the same reason: it is context, not a result.
+     */
     equitySeriesRef.current?.applyOptions({
-      lineColor: primary,
-      topColor: withAlpha(primary, 0.35),
-      bottomColor: withAlpha(primary, 0),
+      lineColor: palette.ink,
+      lineWidth: 2,
+      topColor: withAlpha(palette.ink, 0.14),
+      bottomColor: withAlpha(palette.ink, 0),
       /*
        * The last-value badge on the price scale, not a price line: that is
        * already off. Its background otherwise defaults to the series colour,
@@ -176,7 +189,7 @@ export function EquityCurveChart({
        */
       priceLineColor: palette.background,
     });
-    benchmarkSeriesRef.current?.applyOptions({ color: tertiary });
+    benchmarkSeriesRef.current?.applyOptions({ color: palette.benchmark });
 
     drawdownSeriesRef.current?.applyOptions({
       // Drawdown is never positive, so only the below-baseline half is ever
@@ -185,8 +198,9 @@ export function EquityCurveChart({
       topFillColor1: withAlpha(palette.loss, 0),
       topFillColor2: withAlpha(palette.loss, 0),
       bottomLineColor: palette.loss,
-      bottomFillColor1: withAlpha(palette.loss, 0.05),
-      bottomFillColor2: withAlpha(palette.loss, 0.4),
+      lineWidth: 1,
+      bottomFillColor1: withAlpha(palette.loss, 0.08),
+      bottomFillColor2: withAlpha(palette.loss, 0.45),
       // Same reason as the equity badge above: the drawdown percentage was
       // black on the loss colour.
       priceLineColor: palette.background,

@@ -20,4 +20,9 @@ export const portfolioKeys = {
   executions: (id: string, filters: ExecutionFilters) =>
     [...portfolioKeys.detail(id), 'executions', filters] as const,
   correlations: (id: string) => [...portfolioKeys.detail(id), 'correlations'] as const,
+  /* The master book — every sleeve rolled up. */
+  master: () => [...portfolioKeys.all, 'master'] as const,
+  masterEquity: (days: number) => [...portfolioKeys.master(), 'equity', days] as const,
+  attribution: () => [...portfolioKeys.master(), 'attribution'] as const,
+  risk: () => [...portfolioKeys.master(), 'risk'] as const,
 } as const;

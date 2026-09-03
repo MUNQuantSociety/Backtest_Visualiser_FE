@@ -454,3 +454,29 @@ export function holdingBars(entryDate: string, exitDate: string | null): number 
   if (Number.isNaN(entry) || Number.isNaN(exit)) return null;
   return Math.max(0, Math.round((exit - entry) / 86_400_000));
 }
+
+/**
+ * Pearson correlation of two equal-length series, in [-1, 1].
+ *
+ * Returns 0 when either side has no variance: a flat series is not correlated
+ * with anything, and reporting NaN would poison every average built on it.
+ */
+export function correlation(xs: readonly number[], ys: readonly number[]): number {
+  const n = Math.min(xs.length, ys.length);
+  if (n < 2) return 0;
+
+  const mx = mean(xs.slice(0, n));
+  const my = mean(ys.slice(0, n));
+  let sxy = 0;
+  let sxx = 0;
+  let syy = 0;
+  for (let i = 0; i < n; i += 1) {
+    const dx = (xs[i] ?? 0) - mx;
+    const dy = (ys[i] ?? 0) - my;
+    sxy += dx * dy;
+    sxx += dx * dx;
+    syy += dy * dy;
+  }
+  if (sxx === 0 || syy === 0) return 0;
+  return sxy / Math.sqrt(sxx * syy);
+}

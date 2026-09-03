@@ -60,7 +60,8 @@ for the `/live` views too. See [Demo data and fixtures](#demo-data-and-fixtures)
 | Path                        | Page                                                             |
 | --------------------------- | ---------------------------------------------------------------- |
 | `/`                         | Backtest dashboard                                               |
-| `/backtests`                | All runs, filters in the URL                                     |
+| `/library`                  | Strategies and their runs side by side; selection and filters in the URL |
+| `/compare?runs=a,b`         | Two to four runs: metrics with A − B, parameter diff, overlaid charts |
 | `/backtests/:backtestId`    | Run detail — performance vs. benchmark, drawdown, tearsheet      |
 | `/live`                     | MQS Master overview — balance, P&L, server status                |
 | `/live/portfolios`          | Every sleeve the live engine runs                                |
@@ -261,11 +262,19 @@ points at the offending field. Exact payload shapes live in each feature's
 - `GET /live/portfolios/:id/correlations` → `{ tickers, matrix, lookbackDays }`
 - `GET /live/system/status` → per-service health
 - `GET /live/system/logs?size=` → `{ entries, truncated }`
+- `GET /live/equity?days=` → master NAV `{ points: [{ date, equity, benchmark }], downsampled }`
+- `GET /live/attribution` → `{ asOf, sectors: [{ sector, long, short, net, mtdAttributionBps }], tickerSectors }`
+- `GET /live/risk` → `{ var95, var99, expectedShortfall95, grossExposure, netExposure, leverage, betaToSpy, maxNameWeight, lookbackDays }`
+- `POST /live/flatten` `{ confirm: "FLATTEN" }` → closes every position
 
-These are read-only by design. Nothing in this app writes to the live trading
-system: portfolio config is displayed but never edited here, because MQSMaster
-loads it by file location and places real orders from it. Changing a config is a
-pull request against the trading repo, with review.
+The last three are not built yet: in development they fall back to fixtures
+(the Live Trading page marks those panels **Demo data**), and in production
+they error. Everything else is read-only by design. `/live/flatten` is the one
+write, behind a typed confirmation, and it never falls back to a fixture — a
+flatten that "succeeded" against demo data would be a lie about real money.
+Portfolio config is displayed but never edited here, because MQSMaster loads it
+by file location and places real orders from it. Changing a config is a pull
+request against the trading repo, with review.
 
 ## Conventions worth knowing before your first PR
 
