@@ -53,3 +53,21 @@ export function formatDuration(days: number): string {
   if (days < 365) return `${String(Math.round(days / 30))}mo`;
   return `${formatNumber(days / 365, 1)}y`;
 }
+
+/**
+ * "now", "3h", "yesterday", "5d ago", or the date once it is old enough that
+ * a count of days stops meaning anything. For "last run" and "when" columns.
+ */
+export function formatRelativeDay(iso: string, now: number = Date.now()): string {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return iso;
+  const minutes = Math.max(0, Math.round((now - then) / 60_000));
+  if (minutes < 1) return 'now';
+  if (minutes < 60) return `${String(minutes)}m`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${String(hours)}h`;
+  const days = Math.round(hours / 24);
+  if (days === 1) return 'yesterday';
+  if (days < 30) return `${String(days)}d ago`;
+  return iso.slice(0, 10);
+}

@@ -21,7 +21,19 @@ import { RunBacktestForm } from './run-backtest-form';
  * and the backdrop that a hand-rolled overlay would have to reimplement, and
  * the repo has no dialog dependency to reach for.
  */
-export function RunBacktestDialog() {
+interface RunBacktestDialogProps {
+  /** Start with this strategy chosen. */
+  initialStrategyKey?: string | undefined;
+  /** The trigger's text; "Run backtest" by default. */
+  label?: string | undefined;
+  variant?: 'default' | 'outline' | undefined;
+}
+
+export function RunBacktestDialog({
+  initialStrategyKey,
+  label = 'Run backtest',
+  variant = 'default',
+}: RunBacktestDialogProps = {}) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [open, setOpen] = useState(false);
 
@@ -57,9 +69,13 @@ export function RunBacktestDialog() {
 
   return (
     <>
-      <Button onClick={openDialog}>
+      <Button
+        onClick={openDialog}
+        variant={variant}
+        size={variant === 'outline' ? 'sm' : 'default'}
+      >
         <Play className="mr-2 size-4" aria-hidden />
-        Run backtest
+        {label}
       </Button>
 
       <dialog
@@ -70,10 +86,20 @@ export function RunBacktestDialog() {
         onClose={() => {
           setOpen(false);
         }}
-        // A click that lands on the <dialog> itself rather than on its contents
-        // is a click on the backdrop, which should dismiss.
+        // A backdrop click reaches the <dialog> element itself, but so does a
+        // click on its own scrollbar or padding now that it scrolls. Only a
+        // click whose coordinates fall outside the box is a dismissal; the
+        // other kind closed the form while the element stayed open.
         onClick={(event) => {
-          if (event.target === dialogRef.current) closeDialog();
+          const dialog = dialogRef.current;
+          if (!dialog || event.target !== dialog) return;
+          const box = dialog.getBoundingClientRect();
+          const inside =
+            event.clientX >= box.left &&
+            event.clientX <= box.right &&
+            event.clientY >= box.top &&
+            event.clientY <= box.bottom;
+          if (!inside) closeDialog();
         }}
         // 720px, border-strong hairline, radius 10 and a deep shadow over a
         // background-coloured backdrop at 85% — the handoff's dialog spec.
@@ -102,7 +128,7 @@ export function RunBacktestDialog() {
         {/* Mounted only while open: the form fetches the strategy list and then
             the chosen strategy's data coverage, and the dashboard should not
             pay for either until someone actually asks to run something. */}
-        {open ? <RunBacktestForm layout="dialog" /> : null}
+        {open ? <RunBacktestForm layout="dialog" initialStrategyKey={initialStrategyKey} /> : null}
       </dialog>
     </>
   );

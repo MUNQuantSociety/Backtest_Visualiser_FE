@@ -1,6 +1,6 @@
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
-import { formatSigned } from '@/utils/format';
+import { formatRelativeDay, formatSigned } from '@/utils/format';
 import { toneFromValue } from '@/utils/tone';
 
 import type { NewsArticle } from '../types';
@@ -12,13 +12,6 @@ const toneClass = {
   loss: 'text-[var(--loss)]',
   neutral: 'text-foreground',
 } as const;
-
-function relativeTime(iso: string, now = Date.now()): string {
-  const hours = Math.max(0, Math.round((now - new Date(iso).getTime()) / 3_600_000));
-  if (hours < 1) return 'now';
-  if (hours < 24) return `${String(hours)}h`;
-  return `${String(Math.round(hours / 24))}d`;
-}
 
 export function NewsList({
   articles,
@@ -43,7 +36,7 @@ export function NewsList({
           <div className="min-w-0">
             <p className="tabular truncate text-[10px] text-foreground">{article.source}</p>
             <p className="tabular text-[10px] text-muted-foreground">
-              {relativeTime(article.publishedAt)}
+              {formatRelativeDay(article.publishedAt)}
             </p>
           </div>
           <div className="min-w-0">

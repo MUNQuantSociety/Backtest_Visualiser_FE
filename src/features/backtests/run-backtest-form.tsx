@@ -78,13 +78,15 @@ function defaultStart(start: string, end: string): string {
 interface RunBacktestFormProps {
   /** `dialog` puts the summary and buttons in a footer bar; `card` inlines them. */
   layout?: 'card' | 'dialog' | undefined;
+  /** Start with this strategy chosen — "re-run" from a strategy's own page. */
+  initialStrategyKey?: string | undefined;
 }
 
-export function RunBacktestForm({ layout = 'card' }: RunBacktestFormProps) {
+export function RunBacktestForm({ layout = 'card', initialStrategyKey }: RunBacktestFormProps) {
   const strategies = useStrategies();
   const submit = useSubmitBacktest();
 
-  const [strategyKey, setStrategyKey] = useState('');
+  const [strategyKey, setStrategyKey] = useState(initialStrategyKey ?? '');
   const [name, setName] = useState('');
   const [capital, setCapital] = useState(String(DEFAULT_CAPITAL));
   const [slippageBps, setSlippageBps] = useState(String(DEFAULT_SLIPPAGE_BPS));

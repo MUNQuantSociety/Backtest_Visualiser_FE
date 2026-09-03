@@ -419,13 +419,11 @@ export default function DashboardPage() {
       <Card>
         <CardHeader className="flex-row items-start justify-between gap-4 space-y-0 pb-3">
           <CardTitle className="text-[15px]">Recent runs</CardTitle>
-          {/* Library is step 3 of the handoff and does not exist yet; until it
-              does, the full list lives on the runs page. */}
           <Link
-            to={paths.backtests}
+            to={paths.library}
             className="text-xs text-selected-foreground underline-offset-4 hover:underline"
           >
-            All {String(runs.length)} runs →
+            All {String(runs.length)} in Library →
           </Link>
         </CardHeader>
         <CardContent className="overflow-x-auto">

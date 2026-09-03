@@ -212,10 +212,22 @@ export function StrategyEditor() {
       {/* Two ways in, one payload out: upload reads into the same editor. */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex rounded-md border p-0.5">
-          <ModeTab active={mode === 'write'} onClick={() => { setMode('write'); }} icon={PencilLine}>
+          <ModeTab
+            active={mode === 'write'}
+            onClick={() => {
+              setMode('write');
+            }}
+            icon={PencilLine}
+          >
             Write code
           </ModeTab>
-          <ModeTab active={mode === 'upload'} onClick={() => { setMode('upload'); }} icon={FileUp}>
+          <ModeTab
+            active={mode === 'upload'}
+            onClick={() => {
+              setMode('upload');
+            }}
+            icon={FileUp}
+          >
             Upload file
           </ModeTab>
         </div>
@@ -356,9 +368,9 @@ function CompatibilityPanel({ result }: { result: StrategyCheckResult }) {
             text: 'text-[var(--loss)]',
             label: 'Not compatible',
           }
-        // `unchecked`: fixture mode, where there is no backend to ask. Neutral
-        // on purpose: it is neither a pass nor a complaint about the code.
-        : {
+        : // `unchecked`: fixture mode, where there is no backend to ask. Neutral
+          // on purpose: it is neither a pass nor a complaint about the code.
+          {
             icon: AlertTriangle,
             border: 'border-input',
             text: 'text-muted-foreground',
@@ -375,7 +387,10 @@ function CompatibilityPanel({ result }: { result: StrategyCheckResult }) {
           <p className={cn('text-sm font-medium', tone.text)}>
             {tone.label}
             {result.className ? (
-              <span className="font-mono font-normal text-muted-foreground"> · {result.className}</span>
+              <span className="font-mono font-normal text-muted-foreground">
+                {' '}
+                · {result.className}
+              </span>
             ) : null}
           </p>
           <p className="text-sm text-muted-foreground">{result.message}</p>
@@ -383,7 +398,11 @@ function CompatibilityPanel({ result }: { result: StrategyCheckResult }) {
       </div>
 
       {env.isDev && result.issues.length > 0 ? (
-        <IssueList title="Issues (dev only)" issues={result.issues} className="text-[var(--loss)]" />
+        <IssueList
+          title="Issues (dev only)"
+          issues={result.issues}
+          className="text-[var(--loss)]"
+        />
       ) : null}
 
       {env.isDev && result.warnings.length > 0 ? (

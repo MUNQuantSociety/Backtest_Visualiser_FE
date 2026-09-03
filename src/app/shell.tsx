@@ -1,7 +1,6 @@
 import {
   Activity,
   Briefcase,
-  ChartCandlestick,
   FlaskConical,
   GitCompareArrows,
   LayoutDashboard,
@@ -45,8 +44,7 @@ const sections: readonly NavSection[] = [
     heading: PRODUCT_NAMES.backtests,
     items: [
       { to: paths.dashboard, label: 'Dashboard', icon: LayoutDashboard, end: true },
-      { to: paths.strategies, label: 'Strategies', icon: FlaskConical, end: false },
-      { to: paths.backtests, label: 'Backtests', icon: ChartCandlestick, end: false },
+      { to: paths.library, label: 'Library', icon: FlaskConical, end: false },
       { to: paths.compare, label: 'Compare', icon: GitCompareArrows, end: false },
     ],
   },

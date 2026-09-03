@@ -57,7 +57,14 @@ const BLUEPRINTS: readonly Blueprint[] = [
     tags: ['reversion', 'financials', 'intraday'],
     universe: ['JPM', 'BAC', 'GS', 'MS'],
     parameters: [
-      { key: 'lookback', label: 'Lookback (bars)', type: 'integer', default: 40, min: 10, max: 400 },
+      {
+        key: 'lookback',
+        label: 'Lookback (bars)',
+        type: 'integer',
+        default: 40,
+        min: 10,
+        max: 400,
+      },
       { key: 'entryZ', label: 'Entry z-score', type: 'number', default: 2, min: 0.5, max: 5 },
       { key: 'exitZ', label: 'Exit z-score', type: 'number', default: 0.25, min: 0, max: 3 },
       {
@@ -82,7 +89,14 @@ const BLUEPRINTS: readonly Blueprint[] = [
     parameters: [
       { key: 'fastPeriod', label: 'Fast period', type: 'integer', default: 12, min: 2, max: 100 },
       { key: 'slowPeriod', label: 'Slow period', type: 'integer', default: 26, min: 5, max: 400 },
-      { key: 'atrMultiple', label: 'ATR stop multiple', type: 'number', default: 2.5, min: 0.5, max: 10 },
+      {
+        key: 'atrMultiple',
+        label: 'ATR stop multiple',
+        type: 'number',
+        default: 2.5,
+        min: 0.5,
+        max: 10,
+      },
     ],
   },
   {
@@ -117,7 +131,14 @@ const BLUEPRINTS: readonly Blueprint[] = [
     tags: ['breakout', 'equities', 'daily'],
     universe: ['NVDA', 'AMD', 'AVGO', 'MU'],
     parameters: [
-      { key: 'channelPeriod', label: 'Entry channel', type: 'integer', default: 55, min: 5, max: 300 },
+      {
+        key: 'channelPeriod',
+        label: 'Entry channel',
+        type: 'integer',
+        default: 55,
+        min: 5,
+        max: 300,
+      },
       { key: 'exitPeriod', label: 'Exit channel', type: 'integer', default: 20, min: 2, max: 200 },
       {
         key: 'riskPerTradePct',
@@ -139,7 +160,14 @@ const BLUEPRINTS: readonly Blueprint[] = [
     tags: ['carry', 'fx', 'intraday'],
     universe: ['G10'],
     parameters: [
-      { key: 'rankWindow', label: 'Rank window (days)', type: 'integer', default: 90, min: 10, max: 365 },
+      {
+        key: 'rankWindow',
+        label: 'Rank window (days)',
+        type: 'integer',
+        default: 90,
+        min: 10,
+        max: 365,
+      },
       { key: 'longLegs', label: 'Long legs', type: 'integer', default: 3, min: 1, max: 5 },
       { key: 'shortLegs', label: 'Short legs', type: 'integer', default: 3, min: 1, max: 5 },
     ],
@@ -158,7 +186,14 @@ const BLUEPRINTS: readonly Blueprint[] = [
     parameters: [
       { key: 'trees', label: 'Trees', type: 'integer', default: 400, min: 10, max: 2000 },
       { key: 'maxDepth', label: 'Max depth', type: 'integer', default: 6, min: 1, max: 32 },
-      { key: 'shrinkage', label: 'Learning rate', type: 'number', default: 0.05, min: 0.001, max: 1 },
+      {
+        key: 'shrinkage',
+        label: 'Learning rate',
+        type: 'number',
+        default: 0.05,
+        min: 0.001,
+        max: 1,
+      },
     ],
   },
   {
@@ -171,7 +206,14 @@ const BLUEPRINTS: readonly Blueprint[] = [
     tags: ['reversion', 'retired'],
     universe: ['SPY'],
     parameters: [
-      { key: 'gapThreshold', label: 'Gap threshold', type: 'percent', default: 0.015, min: 0, max: 0.2 },
+      {
+        key: 'gapThreshold',
+        label: 'Gap threshold',
+        type: 'percent',
+        default: 0.015,
+        min: 0,
+        max: 0.2,
+      },
     ],
   },
 ];

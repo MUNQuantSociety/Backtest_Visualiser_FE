@@ -23,6 +23,19 @@ export {
   type UniverseRow,
 } from './book';
 export { RecentRunsTable } from './recent-runs-table';
+export {
+  isPageSize,
+  isRunSort,
+  isStatusFilter,
+  monthSpan,
+  PAGE_SIZES,
+  RUN_SORTS,
+  viewRuns,
+  type PageSize,
+  type RunSort,
+  type StatusFilter,
+} from './run-filters';
+export { RunsTable } from './runs-table';
 export { RunBacktestDialog } from './run-backtest-dialog';
 export { RunBacktestForm } from './run-backtest-form';
 export { RunStatusBanner } from './run-status';
