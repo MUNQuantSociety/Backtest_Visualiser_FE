@@ -2,7 +2,8 @@ import { useQuery } from '@tanstack/react-query';
 
 import { LIVE_REFETCH_MS, LOG_TAIL_SIZE } from '@/config/constants';
 import { env } from '@/config/env';
-import { apiClient } from '@/lib/api-client';
+import { ApiError, apiClient } from '@/lib/api-client';
+import { createLogger } from '@/lib/logger';
 
 import { fixtureLogTail, fixtureSystemStatus } from './fixtures';
 import {
@@ -17,6 +18,8 @@ import {
  * here and nowhere else, exactly as in the portfolios feature.
  */
 
+const log = createLogger('system');
+
 const FIXTURE_DELAY_MS = 180;
 
 async function withFixtureDelay<T>(value: T): Promise<T> {
@@ -24,24 +27,49 @@ async function withFixtureDelay<T>(value: T): Promise<T> {
   return value;
 }
 
-export async function fetchSystemStatus(): Promise<SystemStatus> {
-  if (env.useFixtures) {
-    return withFixtureDelay(systemStatusSchema.parse(fixtureSystemStatus()));
-  }
+/** Statuses that mean "nothing answered", as opposed to "the backend said no". */
+const UNREACHABLE = new Set([0, 502, 503, 504]);
 
-  const data = await apiClient.get<unknown>('/live/system/status');
-  return systemStatusSchema.parse(data);
+/**
+ * Fixtures when they are on, or — in development only — when the backend did
+ * not answer. Production never falls back: a health strip showing demo
+ * heartbeats for a dead engine is the one thing this feature must not do.
+ */
+async function fetchOrFixture<T>(
+  label: string,
+  request: () => Promise<T>,
+  fixture: () => T,
+): Promise<T> {
+  if (env.useFixtures) return withFixtureDelay(fixture());
+  try {
+    return await request();
+  } catch (error) {
+    const status = error instanceof ApiError ? error.status : null;
+    if (env.isDev && status !== null && UNREACHABLE.has(status)) {
+      log.warn(`${label}: backend unreachable, serving fixture data`, { status });
+      return fixture();
+    }
+    throw error;
+  }
+}
+
+export async function fetchSystemStatus(): Promise<SystemStatus> {
+  return fetchOrFixture(
+    'GET /live/system/status',
+    async () => systemStatusSchema.parse(await apiClient.get<unknown>('/live/system/status')),
+    () => systemStatusSchema.parse(fixtureSystemStatus()),
+  );
 }
 
 export async function fetchLogTail(size: number): Promise<LogTail> {
-  if (env.useFixtures) {
-    return withFixtureDelay(
-      logTailResponseSchema.parse({ entries: fixtureLogTail(size), truncated: true }),
-    );
-  }
-
-  const data = await apiClient.get<unknown>('/live/system/logs', { params: { size } });
-  return logTailResponseSchema.parse(data);
+  return fetchOrFixture(
+    'GET /live/system/logs',
+    async () =>
+      logTailResponseSchema.parse(
+        await apiClient.get<unknown>('/live/system/logs', { params: { size } }),
+      ),
+    () => logTailResponseSchema.parse({ entries: fixtureLogTail(size), truncated: true }),
+  );
 }
 
 export function useSystemStatus() {
