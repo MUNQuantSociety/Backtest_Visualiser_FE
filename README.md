@@ -60,7 +60,8 @@ for the `/live` views too. See [Demo data and fixtures](#demo-data-and-fixtures)
 | Path                        | Page                                                             |
 | --------------------------- | ---------------------------------------------------------------- |
 | `/`                         | Backtest dashboard                                               |
-| `/backtests`                | All runs, filters in the URL                                     |
+| `/library`                  | Strategies and their runs side by side; selection and filters in the URL |
+| `/compare?runs=a,b`         | Two to four runs: metrics with A − B, parameter diff, overlaid charts |
 | `/backtests/:backtestId`    | Run detail — performance vs. benchmark, drawdown, tearsheet      |
 | `/live`                     | MQS Master overview — balance, P&L, server status                |
 | `/live/portfolios`          | Every sleeve the live engine runs                                |

@@ -18,6 +18,7 @@ export type ChartToken =
   | 'foreground'
   | 'muted-foreground'
   | 'border'
+  | 'border-strong'
   | 'background'
   | 'card'
   | 'profit'
@@ -102,6 +103,8 @@ export interface ChartPalette {
   text: string;
   mutedText: string;
   grid: string;
+  /** Pane dividers and zero lines — a hairline that must read as a reference. */
+  gridStrong: string;
   background: string;
   profit: string;
   loss: string;
@@ -121,6 +124,7 @@ export function readChartPalette(): ChartPalette {
     text: resolveToken('foreground'),
     mutedText: resolveToken('muted-foreground'),
     grid: resolveToken('border'),
+    gridStrong: resolveToken('border-strong'),
     background: resolveToken('card'),
     profit: resolveToken('profit'),
     loss: resolveToken('loss'),

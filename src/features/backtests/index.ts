@@ -9,10 +9,12 @@
 export { BacktestCard } from './backtest-card';
 export { BacktestList } from './backtest-list';
 export {
+  alignByDate,
   alphaRows,
   benchmarkCurve,
   bestRunByStrategy,
   bookCurve,
+  regressOnBenchmark,
   returnCorrelation,
   sliceToPeriod,
   summariseBook,
@@ -22,7 +24,21 @@ export {
   type BookSummary,
   type UniverseRow,
 } from './book';
+export {
+  chipParts,
+  chipSummary,
+  compareContext,
+  compareMetricRows,
+  deltaTone,
+  describeComparison,
+  parameterRows,
+  winnerIndex,
+  type ChipPart,
+  type CompareMetricRow,
+  type ParameterRow,
+} from './compare-model';
 export { RecentRunsTable } from './recent-runs-table';
+export { RunPickerDialog } from './run-picker-dialog';
 export {
   isPageSize,
   isRunSort,
