@@ -75,15 +75,23 @@ export function RunBacktestDialog() {
         onClick={(event) => {
           if (event.target === dialogRef.current) closeDialog();
         }}
-        className="m-auto w-[min(42rem,calc(100vw-2rem))] rounded-lg border bg-card p-0 text-card-foreground backdrop:bg-black/50 backdrop:backdrop-blur-sm"
+        // 720px, border-strong hairline, radius 10 and a deep shadow over a
+        // background-coloured backdrop at 85% — the handoff's dialog spec.
+        // Taller than most viewports once a strategy shows its parameters, so it
+        // scrolls inside itself; without the cap the header sits above the fold
+        // and the close button with it.
+        className="m-auto max-h-[calc(100vh-2rem)] w-[min(720px,calc(100vw-2rem))] overflow-y-auto rounded-[10px] border border-[var(--border-strong)] bg-card p-0 text-card-foreground shadow-[0_40px_100px_rgb(0_0_0/0.6)] backdrop:bg-background/85"
       >
-        <div className="flex items-start justify-between gap-4 border-b p-5">
+        {/* Header and footer stay put while the body scrolls, so the title, the
+            close button and the Run button are reachable at any scroll position
+            — the dialog is taller than most viewports once parameters show. */}
+        <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b bg-card px-6 pt-5 pb-4">
           <div className="space-y-1">
-            <h2 id="run-backtest-title" className="font-semibold tracking-tight">
-              New run
+            <h2 id="run-backtest-title" className="text-[17px] font-semibold tracking-tight">
+              Run backtest
             </h2>
-            <p className="text-sm text-muted-foreground">
-              Pick a strategy and a window, and it runs against historical data.
+            <p className="text-[13px] text-muted-foreground">
+              Event-driven by default. Dates are bounded by what the data actually covers.
             </p>
           </div>
           <Button variant="ghost" size="icon" aria-label="Close" onClick={closeDialog}>
@@ -94,7 +102,7 @@ export function RunBacktestDialog() {
         {/* Mounted only while open: the form fetches the strategy list and then
             the chosen strategy's data coverage, and the dashboard should not
             pay for either until someone actually asks to run something. */}
-        <div className="p-5">{open ? <RunBacktestForm /> : null}</div>
+        {open ? <RunBacktestForm layout="dialog" /> : null}
       </dialog>
     </>
   );
