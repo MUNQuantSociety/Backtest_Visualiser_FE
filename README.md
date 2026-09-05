@@ -49,16 +49,19 @@ Requests to `/api/*` are proxied to `DEV_API_PROXY_TARGET` (default
 `http://localhost:8000`), so the browser sees a same-origin URL and there is no
 CORS setup in development. Point that variable at your API.
 
-**No backend yet?** `.env.example` ships with `VITE_USE_FIXTURES=true`, which
-serves generated demo data for the `/live` views so they render standalone. See
-[Fixtures](#fixtures) — it is a stopgap, not the plan.
+**No backend yet?** Nothing to configure — with nothing listening on that port,
+backtest views fall back to the committed dataset at `mock-data/backtests.json`
+and every chart still renders. Set `VITE_USE_FIXTURES=true` to force demo data
+for the `/live` views too. See [Demo data and fixtures](#demo-data-and-fixtures)
+— a stopgap, not the plan.
 
 ## Routes
 
 | Path                        | Page                                                             |
 | --------------------------- | ---------------------------------------------------------------- |
 | `/`                         | Backtest dashboard                                               |
-| `/backtests`                | All runs, filters in the URL                                     |
+| `/library`                  | Strategies and their runs side by side; selection and filters in the URL |
+| `/compare?runs=a,b`         | Two to four runs: metrics with A − B, parameter diff, overlaid charts |
 | `/backtests/:backtestId`    | Run detail — performance vs. benchmark, drawdown, tearsheet      |
 | `/live`                     | MQS Master overview — balance, P&L, server status                |
 | `/live/portfolios`          | Every sleeve the live engine runs                                |
@@ -76,6 +79,7 @@ literal — so a route rename is one edit.
 | `npm run dev`           | Dev server with HMR                            |
 | `npm run build`         | Typecheck, then production build to `dist/`    |
 | `npm run preview`       | Serve the built bundle                         |
+| `npm run generate:mock-data` | Regenerate `mock-data/backtests.json`     |
 | `npm run typecheck`     | `tsc --build`, no emit                         |
 | `npm run lint`          | ESLint, zero warnings tolerated                |
 | `npm run lint:fix`      | ESLint with autofix                            |
@@ -177,14 +181,41 @@ readable message rather than surfacing later as `undefined`.
 with `z.coerce.boolean()`, which treats every non-empty string as true and would
 make `VITE_USE_FIXTURES=false` silently mean *true*.
 
-## Fixtures
+## Demo data and fixtures
 
-With `VITE_USE_FIXTURES=true`, **both** products render generated demo data
+Backtests read from **`mock-data/backtests.json`**, a dataset committed at the
+repo root — 6 runs, ~1,400 equity-curve points, ~1,250 trades. Every chart
+renders from it, so a fresh clone is fully functional with no backend running.
+
+It is served in two situations:
+
+- **The backend is unreachable.** In dev only, a request that reaches no server
+  (status 0) or gets a gateway answer (502/503/504 — what the Vite proxy returns
+  when nothing is listening on `DEV_API_PROXY_TARGET`) falls back to the dataset
+  and logs a warning naming the file. A 4xx or a 5xx from a backend that *is*
+  running still surfaces as an error: quietly swapping in demo data would hide a
+  real bug behind plausible numbers. Production never falls back.
+- **`VITE_USE_FIXTURES=true`.** Forces demo data regardless of the backend.
+
+To change the data, edit the blueprints in
+`src/features/backtests/mock-source.ts` and regenerate:
+
+```bash
+npm run generate:mock-data
+```
+
+The generator runs through `vite-node`, so it resolves the same `@/` aliases as
+the app and shares `@/utils/metrics` rather than reimplementing it. Output is
+committed on purpose — a clone should render charts with no build step. It loads
+through a dynamic import pinned to its own bundle chunk, so the ~570 KB never
+reaches anyone who does not hit one of the two paths above.
+
+With `VITE_USE_FIXTURES=true`, **both** products render demo data
 shaped like the real payloads — including the actual portfolio IDs, ticker sets
 and strategy class names from MQSMaster, so nobody learns a layout that does not
 exist. Settings shows a **"Fixtures — not live data"** badge whenever it is on.
 
-The backtest fixtures derive their numbers rather than inventing them: metrics
+The backtest dataset derives its numbers rather than inventing them: metrics
 run through `@/utils/metrics` over the generated equity curve, and trade P&L is
 scaled so it reconciles exactly with the curve's net profit. A tearsheet whose
 Sharpe disagrees with its own equity chart is worse than no tearsheet. The set
@@ -231,11 +262,19 @@ points at the offending field. Exact payload shapes live in each feature's
 - `GET /live/portfolios/:id/correlations` → `{ tickers, matrix, lookbackDays }`
 - `GET /live/system/status` → per-service health
 - `GET /live/system/logs?size=` → `{ entries, truncated }`
+- `GET /live/equity?days=` → master NAV `{ points: [{ date, equity, benchmark }], downsampled }`
+- `GET /live/attribution` → `{ asOf, sectors: [{ sector, long, short, net, mtdAttributionBps }], tickerSectors }`
+- `GET /live/risk` → `{ var95, var99, expectedShortfall95, grossExposure, netExposure, leverage, betaToSpy, maxNameWeight, lookbackDays }`
+- `POST /live/flatten` `{ confirm: "FLATTEN" }` → closes every position
 
-These are read-only by design. Nothing in this app writes to the live trading
-system: portfolio config is displayed but never edited here, because MQSMaster
-loads it by file location and places real orders from it. Changing a config is a
-pull request against the trading repo, with review.
+The last three are not built yet: in development they fall back to fixtures
+(the Live Trading page marks those panels **Demo data**), and in production
+they error. Everything else is read-only by design. `/live/flatten` is the one
+write, behind a typed confirmation, and it never falls back to a fixture — a
+flatten that "succeeded" against demo data would be a lie about real money.
+Portfolio config is displayed but never edited here, because MQSMaster loads it
+by file location and places real orders from it. Changing a config is a pull
+request against the trading repo, with review.
 
 ## Conventions worth knowing before your first PR
 

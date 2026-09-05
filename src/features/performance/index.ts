@@ -10,11 +10,25 @@
 
 export { DrawdownChart } from './drawdown-chart';
 export { EquityCurveChart } from './equity-curve-chart';
-// export { MetricsGrid } from './metrics-grid';
-// export { MetricsTable } from './metrics-table';
-export { ComparisonChart } from './comparison-chart';
-export { ComparisonTable } from './comparison-table';
+export { MetricsGrid } from './metrics-grid';
+export { MetricsTable } from './metrics-table';
+export { ComparisonChart, type ComparisonSeries } from './comparison-chart';
+export { DrawdownOverlay } from './drawdown-overlay';
+export { MonthlyDifferenceHeatmap } from './monthly-difference-heatmap';
+export { RollingSharpeOverlay } from './rolling-sharpe-overlay';
 export { PnlHistogram } from './pnl-histogram';
 export { RiskReturnScatter } from './risk-return-scatter';
 export { buildTearsheet } from './tearsheet';
 export type { TearsheetRow, TearsheetSection } from './tearsheet';
+
+/* Analytics panels. Recharts rather than lightweight-charts across the board:
+   every one is a categorical or derived view, not a price series, which is the
+   split src/README.md already draws. */
+export { BetaScatter } from './beta-scatter';
+export { DailyPnlBars } from './daily-pnl-bars';
+export { DrawdownTable } from './drawdown-table';
+export { MonthlyReturnsHeatmap } from './monthly-returns-heatmap';
+export { ReturnsDistribution } from './returns-distribution';
+export { RollingSharpeChart } from './rolling-sharpe-chart';
+export { RollingVolatilityChart } from './rolling-volatility-chart';
+export { TradeDurationScatter } from './trade-duration-scatter';

@@ -9,15 +9,20 @@ import type { ExecutionFilters } from './types';
  * other.
  */
 export const portfolioKeys = {
-    all: ['live-portfolios'] as const,
-    lists: () => [...portfolioKeys.all, 'list'] as const,
-    list: () => [...portfolioKeys.lists(), {}] as const,
-    details: () => [...portfolioKeys.all, 'detail'] as const,
-    detail: (id: string) => [...portfolioKeys.details(), id] as const,
-    equity: (id: string, days: number) => [...portfolioKeys.detail(id), 'equity', days] as const,
-    composition: (id: string, days: number) =>
-        [...portfolioKeys.detail(id), 'composition', days] as const,
-    executions: (id: string, filters: ExecutionFilters) =>
-        [...portfolioKeys.detail(id), 'executions', filters] as const,
-    correlations: (id: string) => [...portfolioKeys.detail(id), 'correlations'] as const,
+  all: ['live-portfolios'] as const,
+  lists: () => [...portfolioKeys.all, 'list'] as const,
+  list: () => [...portfolioKeys.lists(), {}] as const,
+  details: () => [...portfolioKeys.all, 'detail'] as const,
+  detail: (id: string) => [...portfolioKeys.details(), id] as const,
+  equity: (id: string, days: number) => [...portfolioKeys.detail(id), 'equity', days] as const,
+  composition: (id: string, days: number) =>
+    [...portfolioKeys.detail(id), 'composition', days] as const,
+  executions: (id: string, filters: ExecutionFilters) =>
+    [...portfolioKeys.detail(id), 'executions', filters] as const,
+  correlations: (id: string) => [...portfolioKeys.detail(id), 'correlations'] as const,
+  /* The master book — every sleeve rolled up. */
+  master: () => [...portfolioKeys.all, 'master'] as const,
+  masterEquity: (days: number) => [...portfolioKeys.master(), 'equity', days] as const,
+  attribution: () => [...portfolioKeys.master(), 'attribution'] as const,
+  risk: () => [...portfolioKeys.master(), 'risk'] as const,
 } as const;

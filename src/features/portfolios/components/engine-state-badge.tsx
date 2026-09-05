@@ -9,13 +9,13 @@ import type { EngineState } from '../types';
  * (deliberately allocated 0% capital) is merely informational.
  */
 const presentation: Record<EngineState, { label: string; variant: BadgeProps['variant'] }> = {
-    running: { label: 'Running', variant: 'profit' },
-    stopped: { label: 'Stopped', variant: 'secondary' },
-    halted: { label: 'Halted', variant: 'destructive' },
-    error: { label: 'Error', variant: 'destructive' },
+  running: { label: 'Running', variant: 'profit' },
+  stopped: { label: 'Stopped', variant: 'secondary' },
+  halted: { label: 'Halted', variant: 'destructive' },
+  error: { label: 'Error', variant: 'destructive' },
 };
 
 export function EngineStateBadge({ state }: { state: EngineState }) {
-    const { label, variant } = presentation[state];
-    return <Badge variant={variant}>{label}</Badge>;
+  const { label, variant } = presentation[state];
+  return <Badge variant={variant}>{label}</Badge>;
 }

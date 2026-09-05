@@ -1,24 +1,30 @@
 {
-    "compilerOptions": {
-        "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node.tsbuildinfo",
-        "target": "ES2023",
-        "lib": ["ES2023"],
-        "module": "ESNext",
-        "skipLibCheck": true,
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node.tsbuildinfo",
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "ESNext",
+    "skipLibCheck": true,
 
-        "moduleResolution": "bundler",
-        "allowImportingTsExtensions": true,
-        "verbatimModuleSyntax": true,
-        "moduleDetection": "force",
-        "noEmit": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "noEmit": true,
 
-        "strict": true,
-        "noUnusedLocals": true,
-        "noUnusedParameters": true,
-        "noFallthroughCasesInSwitch": true,
-        "noUncheckedSideEffectImports": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedSideEffectImports": true,
 
-        "types": ["node"]
-    },
-    "include": ["vite.config.ts", "vitest.config.ts", "eslint.config.js"]
+    "types": ["node"],
+
+    /* The generator in tools/ reaches into src/ for the fixture blueprints and
+       the shared metrics maths, so this project has to resolve "@/" too. */
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": ["vite.config.ts", "vitest.config.ts", "eslint.config.js", "tools/**/*.ts"]
 }

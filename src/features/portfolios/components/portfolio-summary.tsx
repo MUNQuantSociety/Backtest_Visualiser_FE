@@ -5,14 +5,14 @@ import { toneFromValue } from '@/utils/tone';
 import type { PortfolioDetail } from '../types';
 
 interface PortfolioSummaryProps {
-    portfolio: PortfolioDetail | undefined;
-    isLoading?: boolean | undefined;
+  portfolio: PortfolioDetail | undefined;
+  isLoading?: boolean | undefined;
 }
 
 const dateFormat = new Intl.DateTimeFormat('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: '2-digit',
+  year: 'numeric',
+  month: 'short',
+  day: '2-digit',
 });
 
 /**
@@ -22,47 +22,43 @@ const dateFormat = new Intl.DateTimeFormat('en-US', {
  * which is the number that tells you whether the thing is actually alive.
  */
 export function PortfolioSummary({ portfolio, isLoading = false }: PortfolioSummaryProps) {
-    const placeholder = '—';
+  const placeholder = '—';
 
-    return (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <StatTile
-                label="Total value"
-                value={portfolio ? formatCurrency(portfolio.totalValue) : placeholder}
-                hint={portfolio ? `${formatCurrency(portfolio.cash)} cash` : undefined}
-                isLoading={isLoading}
-            />
-            <StatTile
-                label="Total P&L"
-                value={
-                    portfolio
-                        ? formatSigned(portfolio.totalPnl, (value) => formatCurrency(value))
-                        : placeholder
-                }
-                tone={portfolio ? toneFromValue(portfolio.totalPnl) : 'neutral'}
-                hint={
-                    portfolio
-                        ? formatSigned(portfolio.totalReturn, (value) => formatPercent(value))
-                        : undefined
-                }
-                isLoading={isLoading}
-            />
-            <StatTile
-                label="Starting capital"
-                value={portfolio ? formatCurrency(portfolio.startingCapital) : placeholder}
-                hint={
-                    portfolio
-                        ? `Since ${dateFormat.format(new Date(portfolio.startedAt))}`
-                        : undefined
-                }
-                isLoading={isLoading}
-            />
-            <StatTile
-                label="Capital allocation"
-                value={portfolio ? formatPercent(portfolio.allocationWeight, 0) : placeholder}
-                hint="Share of the master portfolio"
-                isLoading={isLoading}
-            />
-        </div>
-    );
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <StatTile
+        label="Total value"
+        value={portfolio ? formatCurrency(portfolio.totalValue) : placeholder}
+        hint={portfolio ? `${formatCurrency(portfolio.cash)} cash` : undefined}
+        isLoading={isLoading}
+      />
+      <StatTile
+        label="Total P&L"
+        value={
+          portfolio
+            ? formatSigned(portfolio.totalPnl, (value) => formatCurrency(value))
+            : placeholder
+        }
+        tone={portfolio ? toneFromValue(portfolio.totalPnl) : 'neutral'}
+        hint={
+          portfolio
+            ? formatSigned(portfolio.totalReturn, (value) => formatPercent(value))
+            : undefined
+        }
+        isLoading={isLoading}
+      />
+      <StatTile
+        label="Starting capital"
+        value={portfolio ? formatCurrency(portfolio.startingCapital) : placeholder}
+        hint={portfolio ? `Since ${dateFormat.format(new Date(portfolio.startedAt))}` : undefined}
+        isLoading={isLoading}
+      />
+      <StatTile
+        label="Capital allocation"
+        value={portfolio ? formatPercent(portfolio.allocationWeight, 0) : placeholder}
+        hint="Share of the master portfolio"
+        isLoading={isLoading}
+      />
+    </div>
+  );
 }

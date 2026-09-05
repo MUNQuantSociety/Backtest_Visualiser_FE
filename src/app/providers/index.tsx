@@ -11,13 +11,13 @@ import { ThemeProvider } from './theme-provider';
  * boundary is outermost so a provider blowing up is still caught.
  */
 export function AppProviders({ children }: { children: ReactNode }) {
-    return (
-        <ErrorBoundary>
-            <AuthProvider>
-                <ThemeProvider>
-                    <QueryProvider>{children}</QueryProvider>
-                </ThemeProvider>
-            </AuthProvider>
-        </ErrorBoundary>
-    );
+  return (
+    <ErrorBoundary>
+      <AuthProvider>
+        <ThemeProvider>
+          <QueryProvider>{children}</QueryProvider>
+        </ThemeProvider>
+      </AuthProvider>
+    </ErrorBoundary>
+  );
 }

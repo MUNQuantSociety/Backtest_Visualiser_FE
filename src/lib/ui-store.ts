@@ -13,59 +13,62 @@ import { STORAGE_KEYS } from '@/config/constants';
 
 export type Theme = 'light' | 'dark' | 'system';
 
-interface UiState {
-    theme: Theme;
-    sidebarCollapsed: boolean;
-    /** IDs currently pinned for side-by-side comparison. */
-    comparisonIds: string[];
+/** How far back the dashboard's book panels look. */
+export type DashboardPeriod = '1y' | '2y' | '5y' | 'max';
 
-    setTheme: (theme: Theme) => void;
-    toggleSidebar: () => void;
-    toggleComparison: (id: string) => void;
-    clearComparison: () => void;
+interface UiState {
+  theme: Theme;
+  dashboardPeriod: DashboardPeriod;
+  /** IDs currently pinned for side-by-side comparison. */
+  comparisonIds: string[];
+
+  setTheme: (theme: Theme) => void;
+  setDashboardPeriod: (period: DashboardPeriod) => void;
+  toggleComparison: (id: string) => void;
+  clearComparison: () => void;
 }
 
 export const useUiStore = create<UiState>()(
-    persist(
-        (set) => ({
-            theme: 'system',
-            sidebarCollapsed: false,
-            comparisonIds: [],
+  persist(
+    (set) => ({
+      theme: 'system',
+      dashboardPeriod: '2y',
+      comparisonIds: [],
 
-            setTheme: (theme) => {
-                set({ theme });
-            },
+      setTheme: (theme) => {
+        set({ theme });
+      },
 
-            toggleSidebar: () => {
-                set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed }));
-            },
+      setDashboardPeriod: (period) => {
+        set({ dashboardPeriod: period });
+      },
 
-            toggleComparison: (id) => {
-                set((state) => ({
-                    comparisonIds: state.comparisonIds.includes(id)
-                        ? state.comparisonIds.filter((existing) => existing !== id)
-                        : [...state.comparisonIds, id],
-                }));
-            },
+      toggleComparison: (id) => {
+        set((state) => ({
+          comparisonIds: state.comparisonIds.includes(id)
+            ? state.comparisonIds.filter((existing) => existing !== id)
+            : [...state.comparisonIds, id],
+        }));
+      },
 
-            clearComparison: () => {
-                set({ comparisonIds: [] });
-            },
-        }),
-        {
-            name: STORAGE_KEYS.theme,
-            // Comparison selections are per-session; only persist real preferences.
-            partialize: (state) => ({
-                theme: state.theme,
-                sidebarCollapsed: state.sidebarCollapsed,
-            }),
-        },
-    ),
+      clearComparison: () => {
+        set({ comparisonIds: [] });
+      },
+    }),
+    {
+      name: STORAGE_KEYS.theme,
+      // Comparison selections are per-session; only persist real preferences.
+      partialize: (state) => ({
+        theme: state.theme,
+        dashboardPeriod: state.dashboardPeriod,
+      }),
+    },
+  ),
 );
 
 /* Selector hooks. Subscribing to one slice stops every consumer from
    re-rendering when an unrelated field changes. */
 export const useTheme = () => useUiStore((state) => state.theme);
 export const useSetTheme = () => useUiStore((state) => state.setTheme);
-export const useSidebarCollapsed = () => useUiStore((state) => state.sidebarCollapsed);
-export const useToggleSidebar = () => useUiStore((state) => state.toggleSidebar);
+export const useDashboardPeriod = () => useUiStore((state) => state.dashboardPeriod);
+export const useSetDashboardPeriod = () => useUiStore((state) => state.setDashboardPeriod);

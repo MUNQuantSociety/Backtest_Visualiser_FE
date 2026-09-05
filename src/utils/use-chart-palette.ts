@@ -6,31 +6,31 @@ let cached: ChartPalette | null = null;
 const listeners = new Set<() => void>();
 
 function emit(): void {
-    cached = null;
-    listeners.forEach((listener) => {
-        listener();
-    });
+  cached = null;
+  listeners.forEach((listener) => {
+    listener();
+  });
 }
 
 function subscribe(listener: () => void): () => void {
-    listeners.add(listener);
+  listeners.add(listener);
 
-    // Re-read the palette when the `dark` class is toggled on <html>.
-    const observer = new MutationObserver(emit);
-    observer.observe(document.documentElement, {
-        attributes: true,
-        attributeFilter: ['class'],
-    });
+  // Re-read the palette when the `dark` class is toggled on <html>.
+  const observer = new MutationObserver(emit);
+  observer.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['class'],
+  });
 
-    return () => {
-        listeners.delete(listener);
-        observer.disconnect();
-    };
+  return () => {
+    listeners.delete(listener);
+    observer.disconnect();
+  };
 }
 
 function getSnapshot(): ChartPalette {
-    cached ??= readChartPalette();
-    return cached;
+  cached ??= readChartPalette();
+  return cached;
 }
 
 /**
@@ -38,5 +38,5 @@ function getSnapshot(): ChartPalette {
  * Cached between reads because `getComputedStyle` forces layout.
  */
 export function useChartPalette(): ChartPalette {
-    return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
