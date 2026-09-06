@@ -1,13 +1,18 @@
 import { createBrowserRouter } from 'react-router';
 
 import { RootLayout } from '@/app/root-layout';
+import LoginPage from '@/pages/LoginPage';
+
+import { paths } from '../paths';
 
 /** Route patterns as react-router expects them (with `:params`). */
 export const routePatterns = {
   dashboard: '/',
-  library: '/library',
+  backtests: '/backtests',
   backtestDetail: '/backtests/:backtestId',
+  strategies: '/strategies',
   compare: '/compare',
+  login: '/login',
 
   live: '/live',
   portfolios: '/live/portfolios',
@@ -28,13 +33,13 @@ export const router = createBrowserRouter([
           return { Component: DashboardPage.default };
         },
       },
-      {
-        path: routePatterns.library,
-        lazy: async () => {
-          const LibraryPage = await import('@/pages/library-page');
-          return { Component: LibraryPage.default };
-        },
-      },
+      // {
+      //     path: routePatterns.backtests,
+      //     lazy: async () => {
+      //         const BacktestsPage = await import('@/pages/backtests-page');
+      //         return { Component: BacktestsPage.default };
+      //     },
+      // },
       {
         path: routePatterns.backtestDetail,
         lazy: async () => {
@@ -49,6 +54,13 @@ export const router = createBrowserRouter([
           return { Component: ComparePage.default };
         },
       },
+      // {
+      //     path: routePatterns.strategies,
+      //     lazy: async () => {
+      //         const StrategiesPage = await import('@/pages/strategies-page');
+      //         return { Component: StrategiesPage.default };
+      //     },
+      // },
       {
         path: routePatterns.live,
         lazy: async () => {
@@ -84,13 +96,17 @@ export const router = createBrowserRouter([
           return { Component: SettingsPage.default };
         },
       },
-      {
-        path: '*',
-        lazy: async () => {
-          const NotFoundPage = await import('@/pages/not-found-page');
-          return { Component: NotFoundPage.default };
-        },
-      },
     ],
+  },
+  {
+    path: '*',
+    lazy: async () => {
+      const NotFoundPage = await import('@/pages/not-found-page');
+      return { Component: NotFoundPage.default };
+    },
+  },
+  {
+    path: paths.login,
+    element: <LoginPage />,
   },
 ]);

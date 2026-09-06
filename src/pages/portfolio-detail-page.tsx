@@ -35,7 +35,8 @@ export default function PortfolioDetailPage() {
   const { portfolioId } = useParams<{ portfolioId: string }>();
   const { data: portfolio, isPending, isError, error } = usePortfolio(portfolioId);
   const { data: equity, isPending: isEquityPending } = usePortfolioEquity(portfolioId);
-  const { data: composition, isPending: isCompositionPending } = usePortfolioComposition(portfolioId);
+  const { data: composition, isPending: isCompositionPending } =
+    usePortfolioComposition(portfolioId);
 
   const points = equity?.points ?? [];
   const returns = toReturns(points.map((point) => point.equity));

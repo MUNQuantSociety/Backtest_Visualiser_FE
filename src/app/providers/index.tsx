@@ -2,6 +2,7 @@ import { type ReactNode } from 'react';
 
 import { ErrorBoundary } from '@/components/common/error-boundary';
 
+import { AuthProvider } from './auth-provider';
 import { QueryProvider } from './query-provider';
 import { ThemeProvider } from './theme-provider';
 
@@ -12,9 +13,11 @@ import { ThemeProvider } from './theme-provider';
 export function AppProviders({ children }: { children: ReactNode }) {
   return (
     <ErrorBoundary>
-      <ThemeProvider>
-        <QueryProvider>{children}</QueryProvider>
-      </ThemeProvider>
+      <AuthProvider>
+        <ThemeProvider>
+          <QueryProvider>{children}</QueryProvider>
+        </ThemeProvider>
+      </AuthProvider>
     </ErrorBoundary>
   );
 }

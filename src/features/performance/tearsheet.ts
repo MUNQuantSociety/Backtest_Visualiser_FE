@@ -86,10 +86,24 @@ export function buildTearsheet(detail: BacktestDetail): TearsheetSection[] {
         { label: 'Winning trades', value: winners.length, format: 'integer' },
         { label: 'Losing trades', value: losers.length, format: 'integer' },
         { label: 'Win rate', value: metrics.winRate || winRate(pnls), format: 'percent' },
-        { label: 'Profit factor', value: metrics.profitFactor || profitFactor(pnls), format: 'ratio' },
+        {
+          label: 'Profit factor',
+          value: metrics.profitFactor || profitFactor(pnls),
+          format: 'ratio',
+        },
         { label: 'Payoff ratio', value: payoffRatio(pnls), format: 'ratio' },
-        { label: 'Average winning trade', value: averageWin(pnls), format: 'currency', signed: true },
-        { label: 'Average losing trade', value: averageLoss(pnls), format: 'currency', signed: true },
+        {
+          label: 'Average winning trade',
+          value: averageWin(pnls),
+          format: 'currency',
+          signed: true,
+        },
+        {
+          label: 'Average losing trade',
+          value: averageLoss(pnls),
+          format: 'currency',
+          signed: true,
+        },
         {
           label: 'Largest win',
           value: winners.length > 0 ? Math.max(...winners) : 0,

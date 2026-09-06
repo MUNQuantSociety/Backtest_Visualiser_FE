@@ -14,6 +14,7 @@ import { useState, type ReactNode } from 'react';
 import { NavLink } from 'react-router';
 
 import { paths } from '@/app/paths';
+import { useAuthCtx } from '@/app/providers/auth-provider.context';
 import logo from '@/assets/logo_dark.svg';
 import { Button } from '@/components/ui/button';
 import { APP_NAME, PRODUCT_NAMES } from '@/config/constants';
@@ -217,19 +218,19 @@ function AppHeader({
             Fixtures
           </span>
         ) : null}
-        {/*
-         * Placeholder. There is no auth yet — no login route, no session, and
-         * no protected routes — so this deliberately does nothing rather than
-         * calling an endpoint that does not exist. Wire it to a real sign-out
-         * once sessions land; the session is an httpOnly cookie, so logging out
-         * will have to be a server round trip, not a client-side clear.
-         */}
-        <Button variant="ghost" size="sm" title="Not wired up yet">
-          <LogOut className="mr-2 size-4" aria-hidden />
-          Log out
-        </Button>
       </div>
+      <LogoutBtn />
     </header>
+  );
+}
+
+function LogoutBtn() {
+  const { logout } = useAuthCtx();
+  return (
+    <Button variant="ghost" size="sm" title="logout">
+      <LogOut className="mr-2 size-4" aria-hidden onClick={logout} />
+      Log out
+    </Button>
   );
 }
 
