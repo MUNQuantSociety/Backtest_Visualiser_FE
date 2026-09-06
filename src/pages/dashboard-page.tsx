@@ -3,7 +3,6 @@ import { Link } from 'react-router';
 
 import { paths } from '@/app/paths';
 import { ChartContainer } from '@/components/charts/chart-container';
-import { CorrelationGrid } from '@/components/charts/correlation-grid';
 import { Sparkline } from '@/components/charts/sparkline';
 import { DemoBadge } from '@/components/common/demo-badge';
 import { PageHeader } from '@/components/common/page-header';
@@ -305,20 +304,7 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-[15px]">Return correlation</CardTitle>
-            <CardDescription>
-              Daily returns, {periodLabel}. Blue is positive, red negative. Two strategies above 0.6
-              are one bet.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <CorrelationGrid labels={model.corr.labels} matrix={model.corr.matrix} />
-          </CardContent>
-        </Card>
-
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-[15px]">Universe</CardTitle>
@@ -362,13 +348,23 @@ export default function DashboardPage() {
 
         <ChartContainer
           title="Return vs. drawdown — all runs"
-          description="Up and left is better. Dot size is Sharpe; colour is the strategy."
-          height={260}
+          description="Up and left is better. Dot size is Sharpe; colour is the strategy. Each strategy's best run is labelled; hover for the rest."
+          height={380}
           isLoading={loading}
         >
           <RiskReturnScatter
             backtests={runs}
             colorIndexFor={(run) => strategyIndex.get(run.strategyId)}
+            legend={[
+              ...new Map(
+                runs.flatMap((run) => {
+                  const colorIndex = strategyIndex.get(run.strategyId);
+                  return colorIndex === undefined
+                    ? []
+                    : [[run.strategyId, { label: run.strategyName, colorIndex }] as const];
+                }),
+              ).values(),
+            ]}
           />
         </ChartContainer>
       </div>
