@@ -10,8 +10,8 @@
 
 export { DrawdownChart } from './drawdown-chart';
 export { EquityCurveChart } from './equity-curve-chart';
-export { MetricsGrid } from './metrics-grid';
-export { MetricsTable } from './metrics-table';
+export { MetricsGrid } from './metric-grid';
+export { MetricsTable } from './metric-table';
 export { ComparisonChart, type ComparisonSeries } from './comparison-chart';
 export { DrawdownOverlay } from './drawdown-overlay';
 export { MonthlyDifferenceHeatmap } from './monthly-difference-heatmap';
