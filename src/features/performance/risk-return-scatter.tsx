@@ -16,6 +16,11 @@ import { seriesColor } from '@/lib/chart-theme';
 import { formatNumber, formatPercent } from '@/utils/format';
 import { useChartPalette } from '@/utils/use-chart-palette';
 
+export interface ScatterLegendItem {
+  label: string;
+  colorIndex: number;
+}
+
 interface RiskReturnScatterProps {
   backtests: readonly BacktestSummary[];
   /**
@@ -23,6 +28,36 @@ interface RiskReturnScatterProps {
    * series palette index returned. Undefined falls back to sign colouring.
    */
   colorIndexFor?: ((backtest: BacktestSummary) => number | undefined) | undefined;
+  /** What each colour means, shown above the plot. */
+  legend?: readonly ScatterLegendItem[] | undefined;
+}
+
+/**
+ * The part of a run's name that tells it apart from its siblings.
+ * "Volatility Momentum · AAPL (lb 40)" → "AAPL (lb 40)"; the strategy is
+ * already said by the colour.
+ */
+function shortLabel(name: string): string {
+  const separator = name.indexOf(' · ');
+  return separator === -1 ? name : name.slice(separator + 3);
+}
+
+/**
+ * Which runs get a label: the best Sharpe of each strategy's completed runs.
+ *
+ * With a few runs every dot can carry its name; with twenty the names pile
+ * up into an unreadable smear over the cluster. One label per strategy keeps
+ * the plot legible, and the tooltip still names every dot. A failed run's
+ * Sharpe over its first bars is not a best, so unfinished runs never win.
+ */
+function labelledIds(backtests: readonly BacktestSummary[]): Set<string> {
+  const best = new Map<string, BacktestSummary>();
+  for (const backtest of backtests) {
+    if (backtest.status !== 'completed') continue;
+    const current = best.get(backtest.strategyId);
+    if (!current || backtest.sharpe > current.sharpe) best.set(backtest.strategyId, backtest);
+  }
+  return new Set([...best.values()].map((backtest) => backtest.id));
 }
 
 /**
@@ -37,11 +72,14 @@ interface RiskReturnScatterProps {
  * already, so the chart needs only the list payload and not a detail fetch per
  * point, and drawdown is what actually ends funds.
  */
-export function RiskReturnScatter({ backtests, colorIndexFor }: RiskReturnScatterProps) {
+export function RiskReturnScatter({ backtests, colorIndexFor, legend }: RiskReturnScatterProps) {
   const palette = useChartPalette();
+  const labelled = labelledIds(backtests);
 
   const points = backtests.map((backtest) => ({
+    id: backtest.id,
     name: backtest.name,
+    label: labelled.has(backtest.id) ? shortLabel(backtest.name) : '',
     colorIndex: colorIndexFor?.(backtest),
     // Plotted as a positive magnitude so the axis reads left-to-right as
     // "safer to riskier"; the sign is restored in the tooltip.
@@ -62,82 +100,100 @@ export function RiskReturnScatter({ backtests, colorIndexFor }: RiskReturnScatte
   }
 
   return (
-    <ResponsiveContainer width="100%" height="100%">
-      <ScatterChart margin={{ top: 12, right: 24, bottom: 4, left: 0 }}>
-        <CartesianGrid stroke={palette.grid} strokeDasharray="3 3" />
-        <XAxis
-          type="number"
-          dataKey="risk"
-          name="Max drawdown"
-          tickFormatter={(value: number) => formatPercent(value, 0)}
-          tick={{ fill: palette.mutedText, fontSize: 11 }}
-          stroke={palette.grid}
-          label={{
-            value: 'Max drawdown →',
-            position: 'insideBottomRight',
-            offset: -2,
-            fill: palette.mutedText,
-            fontSize: 11,
-          }}
-        />
-        <YAxis
-          type="number"
-          dataKey="return"
-          name="Total return"
-          tickFormatter={(value: number) => formatPercent(value, 0)}
-          tick={{ fill: palette.mutedText, fontSize: 11 }}
-          stroke={palette.grid}
-          width={56}
-        />
-        <ZAxis type="number" dataKey="weight" range={[60, 420]} />
-        <Tooltip
-          cursor={{ strokeDasharray: '3 3', stroke: palette.grid }}
-          contentStyle={{
-            background: palette.background,
-            border: `1px solid ${palette.grid}`,
-            borderRadius: 6,
-            color: palette.text,
-            fontSize: 12,
-          }}
-          // Recharts colours each tooltip row from the series colour and
-          // falls back to `#000` when there is none to take. A bar coloured
-          // by a `<Cell>` has none, so those rows rendered pure black on the
-          // dark tooltip. `itemStyle` is spread after that fallback, so it wins.
-          itemStyle={{ color: palette.text }}
-          formatter={(value, name) => {
-            if (name === 'Max drawdown') return [formatPercent(-Number(value)), name];
-            if (name === 'Total return') return [formatPercent(Number(value)), name];
-            return [formatNumber(Number(value)), name];
-          }}
-          labelFormatter={(_label, payload) =>
-            (payload?.[0]?.payload as { name?: string } | undefined)?.name ?? ''
-          }
-        />
-        <Scatter data={points} isAnimationActive={false}>
-          {points.map((point) => (
-            <Cell
-              key={point.name}
-              fill={
-                point.colorIndex === undefined
-                  ? point.return >= 0
-                    ? palette.profit
-                    : palette.loss
-                  : seriesColor(palette, point.colorIndex)
-              }
-              fillOpacity={0.75}
-              stroke={palette.background}
-              strokeWidth={1}
-            />
+    <div className="flex h-full flex-col gap-2">
+      {legend && legend.length > 0 ? (
+        <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+          {legend.map((item) => (
+            <span key={item.label} className="flex items-center gap-1.5">
+              <span
+                className="inline-block size-2 rounded-full"
+                style={{ background: seriesColor(palette, item.colorIndex) }}
+                aria-hidden
+              />
+              {item.label}
+            </span>
           ))}
-          <LabelList
-            dataKey="name"
-            position="top"
-            offset={10}
-            fill={palette.mutedText}
-            fontSize={10}
-          />
-        </Scatter>
-      </ScatterChart>
-    </ResponsiveContainer>
+        </div>
+      ) : null}
+      <div className="min-h-0 flex-1">
+        <ResponsiveContainer width="100%" height="100%">
+          <ScatterChart margin={{ top: 12, right: 32, bottom: 4, left: 0 }}>
+            <CartesianGrid stroke={palette.grid} strokeDasharray="3 3" />
+            <XAxis
+              type="number"
+              dataKey="risk"
+              name="Max drawdown"
+              tickFormatter={(value: number) => formatPercent(value, 0)}
+              tick={{ fill: palette.mutedText, fontSize: 11 }}
+              stroke={palette.grid}
+              label={{
+                value: 'Max drawdown →',
+                position: 'insideBottomRight',
+                offset: -2,
+                fill: palette.mutedText,
+                fontSize: 11,
+              }}
+            />
+            <YAxis
+              type="number"
+              dataKey="return"
+              name="Total return"
+              tickFormatter={(value: number) => formatPercent(value, 0)}
+              tick={{ fill: palette.mutedText, fontSize: 11 }}
+              stroke={palette.grid}
+              width={56}
+            />
+            <ZAxis type="number" dataKey="weight" range={[60, 420]} />
+            <Tooltip
+              cursor={{ strokeDasharray: '3 3', stroke: palette.grid }}
+              contentStyle={{
+                background: palette.background,
+                border: `1px solid ${palette.grid}`,
+                borderRadius: 6,
+                color: palette.text,
+                fontSize: 12,
+              }}
+              // Recharts colours each tooltip row from the series colour and
+              // falls back to `#000` when there is none to take. A bar coloured
+              // by a `<Cell>` has none, so those rows rendered pure black on the
+              // dark tooltip. `itemStyle` is spread after that fallback, so it wins.
+              itemStyle={{ color: palette.text }}
+              formatter={(value, name) => {
+                if (name === 'Max drawdown') return [formatPercent(-Number(value)), name];
+                if (name === 'Total return') return [formatPercent(Number(value)), name];
+                return [formatNumber(Number(value)), name];
+              }}
+              labelFormatter={(_label, payload) =>
+                (payload?.[0]?.payload as { name?: string } | undefined)?.name ?? ''
+              }
+            />
+            <Scatter data={points} isAnimationActive={false}>
+              {points.map((point) => (
+                <Cell
+                  key={point.id}
+                  fill={
+                    point.colorIndex === undefined
+                      ? point.return >= 0
+                        ? palette.profit
+                        : palette.loss
+                      : seriesColor(palette, point.colorIndex)
+                  }
+                  fillOpacity={0.75}
+                  stroke={palette.background}
+                  strokeWidth={1}
+                />
+              ))}
+              <LabelList
+                dataKey="label"
+                position="right"
+                offset={8}
+                fill={palette.mutedText}
+                fontSize={10}
+              />
+            </Scatter>
+          </ScatterChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
   );
 }
