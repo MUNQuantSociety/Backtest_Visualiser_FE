@@ -71,10 +71,27 @@
   box-shadow: 0 0 0 3px rgba(88, 101, 242, 0.14);
 }
 
+/*
+ * Sized in absolute units, not `font-size`.
+ *
+ * react-icons drew every glyph at `1em`, so a font size was enough to scale
+ * it. lucide-react writes `width="24" height="24"` onto the element instead,
+ * which `font-size` cannot override — left as it was, each icon rendered at
+ * 24px and burst the field. A CSS `width`/`height` beats the SVG's own
+ * attributes, so the size stays here in the stylesheet with the rest of the
+ * layout rather than moving into the markup as a `size` prop.
+ */
 .login-field__input svg {
   flex-shrink: 0;
+  width: 1.1rem;
+  height: 1.1rem;
   color: #98a2b3;
-  font-size: 1.1rem;
+}
+
+.login-button svg {
+  flex-shrink: 0;
+  width: 1.05rem;
+  height: 1.05rem;
 }
 
 .login-field__input input {
