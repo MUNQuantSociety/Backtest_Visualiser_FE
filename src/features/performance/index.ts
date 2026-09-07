@@ -10,6 +10,23 @@
 
 export { DrawdownChart } from './drawdown-chart';
 export { EquityCurveChart } from './equity-curve-chart';
+/*
+ * Singular `metric-`, not `metrics-`, and the mismatch with the component name
+ * is deliberate. Mainstream content blockers refuse a script whose path looks
+ * like an analytics endpoint, and these two filenames matched. In dev, where
+ * Vite serves every module as its own request, that killed the entire feature:
+ * each page importing this barrel died on `Failed to fetch dynamically
+ * imported module` and rendered a blank error screen.
+ *
+ * It was expensive to find because nothing in the repo was wrong. The dev
+ * server answered 200 — `curl` with the browser's own headers proves it — and
+ * the browser discarded the response, so there was no server-side error to
+ * read. Typecheck, lint and tests all passed. A production build folds both
+ * files into one hashed chunk, so the name never reaches the wire and the
+ * symptom never appears outside dev.
+ *
+ * Renaming these back to match `MetricsGrid` / `MetricsTable` reintroduces it.
+ */
 export { MetricsGrid } from './metric-grid';
 export { MetricsTable } from './metric-table';
 export { ComparisonChart, type ComparisonSeries } from './comparison-chart';
