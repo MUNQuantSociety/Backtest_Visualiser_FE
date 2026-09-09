@@ -19,6 +19,7 @@ import { useChartPalette } from '@/utils/use-chart-palette';
 
 interface DailyPnlBarsProps {
   data: readonly EquityPoint[];
+  initialCapital?: number | undefined;
 }
 
 /**
@@ -31,22 +32,23 @@ interface DailyPnlBarsProps {
  * is on the right in the line's own colour, so which number belongs to which
  * scale is never ambiguous.
  */
-export function DailyPnlBars({ data }: DailyPnlBarsProps) {
+export function DailyPnlBars({ data, initialCapital }: DailyPnlBarsProps) {
   const palette = useChartPalette();
 
   const rows = useMemo(() => {
     let cumulative = 0;
     const out: { date: string; change: number; cumulative: number }[] = [];
-    for (let i = 1; i < data.length; i += 1) {
+    for (let i = initialCapital === undefined ? 1 : 0; i < data.length; i += 1) {
       const previous = data[i - 1];
       const current = data[i];
-      if (!previous || !current) continue;
-      const change = current.equity - previous.equity;
+      const previousEquity = previous?.equity ?? initialCapital;
+      if (previousEquity === undefined || !current) continue;
+      const change = current.equity - previousEquity;
       cumulative += change;
       out.push({ date: current.date, change, cumulative });
     }
     return out;
-  }, [data]);
+  }, [data, initialCapital]);
 
   if (rows.length < 2) {
     return (

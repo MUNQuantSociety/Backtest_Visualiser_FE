@@ -95,7 +95,7 @@ export function compareMetricRows(runs: readonly BacktestDetail[]): CompareMetri
     },
     {
       key: 'alpha',
-      label: 'Alpha vs SPY',
+      label: 'Alpha vs benchmark',
       better: 'high',
       values: regressions.map((r) => r?.alpha ?? 0),
       format: pct,

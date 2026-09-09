@@ -48,6 +48,8 @@ export const performanceMetricsSchema = z.object({
   winRate: z.number(),
   profitFactor: z.number(),
   totalTrades: z.number().int(),
+  /** Numeric compatibility placeholders that must be displayed as unavailable. */
+  unavailable: z.record(z.string(), z.string()).optional(),
 });
 export type PerformanceMetrics = z.infer<typeof performanceMetricsSchema>;
 
@@ -85,6 +87,8 @@ export const backtestDetailSchema = backtestSummarySchema.extend({
    */
   progressPct: z.number().min(0).max(100).nullable().default(null),
   errorMessage: z.string().nullable().default(null),
+  reportMetadata: z.record(z.string(), z.unknown()).optional(),
+  openPositions: z.array(z.record(z.string(), z.unknown())).optional(),
 });
 export type BacktestDetail = z.infer<typeof backtestDetailSchema>;
 
@@ -105,10 +109,9 @@ export function isInFlight(status: BacktestStatus): boolean {
 /**
  * What launching a run needs.
  *
- * `mode` and `params` are accepted by the endpoint and deliberately not sent by
- * the form: event mode is the dependable path, and the one parameter an upload
- * advertises has a sane default. Both are here so adding a control later is a
- * form change and not a contract change.
+ * `params` contains strategy parameters plus reserved universe/slippageBps/
+ * commissionPerShare controls. The backend validates and separates them before
+ * constructing the engine request. Per-share commission requires event mode.
  */
 export const backtestRunRequestSchema = z.object({
   name: z.string().trim().min(1, 'Give the run a name.').max(120),

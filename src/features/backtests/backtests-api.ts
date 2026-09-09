@@ -154,12 +154,15 @@ export async function submitBacktest(request: BacktestRunRequest): Promise<Backt
  * behind the calendar, so a picker bounded by today produces an empty window
  * and a run that fails for a reason the author did not cause.
  */
-export async function fetchCoverage(strategyKey: string): Promise<CoverageResponse> {
+export async function fetchCoverage(
+  strategyKey: string,
+  tickers?: readonly string[],
+): Promise<CoverageResponse> {
   if (env.useFixtures) return withFixtureDelay(await fixtureCoverage(strategyKey));
 
   try {
     const data = await apiClient.get<unknown>('/market-data/coverage', {
-      params: { strategyKey },
+      params: tickers ? { tickers: tickers.join(',') } : { strategyKey },
     });
     return coverageResponseSchema.parse(data);
   } catch (error) {
@@ -261,12 +264,12 @@ export function useBacktest(id: string | undefined) {
 }
 
 /** Coverage for one strategy. Disabled until a strategy is actually chosen. */
-export function useCoverage(strategyKey: string | undefined) {
+export function useCoverage(strategyKey: string | undefined, tickers?: readonly string[]) {
   return useQuery({
-    queryKey: backtestKeys.coverage(strategyKey ?? ''),
-    queryFn: () => fetchCoverage(strategyKey ?? ''),
+    queryKey: [...backtestKeys.coverage(strategyKey ?? ''), tickers ?? null],
+    queryFn: () => fetchCoverage(strategyKey ?? '', tickers),
     // Fixture mode derives coverage from the demo runs, so it stays enabled.
-    enabled: Boolean(strategyKey),
+    enabled: Boolean(strategyKey) && (tickers === undefined || tickers.length > 0),
     // Coverage moves when the data loader runs, which is not during a sitting.
     staleTime: 5 * 60 * 1_000,
   });

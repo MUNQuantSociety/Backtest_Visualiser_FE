@@ -55,6 +55,7 @@ export {
 export { RunsTable } from './runs-table';
 export { RunBacktestDialog } from './run-backtest-dialog';
 export { RunBacktestForm } from './run-backtest-form';
+export { backtestDetailSchema } from './types';
 export { RunStatusBanner } from './run-status';
 export {
   fetchBacktests,

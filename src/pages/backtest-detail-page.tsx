@@ -149,7 +149,7 @@ export default function BacktestDetailPage() {
             height={280}
             isLoading={isPending}
           >
-            <DailyPnlBars data={equityCurve} />
+            <DailyPnlBars data={equityCurve} initialCapital={data?.initialCapital} />
           </ChartContainer>
         </>
       ) : null}

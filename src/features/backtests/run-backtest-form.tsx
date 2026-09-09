@@ -37,9 +37,8 @@ import { backtestRunRequestSchema } from './types';
  * own universe.
  *
  * Universe, costs, signals and the sentiment gate travel inside `params`: the
- * request schema has no fields for them yet, and the record is where the
- * backend is being asked to read them from. Nothing typed here is dropped on
- * the client. The keys are documented on `buildParams`.
+ * backend separates these reserved execution controls from strategy specs.
+ * Signal overrides and sentiment gating are not implemented and stay disabled.
  */
 
 const DEFAULT_CAPITAL = 100_000;
@@ -110,7 +109,7 @@ export function RunBacktestForm({ layout = 'card', initialStrategyKey }: RunBack
   const [endOverride, setEndOverride] = useState<string | null>(null);
   const [universeOverride, setUniverseOverride] = useState<readonly string[] | null>(null);
 
-  const coverage = useCoverage(strategyKey || undefined);
+  const coverage = useCoverage(strategyKey || undefined, universeOverride ?? undefined);
 
   const nameId = useId();
   const startId = useId();
@@ -181,8 +180,8 @@ export function RunBacktestForm({ layout = 'card', initialStrategyKey }: RunBack
 
   /**
    * Everything the request schema has no field for, keyed for the backend.
-   * Strategy parameters are spread last under their own keys, so a strategy
-   * cannot accidentally shadow one of these names — the reverse is fine.
+   * Execution keys are reserved by the backend; strategy parameters are
+   * validated against the selected strategy's published specification.
    */
   function buildParams(): Record<string, unknown> {
     const strategyParams: Record<string, number | boolean> = {};
@@ -325,7 +324,10 @@ export function RunBacktestForm({ layout = 'card', initialStrategyKey }: RunBack
           </div>
         </Row>
 
-        <Row label="Universe" help="Defaults to the strategy's own. The dot is data coverage.">
+        <Row
+          label="Universe"
+          help="Defaults to the strategy's own. Changing tickers uses equal weights. Dots show data coverage."
+        >
           <div className="flex min-h-9 flex-wrap items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1.5">
             {universe.map((ticker) => (
               <span
@@ -491,7 +493,7 @@ export function RunBacktestForm({ layout = 'card', initialStrategyKey }: RunBack
 
         <Row
           label="Signals"
-          help="Indicators the strategy reads, and whether news sentiment gates entries."
+          help="Not configurable yet. Indicators come from strategy code; sentiment gating is unavailable."
         >
           <div className="flex flex-wrap gap-1.5">
             {SIGNALS.map((signal) => {
@@ -500,6 +502,7 @@ export function RunBacktestForm({ layout = 'card', initialStrategyKey }: RunBack
                 <button
                   key={signal}
                   type="button"
+                  disabled
                   aria-pressed={active}
                   onClick={() => {
                     toggleSignal(signal);
@@ -522,6 +525,7 @@ export function RunBacktestForm({ layout = 'card', initialStrategyKey }: RunBack
                 id={gateId}
                 type="checkbox"
                 role="switch"
+                disabled
                 aria-checked={gateEnabled}
                 checked={gateEnabled}
                 onChange={(event) => {

@@ -66,24 +66,29 @@ const COVERAGE = {
 
 beforeEach(() => {
   vi.resetAllMocks();
-  get.mockImplementation((url: string, config?: { params?: { strategyKey?: string } }) => {
-    if (url === '/strategies') {
-      return Promise.resolve({
-        items: [
-          strategy('portfolio_1', 'Vol Momentum'),
-          strategy('portfolio_2', 'Mean Reversion'),
-          strategy('portfolio_3', 'Broken Universe'),
-          strategy('draft_one', 'Unvalidated Draft', 'draft'),
-        ],
-        total: 4,
-      });
-    }
-    if (url === '/market-data/coverage') {
-      const key = config?.params?.strategyKey ?? '';
-      return Promise.resolve(COVERAGE[key as keyof typeof COVERAGE]);
-    }
-    throw new Error(`unexpected GET ${url}`);
-  });
+  get.mockImplementation(
+    (url: string, config?: { params?: { strategyKey?: string; tickers?: string } }) => {
+      if (url === '/strategies') {
+        return Promise.resolve({
+          items: [
+            strategy('portfolio_1', 'Vol Momentum'),
+            strategy('portfolio_2', 'Mean Reversion'),
+            strategy('portfolio_3', 'Broken Universe'),
+            strategy('draft_one', 'Unvalidated Draft', 'draft'),
+          ],
+          total: 4,
+        });
+      }
+      if (url === '/market-data/coverage') {
+        if (config?.params?.tickers === 'AAPL,MSFT') {
+          return Promise.resolve({ ...COVERAGE.portfolio_1, start: '2022-01-03' });
+        }
+        const key = config?.params?.strategyKey ?? '';
+        return Promise.resolve(COVERAGE[key as keyof typeof COVERAGE]);
+      }
+      throw new Error(`unexpected GET ${url}`);
+    },
+  );
 });
 
 /**
@@ -227,6 +232,14 @@ describe('RunBacktestForm', () => {
     await userEvent.type(screen.getByLabelText('Add ticker'), 'msft{Enter}');
     expect(screen.getByRole('button', { name: 'Remove MSFT' })).toBeInTheDocument();
 
+    await waitFor(() => {
+      expect(get).toHaveBeenCalledWith('/market-data/coverage', {
+        params: { tickers: 'AAPL,MSFT' },
+      });
+      expect(screen.getByLabelText('Start')).toHaveAttribute('min', '2022-01-03');
+      expect(screen.getByRole('button', { name: /run backtest/i })).toBeEnabled();
+    });
+
     submitForm();
     await waitFor(() => {
       expect(post).toHaveBeenCalledTimes(1);
@@ -241,6 +254,13 @@ describe('RunBacktestForm', () => {
     expect(await screen.findByText(/No market data at all for NOPE/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /run backtest/i })).toBeDisabled();
     expect(post).not.toHaveBeenCalled();
+  });
+
+  it('disables unsupported signal and sentiment controls explicitly', () => {
+    renderWithProviders(<RunBacktestForm />);
+    expect(screen.getByRole('button', { name: 'RSI 14' })).toBeDisabled();
+    expect(screen.getByRole('switch', { name: 'Sentiment gate' })).toBeDisabled();
+    expect(screen.getByText(/Indicators come from strategy code/)).toBeInTheDocument();
   });
 
   it('rejects a backwards window without calling the API', async () => {
