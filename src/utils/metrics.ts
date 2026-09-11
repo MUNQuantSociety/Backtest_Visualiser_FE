@@ -28,22 +28,27 @@ export function mean(values: readonly number[]): number {
 /** Sample standard deviation (n-1), which is the convention for return series. */
 export function stdDev(values: readonly number[]): number {
   if (values.length < 2) return 0;
-  const avg = mean(values);
-  const variance = values.reduce((sum, value) => sum + (value - avg) ** 2, 0) / (values.length - 1);
+  // Translation leaves variance unchanged. Centering first avoids summation
+  // roundoff inventing dispersion in identical nonzero returns.
+  const first = values[0] ?? 0;
+  const offsets = values.map((value) => value - first);
+  const avg = mean(offsets);
+  const variance =
+    offsets.reduce((sum, value) => sum + (value - avg) ** 2, 0) / (values.length - 1);
   return Math.sqrt(variance);
 }
 
-/** Annualised excess return over volatility. Returns 0 when vol is 0. */
+/** Annualised excess return over volatility. NaN when the ratio is undefined. */
 export function sharpeRatio(
   returns: readonly number[],
   riskFreeRate = DEFAULT_RISK_FREE_RATE,
   periodsPerYear = TRADING_DAYS_PER_YEAR,
 ): number {
-  if (returns.length < 2) return 0;
+  if (returns.length < 2) return Number.NaN;
   const periodRiskFree = riskFreeRate / periodsPerYear;
   const excess = returns.map((r) => r - periodRiskFree);
   const volatility = stdDev(excess);
-  if (volatility === 0) return 0;
+  if (volatility === 0) return Number.NaN;
   return (mean(excess) / volatility) * Math.sqrt(periodsPerYear);
 }
 
@@ -219,15 +224,15 @@ export function rollingSharpe(
   window = 63,
   periodsPerYear = TRADING_DAYS_PER_YEAR,
 ): (number | null)[] {
-  return returns.map((_, index) =>
-    index < window - 1
-      ? null
-      : sharpeRatio(
-          returns.slice(index - window + 1, index + 1),
-          DEFAULT_RISK_FREE_RATE,
-          periodsPerYear,
-        ),
-  );
+  return returns.map((_, index) => {
+    if (index < window - 1) return null;
+    const value = sharpeRatio(
+      returns.slice(index - window + 1, index + 1),
+      DEFAULT_RISK_FREE_RATE,
+      periodsPerYear,
+    );
+    return Number.isNaN(value) ? null : value;
+  });
 }
 
 /** Annualised volatility over a trailing window. Leading positions are `null`. */

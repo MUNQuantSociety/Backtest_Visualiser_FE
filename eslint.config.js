@@ -78,9 +78,9 @@ export default tseslint.config(
         {
           patterns: [
             {
-              group: ['@/features/*/*'],
+              group: ['@/features/*/*', '!@/features/*/data'],
               message:
-                'Import from the feature barrel (e.g. "@/features/backtests") instead of reaching into its internals.',
+                'Import from the feature barrel or its public data entry point instead of reaching into internals.',
             },
             {
               group: ['../../*'],

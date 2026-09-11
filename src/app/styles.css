@@ -191,3 +191,26 @@
     font-variant-numeric: tabular-nums;
   }
 }
+
+@layer components {
+  /* Card children must be allowed to shrink below their intrinsic text/canvas
+     width. Wide tables scroll in CardContent; text wraps without leaving its cell. */
+  [data-slot='card'] :where(.flex, .grid) > * {
+    min-width: 0;
+  }
+
+  [data-slot='chart-viewport'] > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  [data-slot='card'] :where(img, video, canvas, svg) {
+    max-width: 100%;
+  }
+
+  [data-slot='chart-viewport'] .recharts-tooltip-wrapper {
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}

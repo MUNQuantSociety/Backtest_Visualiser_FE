@@ -57,6 +57,20 @@ describe('persisted backend report contract', () => {
   it('does not display undefined profit factor and win rate as numeric zeros', () => {
     render(<MetricsGrid metrics={detail.metrics} />);
     expect(screen.getAllByText('—')).toHaveLength(2);
+    expect(screen.getByText('0 closed trades')).toBeInTheDocument();
+  });
+
+  it('preserves execution explanations and strategy diagnostics at the API boundary', () => {
+    const execution = { fillCount: 0, message: 'No qualifying entry signals were generated.' };
+    const strategyDiagnostics = { evaluationCount: 4, bullishSignalCount: 0 };
+    const parsed = backtestDetailSchema.parse({
+      ...detail,
+      reportMetadata: { fill_count: 0, execution, strategyDiagnostics },
+    });
+
+    expect(parsed.reportMetadata?.execution).toEqual(execution);
+    expect(parsed.reportMetadata?.['strategyDiagnostics']).toEqual(strategyDiagnostics);
+    expect(parsed.reportMetadata?.['fill_count']).toBe(0);
   });
 
   it('keeps undefined metrics unavailable and counts fills distinctly from paired lots', () => {
@@ -65,5 +79,16 @@ describe('persisted backend report contract', () => {
     expect(rows.find((row) => row.label === 'Profit factor')?.value).toBeNull();
     expect(rows.find((row) => row.label === 'Total fills')?.value).toBe(1);
     expect(rows.find((row) => row.label === 'Trade lots')?.value).toBe(0);
+  });
+
+  it('uses the current execution count before the legacy fill count in the tearsheet', () => {
+    const rows = buildTearsheet({
+      ...detail,
+      reportMetadata: {
+        fill_count: 1,
+        execution: { fillCount: 2, message: null },
+      },
+    }).flatMap((section) => section.rows);
+    expect(rows.find((row) => row.label === 'Total fills')?.value).toBe(2);
   });
 });

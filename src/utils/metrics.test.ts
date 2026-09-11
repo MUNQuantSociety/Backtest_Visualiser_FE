@@ -9,6 +9,7 @@ import {
   maxDrawdown,
   payoffRatio,
   profitFactor,
+  rollingSharpe,
   sharpeRatio,
   stdDev,
   toReturns,
@@ -43,15 +44,36 @@ describe('stdDev', () => {
   it('is zero when there is not enough data', () => {
     expect(stdDev([5])).toBe(0);
   });
+
+  it('does not invent variance by averaging identical nonzero values', () => {
+    expect(stdDev(Array.from({ length: 252 }, () => -0.02 / 252))).toBe(0);
+  });
 });
 
 describe('sharpeRatio', () => {
-  it('is zero when volatility is zero', () => {
-    expect(sharpeRatio([0.01, 0.01, 0.01])).toBe(0);
+  it.each([0, 0.01, -0.01])('is undefined for 252 constant returns of %s', (value) => {
+    expect(sharpeRatio(Array.from({ length: 252 }, () => value))).toBeNaN();
   });
 
   it('is positive for a series that outperforms the risk-free rate', () => {
     expect(sharpeRatio([0.01, 0.02, 0.015, 0.005])).toBeGreaterThan(0);
+  });
+
+  it('preserves the sample Sharpe for varying returns', () => {
+    expect(sharpeRatio([0.01, 0.02, 0.015, 0.005], 0.02, 252)).toBeCloseTo(
+      ((0.0125 - 0.02 / 252) / Math.sqrt(0.000125 / 3)) * Math.sqrt(252),
+      10,
+    );
+  });
+
+  it('preserves genuinely small nonzero dispersion without a volatility floor', () => {
+    expect(sharpeRatio([1e-12, 2e-12, 3e-12], 0, 252)).toBeCloseTo(2 * Math.sqrt(252), 10);
+  });
+
+  it('marks constant rolling windows as unavailable', () => {
+    expect(rollingSharpe(Array.from({ length: 252 }, () => 0))).toEqual(
+      Array.from({ length: 252 }, () => null),
+    );
   });
 });
 

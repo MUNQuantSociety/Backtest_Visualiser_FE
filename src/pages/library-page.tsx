@@ -1,6 +1,6 @@
 import { Search, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 
 import { paths } from '@/app/paths';
 import { ChartContainer } from '@/components/charts/chart-container';
@@ -84,8 +84,27 @@ export default function LibraryPage() {
 
   const strategiesQuery = useStrategies();
   const runsQuery = useBacktests();
-  const strategies = strategiesQuery.data ?? [];
   const allRuns = useMemo(() => runsQuery.data?.items ?? [], [runsQuery.data]);
+  // Catalogue totals can include other accounts. This hub describes only the
+  // runs returned for the current user, including the strategy picker stats.
+  const strategies = useMemo(
+    () =>
+      (strategiesQuery.data ?? []).map((strategy) => {
+        const runs = allRuns.filter((run) => run.strategyId === strategy.id);
+        const finished = runs.filter((run) => run.status === 'completed');
+        return {
+          ...strategy,
+          runCount: runs.length,
+          bestSharpe: finished.length ? Math.max(...finished.map((run) => run.sharpe)) : null,
+          bestReturn: finished.length ? Math.max(...finished.map((run) => run.totalReturn)) : null,
+          lastRunAt: runs.reduce<string | null>(
+            (latest, run) => (latest === null || run.createdAt > latest ? run.createdAt : latest),
+            null,
+          ),
+        };
+      }),
+    [strategiesQuery.data, allRuns],
+  );
 
   const filterParam = searchParams.get('filter');
   const sortParam = searchParams.get('sort');
@@ -98,13 +117,10 @@ export default function LibraryPage() {
   const pageSize: PageSize = isPageSize(pageSizeParam) ? pageSizeParam : 25;
   const [view, setView] = useState<View>('best');
 
-  // The selected strategy is the URL's, or the first that has a run.
+  // Start with every saved run, including strategies no longer in the catalogue.
+  // An explicit strategy in the URL narrows the list and enables its preview.
   const requested = searchParams.get('strategy');
-  const selectedId =
-    requested && strategies.some((s) => s.id === requested)
-      ? requested
-      : ((strategies.find((s) => allRuns.some((run) => run.strategyId === s.id)) ?? strategies[0])
-          ?.id ?? null);
+  const selectedId = requested && strategies.some((s) => s.id === requested) ? requested : null;
   const strategy = strategies.find((s) => s.id === selectedId) ?? null;
 
   function setParam(key: string, value: string | null) {
@@ -131,10 +147,11 @@ export default function LibraryPage() {
   // Plain derivations, not useMemo: the compiler memoizes these itself, and a
   // manual memo it cannot prove safe (an array handed to another function)
   // makes it skip the whole component. Tens of runs; the work is trivial.
-  const strategyRuns = allRuns.filter((run) => run.strategyId === selectedId);
+  const strategyRuns =
+    selectedId === null ? allRuns : allRuns.filter((run) => run.strategyId === selectedId);
   const bestRun = bestRunByStrategy(strategyRuns).get(selectedId ?? '');
   const latestRun = [...strategyRuns].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
-  const featured = view === 'latest' ? latestRun : bestRun;
+  const featured = strategy ? (view === 'latest' ? latestRun : bestRun) : undefined;
   const detail = useBacktest(featured?.id);
 
   const runView = viewRuns(strategyRuns, { status, search, sort, pageSize });
@@ -171,11 +188,38 @@ export default function LibraryPage() {
   const equityCurve = detail.data?.equityCurve ?? [];
   const loadingTearsheet = Boolean(featured) && detail.isPending;
 
+  const loadError = strategiesQuery.error ?? runsQuery.error;
+  if (loadError) {
+    return (
+      <>
+        <PageHeader title="Backtests" />
+        <div role="alert">
+          <EmptyState
+            title="Could not load backtests"
+            description={loadError.message}
+            action={
+              <Button
+                variant="outline"
+                disabled={strategiesQuery.isFetching || runsQuery.isFetching}
+                onClick={() => {
+                  if (strategiesQuery.isError) void strategiesQuery.refetch();
+                  if (runsQuery.isError) void runsQuery.refetch();
+                }}
+              >
+                Try again
+              </Button>
+            }
+          />
+        </div>
+      </>
+    );
+  }
+
   return (
     <>
       <PageHeader
-        title="Library"
-        description={`${String(strategies.length)} strategies · ${String(allRuns.length)} runs. A strategy is the thing you test; a run is one test of it.`}
+        title="Backtests"
+        description={`${String(strategies.length)} strategies · ${String(allRuns.length)} saved runs. Open a result, run a backtest, or create and upload a strategy.`}
         actions={
           <>
             <label className="relative">
@@ -205,247 +249,285 @@ export default function LibraryPage() {
       />
 
       <div className="grid items-start gap-5 xl:grid-cols-[272px_minmax(0,1fr)]">
-        <StrategyPicker
-          strategies={strategiesQuery.data}
-          isLoading={strategiesQuery.isPending}
-          filter={filter}
-          onFilterChange={(next) => {
-            setParam('filter', next === 'all' ? null : next);
-          }}
-          selectedId={selectedId}
-          onSelect={(id) => {
-            setParam('strategy', id);
-          }}
-          runningCount={running}
-        />
+        <div className="order-2 space-y-4 xl:order-1">
+          <button
+            type="button"
+            aria-label={`All runs (${formatNumber(allRuns.length, 0)})`}
+            aria-pressed={selectedId === null}
+            onClick={() => setParam('strategy', null)}
+            className={cn(
+              'flex w-full items-center justify-between rounded-md border px-3.5 py-3 text-left text-sm font-medium focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+              selectedId === null
+                ? 'border-primary bg-selected text-selected-foreground'
+                : 'hover:bg-muted/60',
+            )}
+          >
+            All runs
+            <span className="tabular text-xs">{formatNumber(allRuns.length, 0)}</span>
+          </button>
+          <StrategyPicker
+            strategies={strategiesQuery.data ? strategies : undefined}
+            isLoading={strategiesQuery.isPending || runsQuery.isPending}
+            filter={filter}
+            onFilterChange={(next) => {
+              setParam('filter', next === 'all' ? null : next);
+            }}
+            selectedId={selectedId}
+            onSelect={(id) => {
+              setParam('strategy', id);
+            }}
+            runningCount={running}
+          />
+        </div>
 
-        <div className="min-w-0 space-y-5">
-          {strategy ? (
-            <>
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <h2 className="flex items-center gap-2 text-[17px] font-semibold tracking-tight">
-                    <span
-                      className="size-2 shrink-0 rounded-[2px]"
-                      style={{
-                        background:
-                          colorIndex === null
-                            ? 'var(--border-strong)'
-                            : seriesColor(palette, colorIndex),
-                      }}
-                      aria-hidden
-                    />
-                    <span className="truncate">{strategy.name}</span>
-                    {featured ? (
-                      <span className="tabular truncate text-sm font-normal text-muted-foreground">
-                        — {view === 'latest' ? 'latest run' : 'best run'}: {featured.symbol} ·{' '}
-                        {featured.startDate} → {featured.endDate}
-                      </span>
-                    ) : null}
-                  </h2>
-                  <p className="mt-1 max-w-3xl text-[13px] text-muted-foreground">
-                    {strategy.description}
-                  </p>
-                </div>
+        <div className="order-1 min-w-0 space-y-5 xl:order-2">
+          <>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="flex items-center gap-2 text-[17px] font-semibold tracking-tight">
+                  <span
+                    className="size-2 shrink-0 rounded-[2px]"
+                    style={{
+                      background:
+                        colorIndex === null
+                          ? 'var(--border-strong)'
+                          : seriesColor(palette, colorIndex),
+                    }}
+                    aria-hidden
+                  />
+                  <span className="truncate">{strategy?.name ?? 'All runs'}</span>
+                </h2>
+                <p className="mt-1 max-w-3xl text-[13px] text-muted-foreground">
+                  {strategy?.description ??
+                    'Your saved backtests across all strategies, including older and retired strategies.'}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-sm font-semibold">Run history</h3>
+                <span className="tabular inline-flex items-center gap-1.5 rounded border px-2 py-0.5 text-xs">
+                  <span
+                    className="size-2 rounded-[2px]"
+                    style={{
+                      background:
+                        colorIndex === null
+                          ? 'var(--border-strong)'
+                          : seriesColor(palette, colorIndex),
+                    }}
+                    aria-hidden
+                  />
+                  {strategy?.className ?? 'All strategies'}
+                  <span className="text-muted-foreground">{String(strategyRuns.length)} runs</span>
+                </span>
                 <Segmented
-                  value={view}
-                  options={VIEWS}
-                  onChange={setView}
-                  ariaLabel="Strategy view"
+                  value={status}
+                  options={STATUS_OPTIONS}
+                  onChange={(next) => {
+                    setParam('status', next === 'any' ? null : next);
+                  }}
+                  ariaLabel="Filter runs by status"
                 />
               </div>
+              <Segmented
+                value={sort}
+                options={RUN_SORTS}
+                onChange={(next) => {
+                  setParam('sort', next === 'newest' ? null : next);
+                }}
+                ariaLabel="Sort runs"
+              />
+            </div>
 
-              {view === 'spec' ? (
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-[15px]">
-                      <span className="tabular">{strategy.className}</span> — parameter spec
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    {/* The catalogue carries the spec, not the source: the file
+            <Card>
+              <CardContent className="overflow-x-auto p-4">
+                <p className="mb-4 text-sm text-muted-foreground">
+                  Open a run to view its results. Select two or more runs to compare them.
+                </p>
+                <RunsTable
+                  runs={runView.rows}
+                  isLoading={runsQuery.isPending}
+                  selectedIds={selectedIds}
+                  onToggle={toggleComparison}
+                />
+                <div className="tabular mt-3 flex items-center justify-between text-xs text-muted-foreground">
+                  <span>
+                    {formatNumber(runView.rows.length, 0)} of {formatNumber(runView.total, 0)} runs
+                  </span>
+                  <span className="flex items-center gap-1">
+                    Show
+                    {PAGE_SIZES.map((size) => (
+                      <button
+                        key={size}
+                        type="button"
+                        onClick={() => {
+                          setParam('show', size === 25 ? null : String(size));
+                        }}
+                        className={cn(
+                          'rounded px-1.5 py-0.5',
+                          size === pageSize
+                            ? 'bg-selected text-selected-foreground'
+                            : 'hover:text-foreground',
+                        )}
+                      >
+                        {size}
+                      </button>
+                    ))}
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+
+            {strategy ? (
+              <>
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-5">
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-semibold">Strategy preview</h3>
+                    {featured && view !== 'spec' ? (
+                      <Link
+                        to={paths.backtestDetail(featured.id)}
+                        className="mt-1 block text-sm text-primary underline-offset-4 hover:underline"
+                      >
+                        {featured.name} · {featured.startDate} → {featured.endDate} · View results →
+                      </Link>
+                    ) : null}
+                  </div>
+                  <Segmented
+                    value={view}
+                    options={VIEWS}
+                    onChange={setView}
+                    ariaLabel="Strategy view"
+                  />
+                </div>
+
+                {view === 'spec' ? (
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-[15px]">
+                        <span className="tabular">{strategy.className}</span> — parameter spec
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      {/* The catalogue carries the spec, not the source: the file
                         itself never leaves the engine. What can be shown is
                         what a run of it accepts. */}
-                    {strategy.parameters.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">No tunable parameters.</p>
-                    ) : (
-                      <div className="tabular grid grid-cols-[minmax(0,1fr)_80px_80px_80px_80px] gap-2 text-xs">
-                        <span className="text-[10px] font-medium tracking-[0.06em] text-muted-foreground uppercase">
-                          Parameter
-                        </span>
-                        <span className="text-right text-[10px] font-medium tracking-[0.06em] text-muted-foreground uppercase">
-                          Type
-                        </span>
-                        <span className="text-right text-[10px] font-medium tracking-[0.06em] text-muted-foreground uppercase">
-                          Default
-                        </span>
-                        <span className="text-right text-[10px] font-medium tracking-[0.06em] text-muted-foreground uppercase">
-                          Min
-                        </span>
-                        <span className="text-right text-[10px] font-medium tracking-[0.06em] text-muted-foreground uppercase">
-                          Max
-                        </span>
-                        {strategy.parameters.map((spec) => (
-                          <div key={spec.key} className="contents">
-                            <span className="truncate border-t py-1.5 font-sans">{spec.label}</span>
-                            <span className="border-t py-1.5 text-right text-muted-foreground">
-                              {spec.type}
-                            </span>
-                            <span className="border-t py-1.5 text-right">
-                              {String(spec.default)}
-                            </span>
-                            <span className="border-t py-1.5 text-right text-muted-foreground">
-                              {spec.min ?? '—'}
-                            </span>
-                            <span className="border-t py-1.5 text-right text-muted-foreground">
-                              {spec.max ?? '—'}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {strategy.tags.length > 0 ? (
-                      <div className="flex flex-wrap gap-1">
-                        {strategy.tags.map((tag) => (
-                          <span
-                            key={tag}
-                            className="rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground"
-                          >
-                            {tag}
+                      {strategy.parameters.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">No tunable parameters.</p>
+                      ) : (
+                        <div className="tabular grid grid-cols-[minmax(0,1fr)_80px_80px_80px_80px] gap-2 text-xs">
+                          <span className="text-[10px] font-medium tracking-[0.06em] text-muted-foreground uppercase">
+                            Parameter
                           </span>
-                        ))}
-                      </div>
-                    ) : null}
-                  </CardContent>
-                </Card>
-              ) : featured ? (
-                <>
-                  <MetricsGrid metrics={detail.data?.metrics} isLoading={loadingTearsheet} />
-                  <ChartContainer
-                    title="Performance vs. benchmark and drawdown"
-                    description="Account value against buy-and-hold, with trade entries and distance below the running peak."
-                    height={420}
-                    isLoading={loadingTearsheet}
-                  >
-                    <EquityCurveChart
-                      data={equityCurve}
-                      trades={detail.data?.trades}
-                      showDrawdownPane
-                    />
-                  </ChartContainer>
-                  <div className="grid gap-5 xl:grid-cols-2">
+                          <span className="text-right text-[10px] font-medium tracking-[0.06em] text-muted-foreground uppercase">
+                            Type
+                          </span>
+                          <span className="text-right text-[10px] font-medium tracking-[0.06em] text-muted-foreground uppercase">
+                            Default
+                          </span>
+                          <span className="text-right text-[10px] font-medium tracking-[0.06em] text-muted-foreground uppercase">
+                            Min
+                          </span>
+                          <span className="text-right text-[10px] font-medium tracking-[0.06em] text-muted-foreground uppercase">
+                            Max
+                          </span>
+                          {strategy.parameters.map((spec) => (
+                            <div key={spec.key} className="contents">
+                              <span className="truncate border-t py-1.5 font-sans">
+                                {spec.label}
+                              </span>
+                              <span className="border-t py-1.5 text-right text-muted-foreground">
+                                {spec.type}
+                              </span>
+                              <span className="border-t py-1.5 text-right">
+                                {String(spec.default)}
+                              </span>
+                              <span className="border-t py-1.5 text-right text-muted-foreground">
+                                {spec.min ?? '—'}
+                              </span>
+                              <span className="border-t py-1.5 text-right text-muted-foreground">
+                                {spec.max ?? '—'}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {strategy.tags.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {strategy.tags.map((tag) => (
+                            <span
+                              key={tag}
+                              className="rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground"
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                    </CardContent>
+                  </Card>
+                ) : detail.isError ? (
+                  <EmptyState
+                    title="Could not load this run"
+                    description={detail.error.message}
+                    action={
+                      <Button variant="outline" onClick={() => void detail.refetch()}>
+                        Try again
+                      </Button>
+                    }
+                  />
+                ) : featured ? (
+                  <>
+                    <MetricsGrid metrics={detail.data?.metrics} isLoading={loadingTearsheet} />
                     <ChartContainer
-                      title="Monthly returns"
-                      description="Shading scaled to the largest month in this grid. YTD is not shaded."
-                      height={200}
+                      title="Performance vs. benchmark and drawdown"
+                      description="Account value against buy-and-hold, with trade entries and distance below the running peak."
+                      height={420}
                       isLoading={loadingTearsheet}
                     >
-                      <MonthlyReturnsHeatmap data={equityCurve} />
+                      <EquityCurveChart
+                        data={equityCurve}
+                        trades={detail.data?.trades}
+                        showDrawdownPane
+                      />
                     </ChartContainer>
-                    <ChartContainer
-                      title="Daily profit &amp; loss"
-                      description={`Last ${String(PNL_SESSIONS)} sessions. Bars are the day; the line is the run to date.`}
-                      height={200}
-                      isLoading={loadingTearsheet}
-                    >
-                      <DailyPnlBars data={equityCurve.slice(-PNL_SESSIONS)} />
-                    </ChartContainer>
-                  </div>
-                </>
-              ) : (
-                <EmptyState
-                  title="Never tested"
-                  description={
-                    strategy.status === 'active'
-                      ? 'Run this strategy to see its tearsheet here.'
-                      : 'Drafts and archived strategies have no runs to show.'
-                  }
-                  action={
-                    strategy.status === 'active' ? (
-                      <RunBacktestDialog initialStrategyKey={strategy.id} variant="outline" />
-                    ) : undefined
-                  }
-                />
-              )}
-
-              <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-semibold">Runs</span>
-                  <span className="tabular inline-flex items-center gap-1.5 rounded border px-2 py-0.5 text-xs">
-                    <span
-                      className="size-2 rounded-[2px]"
-                      style={{
-                        background:
-                          colorIndex === null
-                            ? 'var(--border-strong)'
-                            : seriesColor(palette, colorIndex),
-                      }}
-                      aria-hidden
-                    />
-                    {strategy.className}
-                    <span className="text-muted-foreground">
-                      {String(strategyRuns.length)} runs
-                    </span>
-                  </span>
-                  <Segmented
-                    value={status}
-                    options={STATUS_OPTIONS}
-                    onChange={(next) => {
-                      setParam('status', next === 'any' ? null : next);
-                    }}
-                    ariaLabel="Filter runs by status"
+                    <div className="grid gap-5 xl:grid-cols-2">
+                      <ChartContainer
+                        title="Monthly returns"
+                        description="Shading scaled to the largest month in this grid. YTD is not shaded."
+                        height={200}
+                        isLoading={loadingTearsheet}
+                      >
+                        <MonthlyReturnsHeatmap data={equityCurve} />
+                      </ChartContainer>
+                      <ChartContainer
+                        title="Daily profit &amp; loss"
+                        description={`Last ${String(PNL_SESSIONS)} sessions. Bars are the day; the line is the run to date.`}
+                        height={200}
+                        isLoading={loadingTearsheet}
+                      >
+                        <DailyPnlBars data={equityCurve.slice(-PNL_SESSIONS)} />
+                      </ChartContainer>
+                    </div>
+                  </>
+                ) : (
+                  <EmptyState
+                    title="Never tested"
+                    description={
+                      strategy.status === 'active'
+                        ? 'Run this strategy to see its tearsheet here.'
+                        : 'Drafts and archived strategies have no runs to show.'
+                    }
+                    action={
+                      strategy.status === 'active' ? (
+                        <RunBacktestDialog initialStrategyKey={strategy.id} variant="outline" />
+                      ) : undefined
+                    }
                   />
-                </div>
-                <Segmented
-                  value={sort}
-                  options={RUN_SORTS}
-                  onChange={(next) => {
-                    setParam('sort', next === 'newest' ? null : next);
-                  }}
-                  ariaLabel="Sort runs"
-                />
-              </div>
-
-              <Card>
-                <CardContent className="overflow-x-auto p-4">
-                  <RunsTable
-                    runs={runView.rows}
-                    isLoading={runsQuery.isPending}
-                    selectedIds={selectedIds}
-                    onToggle={toggleComparison}
-                  />
-                  <div className="tabular mt-3 flex items-center justify-between text-xs text-muted-foreground">
-                    <span>
-                      {formatNumber(runView.rows.length, 0)} of {formatNumber(runView.total, 0)}{' '}
-                      runs
-                    </span>
-                    <span className="flex items-center gap-1">
-                      Show
-                      {PAGE_SIZES.map((size) => (
-                        <button
-                          key={size}
-                          type="button"
-                          onClick={() => {
-                            setParam('show', size === 25 ? null : String(size));
-                          }}
-                          className={cn(
-                            'rounded px-1.5 py-0.5',
-                            size === pageSize
-                              ? 'bg-selected text-selected-foreground'
-                              : 'hover:text-foreground',
-                          )}
-                        >
-                          {size}
-                        </button>
-                      ))}
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
-            </>
-          ) : strategiesQuery.isPending ? null : (
-            <EmptyState title="No strategies yet" description="Add one with New strategy." />
-          )}
+                )}
+              </>
+            ) : null}
+          </>
         </div>
       </div>
 

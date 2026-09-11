@@ -7,6 +7,7 @@
  */
 
 export { BacktestCard } from './backtest-card';
+export { dashboardEndDate, useBacktestEquities } from './equity-api';
 export { BacktestList } from './backtest-list';
 export {
   alignByDate,
@@ -53,10 +54,13 @@ export {
   type StatusFilter,
 } from './run-filters';
 export { RunsTable } from './runs-table';
+export { TradesTable } from './trades-table';
+export { recordedFillCount } from './trade-report';
 export { RunBacktestDialog } from './run-backtest-dialog';
 export { RunBacktestForm } from './run-backtest-form';
 export { backtestDetailSchema } from './types';
 export { RunStatusBanner } from './run-status';
+export { NoTradesExplanation } from './no-trades-explanation';
 export {
   fetchBacktests,
   fetchCoverage,

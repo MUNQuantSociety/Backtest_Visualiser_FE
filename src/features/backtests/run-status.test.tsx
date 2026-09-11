@@ -87,9 +87,72 @@ describe('RunStatusBanner', () => {
     expect(screen.getByText(/No reason was recorded/)).toBeInTheDocument();
   });
 
-  it('renders nothing for a finished run', () => {
+  it('renders nothing for a finished run without execution metadata', () => {
     const { container } = renderWithProviders(
       <RunStatusBanner run={makeDetail({ status: 'completed', progressPct: 100 })} />,
+    );
+
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('explains a completed no-fill run using the backend reason', () => {
+    const message =
+      'No qualifying entry signals were generated, so the strategy held cash. Trade metrics are unavailable because no trades closed.';
+    renderWithProviders(
+      <RunStatusBanner
+        run={makeDetail({
+          status: 'completed',
+          reportMetadata: { execution: { fillCount: 0, message } },
+        })}
+      />,
+    );
+
+    expect(screen.getByRole('status')).toHaveTextContent('Run completed');
+    expect(screen.getByText(message)).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+  });
+
+  it('preserves the fast-mode explanation without inferring a cash-only run', () => {
+    const message =
+      'Fast mode models positions without individual order fills; an empty trade table does not mean the strategy made no trades.';
+    renderWithProviders(
+      <RunStatusBanner
+        run={makeDetail({
+          status: 'completed',
+          reportMetadata: { execution: { fillCount: 0, message } },
+        })}
+      />,
+    );
+
+    expect(screen.getByText(message)).toBeInTheDocument();
+    expect(screen.queryByText(/held cash/)).not.toBeInTheDocument();
+  });
+
+  it.each(['queued', 'running', 'failed'] as const)(
+    'does not display the completion explanation while %s',
+    (status) => {
+      renderWithProviders(
+        <RunStatusBanner
+          run={makeDetail({
+            status,
+            reportMetadata: { execution: { fillCount: 0, message: 'No fills recorded.' } },
+          })}
+        />,
+      );
+
+      expect(screen.queryByText('Run completed')).not.toBeInTheDocument();
+      expect(screen.queryByText('No fills recorded.')).not.toBeInTheDocument();
+    },
+  );
+
+  it.each([
+    { fillCount: 0, message: null },
+    { fillCount: 0, message: ' ' },
+    { fillCount: 1, message: 'No fills recorded.' },
+  ])('omits a completion notice without a no-fill explanation: %j', (execution) => {
+    const { container } = renderWithProviders(
+      <RunStatusBanner run={makeDetail({ status: 'completed', reportMetadata: { execution } })} />,
     );
 
     expect(container).toBeEmptyDOMElement();

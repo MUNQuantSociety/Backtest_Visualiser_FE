@@ -9,6 +9,10 @@ import { z } from 'zod';
 const envSchema = z.object({
   VITE_API_BASE_URL: z.string().min(1).default('/api'),
   VITE_API_TIMEOUT: z.coerce.number().int().positive().default(30_000),
+  VITE_DEV_USER_ID: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z.uuid().optional(),
+  ),
 
   /**
    * Serve fixture data instead of calling the API.
@@ -25,7 +29,11 @@ const envSchema = z.object({
     .transform((value) => value === 'true'),
 });
 
-const parsed = envSchema.safeParse(import.meta.env);
+const parsed = envSchema.safeParse({
+  ...import.meta.env,
+  // Temporary local ownership is never enabled by a production build.
+  VITE_DEV_USER_ID: import.meta.env.DEV ? import.meta.env.VITE_DEV_USER_ID : undefined,
+});
 
 if (!parsed.success) {
   const issues = parsed.error.issues
@@ -37,6 +45,7 @@ if (!parsed.success) {
 export const env = {
   apiBaseUrl: parsed.data.VITE_API_BASE_URL,
   apiTimeout: parsed.data.VITE_API_TIMEOUT,
+  devUserId: parsed.data.VITE_DEV_USER_ID,
   useFixtures: parsed.data.VITE_USE_FIXTURES,
   isDev: import.meta.env.DEV,
   isProd: import.meta.env.PROD,

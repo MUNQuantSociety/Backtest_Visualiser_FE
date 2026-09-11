@@ -34,7 +34,7 @@ export default defineConfig(({ mode }) => {
       // avoid CORS entirely. In production the app talks to VITE_API_BASE_URL.
       proxy: {
         '/api': {
-          target: env.DEV_API_PROXY_TARGET ?? 'http://localhost:8000',
+          target: env.DEV_API_PROXY_TARGET ?? 'http://127.0.0.1:8000',
           changeOrigin: true,
           secure: false,
         },

@@ -23,9 +23,8 @@ import {
  * validated data — callers get a `BacktestDetail`, never a raw `unknown`.
  * No React here: these stay trivially unit-testable and reusable outside hooks.
  *
- * Demo data comes from `mock-data/backtests.json` via `./fixtures`, either
- * because `VITE_USE_FIXTURES=true` forces it or because the backend could not
- * be reached at all.
+ * Demo data comes from `mock-data/backtests.json` via `./fixtures` only when
+ * explicitly enabled with `VITE_USE_FIXTURES=true`.
  */
 
 const log = createLogger('backtests');
@@ -36,37 +35,6 @@ const FIXTURE_DELAY_MS = 220;
 async function withFixtureDelay<T>(value: T): Promise<T> {
   await new Promise((resolve) => setTimeout(resolve, FIXTURE_DELAY_MS));
   return value;
-}
-
-/**
- * True when nothing was listening at the other end.
- *
- * Two shapes, because it depends on how the app is talking to the API. Called
- * directly, an absent server is a network failure and `ApiError` reports status
- * 0. Called through the Vite dev proxy — the default — the proxy answers on the
- * server's behalf with a 502, so the browser gets a real response and status 0
- * never happens. Both have to count or the fallback would never fire in dev,
- * which is the one place it exists for.
- *
- * 4xx is excluded on purpose: a backend that *is* running and is returning 404
- * or 422 has a bug worth seeing, and quietly swapping in demo data would turn
- * it into charts full of plausible fiction.
- */
-const GATEWAY_STATUSES = new Set([502, 503, 504]);
-
-function isUnreachable(error: unknown): boolean {
-  if (!(error instanceof ApiError)) return false;
-  return error.status === 0 || GATEWAY_STATUSES.has(error.status);
-}
-
-/**
- * Only ever in dev.
- *
- * A production deployment hitting a 502 should show its error state, not serve
- * fabricated numbers to someone who thinks they are looking at real results.
- */
-function canFallBack(error: unknown): boolean {
-  return env.isDev && isUnreachable(error);
 }
 
 /** Filtering and paging applied locally, so the demo exercises the same
@@ -100,41 +68,56 @@ async function mockBacktestList(filters: BacktestFilters) {
   );
 }
 
-export async function fetchBacktests(filters: BacktestFilters = {}) {
-  if (env.useFixtures) return mockBacktestList(filters);
-
-  try {
-    const data = await apiClient.get<unknown>('/backtests', { params: filters });
-    return backtestListResponseSchema.parse(data);
-  } catch (error) {
-    if (!canFallBack(error)) throw error;
-    log.warn('backend unreachable, serving mock-data/backtests.json', { endpoint: '/backtests' });
+export async function fetchBacktests(filters: BacktestFilters = {}, signal?: AbortSignal) {
+  if (env.useFixtures) {
+    log.info('loading backtest list', { source: 'fixtures', filters });
     return mockBacktestList(filters);
   }
+
+  const data = await apiClient.get<unknown>('/backtests', {
+    params: filters,
+    ...(signal ? { signal } : {}),
+  });
+  return backtestListResponseSchema.parse(data);
 }
 
-export async function fetchBacktest(id: string): Promise<BacktestDetail> {
-  if (env.useFixtures) return withFixtureDelay(await fixtureBacktest(id));
-
-  try {
-    const data = await apiClient.get<unknown>(`/backtests/${encodeURIComponent(id)}`);
-    return backtestDetailSchema.parse(data);
-  } catch (error) {
-    if (!canFallBack(error)) throw error;
-    log.warn('backend unreachable, serving mock-data/backtests.json', { id });
+export async function fetchBacktest(id: string, signal?: AbortSignal): Promise<BacktestDetail> {
+  if (env.useFixtures) {
+    log.info('loading backtest detail', { id, source: 'fixtures' });
     return withFixtureDelay(await fixtureBacktest(id));
   }
+
+  const data = await apiClient.get<unknown>(`/backtests/${encodeURIComponent(id)}`, {
+    ...(signal ? { signal } : {}),
+  });
+  const detail = backtestDetailSchema.parse(data);
+  const write = detail.status === 'failed' ? log.error : log.info;
+  write('backtest status received', {
+    id,
+    source: 'backend',
+    status: detail.status,
+    progressPct: detail.progressPct,
+    errorMessage: detail.errorMessage,
+    polling: isInFlight(detail.status) ? 'continue every 3 seconds while subscribed' : 'finished',
+  });
+  return detail;
 }
 
 /**
  * Launches a run. The endpoint answers 202 with the row it just created.
  *
- * No fixture branch and no unreachable-backend fallback, unlike the readers
- * above. Both exist so a demo can *show* results without a backend; there is no
+ * No fixture branch: demos can show results without a backend, but there is no
  * honest way to fake having *started* something, and a fabricated queued row
  * would sit there forever pretending to make progress.
  */
 export async function submitBacktest(request: BacktestRunRequest): Promise<BacktestSummary> {
+  log.info('submitting backtest', {
+    strategyKey: request.strategyKey,
+    startDate: request.startDate,
+    endDate: request.endDate,
+    mode: request.mode,
+    params: request.params,
+  });
   if (env.useFixtures) {
     throw new ApiError(
       'Running a backtest needs the backend. Set VITE_USE_FIXTURES=false and start the API.',
@@ -144,7 +127,13 @@ export async function submitBacktest(request: BacktestRunRequest): Promise<Backt
   }
 
   const data = await apiClient.post<unknown>('/backtests', request);
-  return backtestSummarySchema.parse(data);
+  const summary = backtestSummarySchema.parse(data);
+  log.info('backtest submission accepted', {
+    runId: summary.id,
+    status: summary.status,
+    strategyKey: request.strategyKey,
+  });
+  return summary;
 }
 
 /**
@@ -158,19 +147,46 @@ export async function fetchCoverage(
   strategyKey: string,
   tickers?: readonly string[],
 ): Promise<CoverageResponse> {
-  if (env.useFixtures) return withFixtureDelay(await fixtureCoverage(strategyKey));
-
+  const context = {
+    strategyKey,
+    requestedTickers: tickers ?? null,
+    selection: tickers ? 'custom tickers' : 'strategy universe',
+    source: env.useFixtures ? 'fixtures' : 'backend',
+  };
+  log.info('coverage check started', context);
+  const startedAt = performance.now();
   try {
+    if (env.useFixtures) {
+      const coverage = await withFixtureDelay(await fixtureCoverage(strategyKey));
+      log.warn('coverage check completed using demo data', { ...context, ...coverage });
+      return coverage;
+    }
+
+    // Real run eligibility must come from the backend, including for custom
+    // tickers. A timeout is not missing history and must not become demo coverage.
     const data = await apiClient.get<unknown>('/market-data/coverage', {
       params: tickers ? { tickers: tickers.join(',') } : { strategyKey },
     });
-    return coverageResponseSchema.parse(data);
-  } catch (error) {
-    if (!canFallBack(error)) throw error;
-    log.warn('backend unreachable, deriving coverage from mock-data/backtests.json', {
-      strategyKey,
+    log.debug('coverage response received; validating fields', context);
+    const coverage = coverageResponseSchema.parse(data);
+    log.info('coverage check completed', {
+      ...context,
+      ms: Math.round(performance.now() - startedAt),
+      ...coverage,
     });
-    return fixtureCoverage(strategyKey);
+    if (coverage.missing.length > 0)
+      log.warn('coverage has tickers with no market data', {
+        ...context,
+        missing: coverage.missing,
+      });
+    return coverage;
+  } catch (error) {
+    log.error('coverage check failed; no coverage substituted', {
+      ...context,
+      ms: Math.round(performance.now() - startedAt),
+      error,
+    });
+    throw error;
   }
 }
 
@@ -227,14 +243,18 @@ const IN_FLIGHT_POLL_MS = 3_000;
 export function useBacktests(filters: BacktestFilters = {}) {
   return useQuery({
     queryKey: backtestKeys.list(filters),
-    queryFn: () => fetchBacktests(filters),
+    queryFn: ({ signal }) => fetchBacktests(filters, signal),
     // Keeps the previous page on screen while the next one loads instead of
     // flashing a skeleton on every pagination click.
     placeholderData: (previous) => previous,
     // Only while something on this page can still change. A list of finished
     // runs is static, and polling it would be a request per interval forever.
     refetchInterval: (query) =>
-      query.state.data?.items.some((run) => isInFlight(run.status)) ? IN_FLIGHT_POLL_MS : false,
+      !env.useFixtures &&
+      query.state.status !== 'error' &&
+      query.state.data?.items.some((run) => isInFlight(run.status))
+        ? IN_FLIGHT_POLL_MS
+        : false,
     refetchIntervalInBackground: false,
   });
 }
@@ -242,7 +262,7 @@ export function useBacktests(filters: BacktestFilters = {}) {
 export function useBacktest(id: string | undefined) {
   return useQuery({
     queryKey: backtestKeys.detail(id ?? ''),
-    queryFn: () => fetchBacktest(id ?? ''),
+    queryFn: ({ signal }) => fetchBacktest(id ?? '', signal),
     enabled: Boolean(id),
     /*
      * A finished backtest never changes, so it stays cached for the session.
@@ -258,7 +278,12 @@ export function useBacktest(id: string | undefined) {
      */
     staleTime: Number.POSITIVE_INFINITY,
     refetchInterval: (query) =>
-      query.state.data && isInFlight(query.state.data.status) ? IN_FLIGHT_POLL_MS : false,
+      !env.useFixtures &&
+      query.state.status !== 'error' &&
+      query.state.data &&
+      isInFlight(query.state.data.status)
+        ? IN_FLIGHT_POLL_MS
+        : false,
     refetchIntervalInBackground: false,
   });
 }
@@ -279,6 +304,7 @@ export function useSubmitBacktest() {
   const queryClient = useQueryClient();
 
   return useMutation({
+    mutationKey: ['backtests', 'submit'],
     mutationFn: submitBacktest,
     onSuccess: (summary) => {
       // The new row belongs at the top of every list, and its detail is
@@ -301,7 +327,7 @@ export function useBacktestDetails(ids: readonly string[]) {
   return useQueries({
     queries: ids.map((id) => ({
       queryKey: backtestKeys.detail(id),
-      queryFn: () => fetchBacktest(id),
+      queryFn: ({ signal }) => fetchBacktest(id, signal),
       staleTime: Number.POSITIVE_INFINITY,
     })),
     combine: (results) => ({
@@ -316,6 +342,7 @@ export function useDeleteBacktest() {
   const queryClient = useQueryClient();
 
   return useMutation({
+    mutationKey: ['backtests', 'delete'],
     mutationFn: deleteBacktest,
     onSuccess: (_data, id) => {
       queryClient.removeQueries({ queryKey: backtestKeys.detail(id) });

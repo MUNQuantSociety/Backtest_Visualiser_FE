@@ -61,7 +61,9 @@ how `performance` reaches `EquityPoint` today.
 ### The barrel rule
 
 Other features and pages import from `@/features/backtests` — never
-`@/features/backtests/backtests-api`. ESLint's `no-restricted-imports` blocks
+`@/features/backtests/backtests-api`. Lightweight startup fetching may use the
+public `@/features/backtests/data` and `@/features/strategies/data` entry points,
+which omit page, editor, and chart modules. ESLint's `no-restricted-imports` blocks
 the aliased deep path.
 
 Inside a feature, use relative imports (`./query-keys`). Outside, use the `@/`

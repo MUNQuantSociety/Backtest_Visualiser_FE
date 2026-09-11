@@ -91,6 +91,7 @@ export function useNews(tickers: readonly string[], scope: NewsScope, limit = 8)
   return useQuery({
     queryKey: marketKeys.news(tickers, scope, limit),
     queryFn: () => fetchNews(tickers, scope, limit),
+    enabled: scope === 'all' || tickers.length > 0,
     staleTime: 5 * 60 * 1000,
   });
 }

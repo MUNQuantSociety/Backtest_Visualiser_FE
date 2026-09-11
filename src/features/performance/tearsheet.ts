@@ -1,4 +1,4 @@
-import type { BacktestDetail } from '@/features/backtests';
+import { recordedFillCount, type BacktestDetail } from '@/features/backtests';
 import { averageLoss, averageWin, calmarRatio, payoffRatio } from '@/utils/metrics';
 
 /**
@@ -89,10 +89,7 @@ export function buildTearsheet(detail: BacktestDetail): TearsheetSection[] {
         { label: 'Trade lots', value: trades.length, format: 'integer' },
         {
           label: 'Total fills',
-          value:
-            typeof detail.reportMetadata?.['fill_count'] === 'number'
-              ? detail.reportMetadata['fill_count']
-              : null,
+          value: recordedFillCount(detail.reportMetadata),
           format: 'integer',
         },
         { label: 'Total closed trades', value: closed.length, format: 'integer' },

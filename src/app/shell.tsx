@@ -45,7 +45,7 @@ const sections: readonly NavSection[] = [
     heading: PRODUCT_NAMES.backtests,
     items: [
       { to: paths.dashboard, label: 'Dashboard', icon: LayoutDashboard, end: true },
-      { to: paths.library, label: 'Library', icon: FlaskConical, end: false },
+      { to: paths.backtests, label: 'Backtests', icon: FlaskConical, end: false },
       { to: paths.compare, label: 'Compare', icon: GitCompareArrows, end: false },
     ],
   },
@@ -227,8 +227,8 @@ function AppHeader({
 function LogoutBtn() {
   const { logout } = useAuthCtx();
   return (
-    <Button variant="ghost" size="sm" title="logout">
-      <LogOut className="mr-2 size-4" aria-hidden onClick={logout} />
+    <Button variant="ghost" size="sm" title="logout" onClick={logout}>
+      <LogOut className="mr-2 size-4" aria-hidden />
       Log out
     </Button>
   );

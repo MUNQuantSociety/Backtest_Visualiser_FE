@@ -1,3 +1,5 @@
+import { cn } from '@/lib/utils';
+
 interface SparklineProps {
   /** Nulls are gaps — a rolling window that has not filled yet. */
   values: readonly (number | null)[];
@@ -45,7 +47,7 @@ export function Sparkline({
       width={width}
       height={height}
       viewBox={`0 0 ${String(width)} ${String(height)}`}
-      className={className}
+      className={cn('max-w-full', className)}
       aria-hidden
     >
       {zeroTick !== undefined ? (

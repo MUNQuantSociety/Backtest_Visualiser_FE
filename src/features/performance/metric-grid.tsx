@@ -59,7 +59,7 @@ export function MetricsGrid({ metrics, isLoading = false }: MetricsGridProps) {
       <StatTile
         label="Profit factor"
         value={display('profitFactor', formatNumber)}
-        hint={metrics ? `${String(metrics.totalTrades)} trades` : undefined}
+        hint={metrics ? `${String(metrics.totalTrades)} closed trades` : undefined}
         isLoading={isLoading}
       />
     </div>

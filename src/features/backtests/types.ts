@@ -87,7 +87,17 @@ export const backtestDetailSchema = backtestSummarySchema.extend({
    */
   progressPct: z.number().min(0).max(100).nullable().default(null),
   errorMessage: z.string().nullable().default(null),
-  reportMetadata: z.record(z.string(), z.unknown()).optional(),
+  reportMetadata: z
+    .object({
+      execution: z
+        .object({
+          fillCount: z.number().int().nonnegative(),
+          message: z.string().nullable(),
+        })
+        .optional(),
+    })
+    .catchall(z.unknown())
+    .optional(),
   openPositions: z.array(z.record(z.string(), z.unknown())).optional(),
 });
 export type BacktestDetail = z.infer<typeof backtestDetailSchema>;
