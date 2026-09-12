@@ -46,6 +46,11 @@ function strategy(id: string, name: string, status = 'active') {
     bestSharpe: null,
     bestReturn: null,
     lastRunAt: null,
+    validationState: status,
+    validationRunId: null,
+    // What this strategy's INDICATORS block declares; the Signals row
+    // highlights these.
+    indicators: id === 'portfolio_1' ? ['RateOfChange'] : [],
   };
 }
 
@@ -80,6 +85,12 @@ beforeEach(() => {
             strategy('draft_one', 'Unvalidated Draft', 'draft'),
           ],
           total: 4,
+        });
+      }
+      if (url === '/strategies/indicators') {
+        return Promise.resolve({
+          items: ['RateOfChange', 'SimpleMovingAverage'],
+          total: 2,
         });
       }
       if (url === '/market-data/coverage') {
@@ -289,10 +300,29 @@ describe('RunBacktestForm', () => {
     expect(post).not.toHaveBeenCalled();
   });
 
-  it('disables unsupported signal and sentiment controls explicitly', () => {
+  it('disables the sentiment gate explicitly', () => {
     renderWithProviders(<RunBacktestForm />);
-    expect(screen.getByRole('button', { name: 'RSI 14' })).toBeDisabled();
     expect(screen.getByRole('switch', { name: 'Sentiment gate' })).toBeDisabled();
+  });
+
+  it('lists the engine’s indicators read-only, highlighting the strategy’s own', async () => {
+    renderWithProviders(<RunBacktestForm />);
+
+    // Not buttons any more: nothing here was ever selectable, and a disabled
+    // button invites a click that could never work. The engine builds
+    // indicators from the strategy class.
+    const name = await screen.findByText('SimpleMovingAverage');
+    expect(name.tagName).toBe('SPAN');
+    expect(screen.queryByRole('button', { name: 'SimpleMovingAverage' })).not.toBeInTheDocument();
+    expect(screen.getByText(/a run cannot add or remove them/i)).toBeInTheDocument();
+
+    // portfolio_1 declares RateOfChange in the strategy fixture below, so it
+    // is the one marked active once the strategy is chosen.
+    await pickStrategy('portfolio_1');
+    await waitFor(() => {
+      expect(screen.getByText('RateOfChange').className).toContain('border-primary');
+    });
+    expect(screen.getByText('SimpleMovingAverage').className).not.toContain('border-primary');
   });
 
   it('rejects a backwards window without calling the API', async () => {

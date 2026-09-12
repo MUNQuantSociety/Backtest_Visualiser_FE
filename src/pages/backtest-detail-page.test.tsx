@@ -23,6 +23,10 @@ vi.mock('@/features/backtests', async (importOriginal) => ({
   RunBacktestDialog: ({ initialStrategyKey }: { initialStrategyKey?: string }) => (
     <button data-strategy={initialStrategyKey}>Run backtest</button>
   ),
+  // Stubbed for the same reason as the dialog: it holds a React Query
+  // mutation, and this page renders here without a QueryClientProvider.
+  // Its own behaviour is covered by report-exports.test.tsx.
+  ReportExports: () => null,
 }));
 vi.mock('@/features/performance', () => ({
   BetaScatter: () => null,

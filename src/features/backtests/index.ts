@@ -40,6 +40,7 @@ export {
   type ParameterRow,
 } from './compare-model';
 export { RecentRunsTable } from './recent-runs-table';
+export { ReportExports } from './report-exports';
 export { RunPickerDialog } from './run-picker-dialog';
 export {
   isPageSize,
@@ -65,6 +66,7 @@ export {
   fetchBacktests,
   fetchAllBacktests,
   fetchCoverage,
+  fetchExport,
   submitBacktest,
   useBacktest,
   useBacktestDetails,
@@ -72,10 +74,12 @@ export {
   useAllBacktests,
   useCoverage,
   useDeleteBacktest,
+  useDownloadExport,
   useSubmitBacktest,
 } from './backtests-api';
 export { backtestKeys } from './backtests-api';
 export { isInFlight } from './types';
+export { EXPORT_FILENAMES } from './types';
 export type {
   BacktestDetail,
   BacktestFilters,
@@ -84,6 +88,7 @@ export type {
   BacktestSummary,
   CoverageResponse,
   EquityPoint,
+  ExportFilename,
   PerformanceMetrics,
   Trade,
 } from './types';

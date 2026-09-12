@@ -1,5 +1,5 @@
 import { Play, X } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { createLogger } from '@/lib/logger';
@@ -30,12 +30,23 @@ interface RunBacktestDialogProps {
   /** The trigger's text; "Run backtest" by default. */
   label?: string | undefined;
   variant?: 'default' | 'outline' | undefined;
+  /**
+   * Opens the dialog from outside, once per increment.
+   *
+   * A counter rather than a boolean, deliberately: the trap the comment below
+   * describes is a flag that already holds the value it is being set to, so
+   * the effect never re-runs. A number that changes on every request cannot
+   * get stuck that way. Used by the strategy actions menu, which has to open
+   * this dialog without owning its trigger.
+   */
+  openSignal?: number | undefined;
 }
 
 export function RunBacktestDialog({
   initialStrategyKey,
   label = 'Run backtest',
   variant = 'default',
+  openSignal,
 }: RunBacktestDialogProps = {}) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [open, setOpen] = useState(false);
@@ -60,6 +71,14 @@ export function RunBacktestDialog({
     if (!dialog.open) dialog.showModal();
     log.info('run dialog opened', { initialStrategyKey: initialStrategyKey ?? null });
   }
+
+  useEffect(() => {
+    if (openSignal === undefined || openSignal === 0) return;
+    openDialog();
+    // openDialog is stable enough for this: it closes over refs and setState
+    // only, both of which React guarantees.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openSignal]);
 
   function closeDialog() {
     log.info('run dialog closed');

@@ -61,8 +61,10 @@ export function NewStrategyDialog() {
               New strategy
             </h2>
             <p className="text-[13px] text-muted-foreground">
-              Paste or write Python against <code className="tabular">BasePortfolio</code>, or
-              upload an existing <code className="tabular">.py</code> file.
+              Write <code className="tabular">OnData</code>, declare what it needs in{' '}
+              <code className="tabular">INDICATORS</code> and{' '}
+              <code className="tabular">STATE</code>, or upload an existing{' '}
+              <code className="tabular">.py</code> file.
             </p>
           </div>
           <Button variant="ghost" size="icon" aria-label="Close" onClick={closeDialog}>

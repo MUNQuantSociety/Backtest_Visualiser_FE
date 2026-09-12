@@ -6,9 +6,11 @@ import { paths } from '@/app/paths';
 import { Button } from '@/components/ui/button';
 import { Segmented } from '@/components/ui/segmented';
 import { useStrategies } from '@/features/strategies';
+import { useEngineIndicators } from '@/features/strategies';
 import { createLogger } from '@/lib/logger';
 import { cn } from '@/lib/utils';
 import { formatNumber } from '@/utils/format';
+
 
 import { useCoverage, useSubmitBacktest } from './backtests-api';
 import {
@@ -53,14 +55,16 @@ const DEFAULT_SENTIMENT_THRESHOLD = -0.25;
 /** How much history to preselect, when coverage allows that much. */
 const DEFAULT_WINDOW_DAYS = 365;
 
-const SIGNALS = [
-  'RSI 14',
-  'ATR 14',
-  'SMA 50/200',
-  'MACD 12/26/9',
-  'Bollinger 20/2',
-  'VWAP',
-] as const;
+/**
+ * Fallback signal list, used only when the engine's own cannot be fetched.
+ *
+ * This used to be the whole list, hardcoded — and it was wrong: it offered
+ * MACD and Bollinger, which the engine does not ship, so a member could pick a
+ * signal that could never have been applied. `GET /strategies/indicators` is
+ * the real source; these are the two names most likely to be recognised if it
+ * is unreachable.
+ */
+const FALLBACK_SIGNALS = ['SimpleMovingAverage', 'RelativeStrengthIndex'] as const;
 
 const MODES = [
   { value: 'event', label: 'Event' },
@@ -102,7 +106,6 @@ export function RunBacktestForm({
   const [slippageBps, setSlippageBps] = useState(String(DEFAULT_SLIPPAGE_BPS));
   const [commission, setCommission] = useState(String(DEFAULT_COMMISSION));
   const [mode, setMode] = useState<Mode>('event');
-  const [signals, setSignals] = useState<readonly string[]>([]);
   const [gateEnabled, setGateEnabled] = useState(false);
   const [gateThreshold, setGateThreshold] = useState(DEFAULT_SENTIMENT_THRESHOLD);
   const [paramValues, setParamValues] = useState<Record<string, string | boolean>>({});
@@ -121,6 +124,10 @@ export function RunBacktestForm({
   const [universeOverride, setUniverseOverride] = useState<readonly string[] | null>(null);
 
   const coverage = useCoverage(strategyKey || undefined, universeOverride ?? undefined);
+  // The engine's indicator classes, so this list offers what could actually be
+  // applied rather than names invented in the client.
+  const engineIndicators = useEngineIndicators();
+  const signalNames: readonly string[] = engineIndicators.data ?? FALLBACK_SIGNALS;
 
   const nameId = useId();
   const startId = useId();
@@ -138,6 +145,10 @@ export function RunBacktestForm({
     [strategies.data],
   );
   const chosen = runnable.find((strategy) => strategy.id === strategyKey);
+  // What the chosen strategy declares, for the highlight. Empty until one is
+  // picked, and empty for an uploaded file whose source the list does not read.
+  const strategyIndicators: readonly string[] = chosen?.indicators ?? [];
+
 
   const covered = coverage.data;
   const hasWindow = Boolean(covered?.start && covered.end);
@@ -200,12 +211,6 @@ export function RunBacktestForm({
     setUniverseOverride(universe.filter((existing) => existing !== ticker));
   }
 
-  function toggleSignal(signal: string) {
-    setSignals((current) =>
-      current.includes(signal) ? current.filter((s) => s !== signal) : [...current, signal],
-    );
-  }
-
   /**
    * Everything the request schema has no field for, keyed for the backend.
    * Execution keys are reserved by the backend; strategy parameters are
@@ -227,7 +232,12 @@ export function RunBacktestForm({
       universe,
       slippageBps: Number(slippageBps),
       commissionPerShare: Number(commission),
-      signals,
+      // Always empty, and sent anyway so the key is present and explicit.
+      // `run_controls.py` refuses a non-empty list: the engine builds
+      // indicators from the strategy class, and one injected per run would be
+      // registered and never read by its OnData. The Signals row shows which
+      // the strategy declares rather than pretending they are selectable.
+      signals: [] as readonly string[],
       sentimentGate: { enabled: gateEnabled, threshold: gateThreshold },
       ...strategyParams,
     };
@@ -541,27 +551,31 @@ export function RunBacktestForm({
         </Row>
 
         <Row label="Signals">
+          <p className="mb-1.5 text-xs text-muted-foreground">
+            Read-only. A strategy registers its own indicators in its{' '}
+            <code className="tabular">INDICATORS</code> block, so a run cannot add or remove
+            them. Highlighted ones are what this strategy uses.
+          </p>
           <div className="flex flex-wrap gap-1.5">
-            {SIGNALS.map((signal) => {
-              const active = signals.includes(signal);
+            {signalNames.map((signal) => {
+              // "Active" means the chosen strategy declares it, not that
+              // anyone selected it. Nothing here is selectable: the engine
+              // builds indicators from the class, and a run-time override
+              // would be registered and never read. Showing which are live is
+              // the honest thing this list can do.
+              const used = strategyIndicators.includes(signal);
               return (
-                <button
+                <span
                   key={signal}
-                  type="button"
-                  disabled
-                  aria-pressed={active}
-                  onClick={() => {
-                    toggleSignal(signal);
-                  }}
                   className={cn(
-                    'tabular rounded border px-2 py-1 text-xs transition-colors',
-                    active
+                    'tabular rounded border px-2 py-1 text-xs',
+                    used
                       ? 'border-primary bg-selected text-selected-foreground'
-                      : 'border-border text-muted-foreground hover:text-foreground',
+                      : 'border-border text-muted-foreground/60',
                   )}
                 >
                   {signal}
-                </button>
+                </span>
               );
             })}
           </div>
