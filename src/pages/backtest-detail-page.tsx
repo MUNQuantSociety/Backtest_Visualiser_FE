@@ -10,6 +10,7 @@ import { buttonVariants } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import {
   NoTradesExplanation,
+  ReportExports,
   RunBacktestDialog,
   RunStatusBanner,
   TradesTable,
@@ -134,6 +135,9 @@ export default function BacktestDetailPage() {
         actions={
           <>
             {backLink}
+            {/* Renders itself only for a completed run, so it adds nothing to
+                the header while one is still queued or running. */}
+            {data ? <ReportExports run={data} /> : null}
             <RunBacktestDialog initialStrategyKey={data?.strategyId} />
           </>
         }

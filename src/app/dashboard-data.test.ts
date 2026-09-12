@@ -62,6 +62,9 @@ describe('dashboard data prefetch', () => {
         bestSharpe: 1,
         bestReturn: 0.1,
         lastRunAt: '2026-01-01',
+        validationState: 'active',
+        validationRunId: null,
+        indicators: [],
       },
     ];
     let resolveStrategies!: (value: typeof strategies) => void;

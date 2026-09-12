@@ -8,6 +8,14 @@ vi.mock('@/app/providers/auth-provider.context', () => ({
   useAuthCtx: () => ({ logout: vi.fn() }),
 }));
 
+// The shell carries the validation notice, which polls through React Query.
+// This file renders `AppShell` bare to assert nav highlighting, so the notice
+// is stubbed rather than given a QueryClient it would only use to fetch
+// nothing. Its own behaviour is covered by the strategies feature's tests.
+vi.mock('@/features/strategies', () => ({
+  ValidationNotifications: () => null,
+}));
+
 describe('Backtests navigation', () => {
   it.each(['/backtests', '/backtests/run-1', '/backtests/run-1?tab=risk'])(
     'keeps Backtests selected on desktop and mobile at %s',

@@ -11,9 +11,7 @@ export const routePatterns = {
   library: '/library',
   backtests: paths.backtests,
   backtestDetail: '/backtests/:backtestId',
-  strategies: '/strategies',
   compare: '/compare',
-  login: '/login',
 
   live: '/live',
   portfolios: '/live/portfolios',
@@ -59,13 +57,6 @@ export const router = createBrowserRouter([
           return { Component: ComparePage.default };
         },
       },
-      // {
-      //     path: routePatterns.strategies,
-      //     lazy: async () => {
-      //         const StrategiesPage = await import('@/pages/strategies-page');
-      //         return { Component: StrategiesPage.default };
-      //     },
-      // },
       {
         path: routePatterns.live,
         lazy: async () => {

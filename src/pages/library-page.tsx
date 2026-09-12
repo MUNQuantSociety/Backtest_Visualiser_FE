@@ -36,8 +36,11 @@ import {
   isStrategyFilter,
   NewStrategyDialog,
   strategyColorIndex,
+  EditStrategyDialog,
   StrategyPicker,
+  useDraftStrategies,
   useStrategies,
+  type Strategy,
   type StrategyFilter,
 } from '@/features/strategies';
 import { seriesColor } from '@/lib/chart-theme';
@@ -83,13 +86,25 @@ export default function LibraryPage() {
   const searchRef = useRef<HTMLInputElement>(null);
 
   const strategiesQuery = useStrategies();
+  /*
+   * Uploads that have not passed validation are absent from the catalogue by
+   * design, so without this a failed save leaves nothing to click anywhere.
+   * Merged rather than fetched again: the catalogue wins on any key it knows.
+   */
+  const draftStrategies = useDraftStrategies();
+  /* The strategy whose source is open in the editor, and the one the menu
+     asked to run. Both are dialogs driven from the actions menu. */
+  const [editing, setEditing] = useState<Strategy | null>(null);
+  // Incremented by the actions menu to open the header's run dialog, which
+  // owns its own trigger.
+  const [runSignal, setRunSignal] = useState(0);
   const runsQuery = useBacktests();
   const allRuns = useMemo(() => runsQuery.data?.items ?? [], [runsQuery.data]);
   // Catalogue totals can include other accounts. This hub describes only the
   // runs returned for the current user, including the strategy picker stats.
   const strategies = useMemo(
     () =>
-      (strategiesQuery.data ?? []).map((strategy) => {
+      mergeDrafts(strategiesQuery.data ?? [], draftStrategies).map((strategy) => {
         const runs = allRuns.filter((run) => run.strategyId === strategy.id);
         const finished = runs.filter((run) => run.status === 'completed');
         return {
@@ -103,7 +118,7 @@ export default function LibraryPage() {
           ),
         };
       }),
-    [strategiesQuery.data, allRuns],
+    [strategiesQuery.data, draftStrategies, allRuns],
   );
 
   const filterParam = searchParams.get('filter');
@@ -243,7 +258,10 @@ export default function LibraryPage() {
               </kbd>
             </label>
             <NewStrategyDialog />
-            <RunBacktestDialog initialStrategyKey={selectedId ?? undefined} />
+            <RunBacktestDialog
+              initialStrategyKey={selectedId ?? undefined}
+              openSignal={runSignal}
+            />
           </>
         }
       />
@@ -277,6 +295,13 @@ export default function LibraryPage() {
               setParam('strategy', id);
             }}
             runningCount={running}
+            onEdit={setEditing}
+            onRun={(strategy) => {
+              // Selecting first means the run dialog below opens on this
+              // strategy, which is what its initialStrategyKey already reads.
+              setParam('strategy', strategy.id);
+              setRunSignal((count) => count + 1);
+            }}
           />
         </div>
 
@@ -572,6 +597,27 @@ export default function LibraryPage() {
           </Button>
         </div>
       ) : null}
+      {/* Mounted once for the page, outside every panel: the actions menu on
+          any card opens it, and it fetches that strategy's stored source then
+          rather than with the list. */}
+      <EditStrategyDialog
+        strategy={editing}
+        onClose={() => {
+          setEditing(null);
+        }}
+      />
     </>
   );
+}
+
+/**
+ * The catalogue plus this browser's own drafts, without duplicates.
+ *
+ * The catalogue is authoritative for any key it returns — a draft that has
+ * since passed validation appears there with its real aggregates, and the
+ * stored copy must not shadow it.
+ */
+function mergeDrafts(catalogue: readonly Strategy[], drafts: readonly Strategy[]): Strategy[] {
+  const known = new Set(catalogue.map((strategy) => strategy.id));
+  return [...catalogue, ...drafts.filter((strategy) => !known.has(strategy.id))];
 }

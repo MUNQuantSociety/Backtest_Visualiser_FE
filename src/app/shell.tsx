@@ -19,6 +19,7 @@ import logo from '@/assets/logo_dark.svg';
 import { Button } from '@/components/ui/button';
 import { APP_NAME, PRODUCT_NAMES } from '@/config/constants';
 import { env } from '@/config/env';
+import { ValidationNotifications } from '@/features/strategies';
 import { cn } from '@/lib/utils';
 
 interface NavItem {
@@ -134,6 +135,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="flex min-w-0 flex-1 flex-col">
             <TopNav />
             <main id="main" className="mx-auto w-full max-w-[1600px] flex-1 space-y-6 p-6">
+              {/* Above the page, on every page: a validation run outlives the
+                  editor that started it, and a failure has to be visible
+                  wherever the author happens to be when it lands. */}
+              <ValidationNotifications />
               {children}
             </main>
           </div>

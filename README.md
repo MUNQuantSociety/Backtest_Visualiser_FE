@@ -99,15 +99,17 @@ literal — so a route rename is one edit.
 See [src/README.md](src/README.md) for the folder layout, the dependency
 direction rule, and how to add a feature.
 
-Four feature slices, each with a public barrel that is the only legal import
+Six feature slices, each with a public barrel that is the only legal import
 path into it:
 
-| Feature                | Owns                                                    |
-| ---------------------- | ------------------------------------------------------- |
-| `features/backtests`   | Backtest runs, their metrics and round-trip trades      |
-| `features/performance` | Equity/drawdown charts, metrics grid, tearsheet table   |
-| `features/portfolios`  | Live portfolios, positions, fills, correlations, config |
-| `features/system`      | Engine health per service, and the log tail             |
+| Feature                | Owns                                                       |
+| ---------------------- | ---------------------------------------------------------- |
+| `features/backtests`   | Backtest runs, their metrics, trades and report downloads  |
+| `features/strategies`  | The strategy catalogue, the editor and its upload checks   |
+| `features/performance` | Equity/drawdown charts, metrics grid, tearsheet table      |
+| `features/market`      | Indicators and news — endpoints the backend has not built  |
+| `features/portfolios`  | Live portfolios, positions, fills, correlations, config    |
+| `features/system`      | Engine health per service, and the log tail                |
 
 `features/performance` is shared: the live portfolio page renders its
 `EquityCurveChart` and `DrawdownChart` unchanged. Theme-reactive palettes and

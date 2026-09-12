@@ -2,6 +2,7 @@ import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/rea
 
 import { env } from '@/config/env';
 import { ApiError, apiClient } from '@/lib/api-client';
+import { saveBlob } from '@/lib/download';
 import { createLogger } from '@/lib/logger';
 
 import { fixtureBacktest, fixtureBacktests } from './fixtures';
@@ -16,6 +17,7 @@ import {
   type BacktestRunRequest,
   type BacktestSummary,
   type CoverageResponse,
+  type ExportFilename,
 } from './types';
 
 /**
@@ -221,6 +223,34 @@ export async function deleteBacktest(id: string): Promise<void> {
   await apiClient.delete(`/backtests/${encodeURIComponent(id)}`);
 }
 
+/**
+ * One of a finished run's canonical downloads, as bytes.
+ *
+ * `responseType: 'blob'` is the whole reason this does not go through a schema:
+ * there is nothing to validate — the body is a CSV or a JSON file destined for
+ * a disk, not a payload the app reads. It is still fetched through the api
+ * client so it inherits the base URL, the timeout and the credentials, and so
+ * a failure arrives as an `ApiError` like every other request's.
+ *
+ * No fixture path. The exports are generated from a stored report by the
+ * backend, and a plausible-looking CSV assembled from demo data would be
+ * indistinguishable from a real one once it is sitting in someone's downloads.
+ */
+export async function fetchExport(id: string, filename: ExportFilename): Promise<Blob> {
+  if (env.useFixtures) {
+    throw new ApiError(
+      'Downloads come from a stored report, so they need the backend. Set VITE_USE_FIXTURES=false.',
+      0,
+      'FIXTURES_ENABLED',
+    );
+  }
+
+  return apiClient.get<Blob>(
+    `/backtests/${encodeURIComponent(id)}/exports/${encodeURIComponent(filename)}`,
+    { responseType: 'blob' },
+  );
+}
+
 export const backtestKeys = {
   all: ['backtests'] as const,
   lists: () => [...backtestKeys.all, 'list'] as const,
@@ -335,6 +365,28 @@ export function useBacktestDetails(ids: readonly string[]) {
       isPending: results.some((result) => result.isPending),
       isError: results.some((result) => result.isError),
     }),
+  });
+}
+
+/**
+ * Fetch one export and hand it to the browser.
+ *
+ * A mutation rather than a query: it is an action with a side effect outside
+ * React, it should run when the button is pressed and never on mount, and its
+ * result must not be cached — there is nothing to re-render, and holding a
+ * megabyte of CSV in the query cache would serve no one.
+ *
+ * The download name is prefixed with the run's short id. The server's own
+ * `Content-Disposition` says `equity.csv`, which is right for one run and
+ * useless for three: comparing two runs' trades means two files called
+ * `trades.csv`, one of them renamed `trades(1).csv` by the browser.
+ */
+export function useDownloadExport() {
+  return useMutation({
+    mutationFn: async ({ id, filename }: { id: string; filename: ExportFilename }) => {
+      const blob = await fetchExport(id, filename);
+      saveBlob(blob, `${id.slice(0, 8)}-${filename}`);
+    },
   });
 }
 
