@@ -55,6 +55,28 @@ async function clickCheck() {
   await userEvent.click(screen.getByRole('button', { name: /check compatibility/i }));
 }
 
+/**
+ * Put the editor on the whole-file tab.
+ *
+ * Fragment mode is the default for a new strategy now — it is the one where a
+ * reported line number is a line the member wrote. The full-file path these
+ * tests cover still exists, one tab across.
+ */
+async function openWholeFile() {
+  await userEvent.click(await screen.findByRole('button', { name: /whole file/i }));
+}
+
+/**
+ * Reveal the import lines.
+ *
+ * The whole-file editor shows the file from its `class` line onward — the
+ * imports are part of the source but off screen until asked for. Tests that
+ * assert on the entire file have to ask.
+ */
+async function showImports() {
+  await userEvent.click(await screen.findByRole('button', { name: /show imports/i }));
+}
+
 describe('StrategyEditor compatibility check', () => {
   it('sends the source to the check endpoint and reports a pass', async () => {
     post.mockResolvedValue({
@@ -67,6 +89,7 @@ describe('StrategyEditor compatibility check', () => {
     });
 
     renderWithProviders(<StrategyEditor />);
+    await openWholeFile();
     await clickCheck();
 
     // Anchored: "Check compatibility" and the message sentence both contain
@@ -100,6 +123,7 @@ describe('StrategyEditor compatibility check', () => {
     mockIncompatible();
 
     renderWithProviders(<StrategyEditor />);
+    await openWholeFile();
     await clickCheck();
 
     expect(await screen.findByText(/not compatible/i)).toBeInTheDocument();
@@ -119,6 +143,7 @@ describe('StrategyEditor compatibility check', () => {
     mockIncompatible();
 
     renderWithProviders(<StrategyEditor />);
+    await openWholeFile();
     await clickCheck();
 
     expect(await screen.findByText(/not compatible/i)).toBeInTheDocument();
@@ -134,16 +159,17 @@ describe('StrategyEditor compatibility check', () => {
       ok: true,
       className: 'MyStrategy',
       issues: [],
-      warnings: [{ line: 9, message: 'MyStrategy.__init__ never calls super().__init__(...).' }],
+      warnings: [{ line: 9, message: 'MyStrategy declares an indicator the engine does not ship.' }],
       message: 'MyStrategy is compatible with the engine. 1 warning worth reading.',
     });
 
     testEnv.isDev = true;
     renderWithProviders(<StrategyEditor />);
+    await openWholeFile();
     await clickCheck();
 
     expect(await screen.findByText(/^Compatible$/)).toBeInTheDocument();
-    expect(screen.getByText(/never calls super/)).toBeInTheDocument();
+    expect(screen.getByText(/does not ship/)).toBeInTheDocument();
   });
 
   it('retires the verdict as soon as the source is edited', async () => {
@@ -157,6 +183,7 @@ describe('StrategyEditor compatibility check', () => {
     });
 
     renderWithProviders(<StrategyEditor />);
+    await openWholeFile();
     await clickCheck();
     expect(await screen.findByText(/^Compatible$/)).toBeInTheDocument();
 
@@ -170,6 +197,7 @@ describe('StrategyEditor compatibility check', () => {
     post.mockRejectedValue(new ApiError('Could not reach the server.', 0, 'NETWORK_ERROR'));
 
     renderWithProviders(<StrategyEditor />);
+    await openWholeFile();
     await clickCheck();
 
     expect(await screen.findByText(/could not run/i)).toBeInTheDocument();
@@ -179,11 +207,17 @@ describe('StrategyEditor compatibility check', () => {
 describe('StrategyEditor starter code', () => {
   it('opens with the template the backend serves', async () => {
     renderWithProviders(<StrategyEditor />);
+    await openWholeFile();
 
     const editor = await screen.findByLabelText(/strategy source code/i);
+    // The class onward is what is on screen; the imports are hidden.
     await waitFor(() => {
-      expect(editor).toHaveValue(SERVED_TEMPLATE);
+      expect((editor as HTMLTextAreaElement).value).toContain('class ServedByTheBackend');
     });
+    expect((editor as HTMLTextAreaElement).value).not.toContain('import BasePortfolio');
+
+    await showImports();
+    expect(editor).toHaveValue(SERVED_TEMPLATE);
     expect(get).toHaveBeenCalledWith('/strategies/template');
   });
 
@@ -192,6 +226,7 @@ describe('StrategyEditor starter code', () => {
     get.mockRejectedValue(new ApiError('Could not reach the server.', 0, 'NETWORK_ERROR'));
 
     renderWithProviders(<StrategyEditor />);
+    await openWholeFile();
 
     const editor = await screen.findByLabelText(/strategy source code/i);
     await waitFor(() => {
@@ -204,6 +239,7 @@ describe('StrategyEditor starter code', () => {
     get.mockReturnValue(new Promise((resolve) => (release = resolve)));
 
     renderWithProviders(<StrategyEditor />);
+    await openWholeFile();
     const editor = await screen.findByLabelText(/strategy source code/i);
 
     await userEvent.clear(editor);
@@ -215,19 +251,234 @@ describe('StrategyEditor starter code', () => {
     });
 
     // The whole reason the source is derived rather than synced in an effect.
-    expect(editor).toHaveValue('# mine');
+    // With no class line left to split on, nothing is hidden — so the edit is
+    // all there is, and the served template never overwrote it.
+    expect((editor as HTMLTextAreaElement).value).toContain('# mine');
+    expect((editor as HTMLTextAreaElement).value).not.toContain('ServedByTheBackend');
   });
 
   it('resets back to the served template, not the fallback', async () => {
     renderWithProviders(<StrategyEditor />);
+    await openWholeFile();
     const editor = await screen.findByLabelText(/strategy source code/i);
     await waitFor(() => {
-      expect(editor).toHaveValue(SERVED_TEMPLATE);
+      expect((editor as HTMLTextAreaElement).value).toContain('class ServedByTheBackend');
     });
 
     await userEvent.type(editor, '# scribble');
     await userEvent.click(screen.getByRole('button', { name: /reset to template/i }));
 
+    // Reset restores the served file, imports included — shown here to assert
+    // the whole thing came back, not just the visible half.
+    await showImports();
     expect(editor).toHaveValue(SERVED_TEMPLATE);
+  });
+});
+
+describe('StrategyEditor fragment mode', () => {
+  /**
+   * Step 4's point: a member writes an OnData body, and a reported line number
+   * is a line of that body. These assert the fragment path is wired to the
+   * draft endpoints and that the generated file is shown rather than rebuilt.
+   */
+
+  it('checks the fragment and reports the member’s own line number', async () => {
+    get.mockResolvedValue({
+      filename: 'strategy.py',
+      source: 'class MyStrategy(BasePortfolio):\n    pass\n',
+      body: 'pass',
+      indicators: [],
+      state: {},
+    });
+    post.mockResolvedValue({
+      status: 'incompatible',
+      ok: false,
+      className: null,
+      issues: [{ line: 3, message: "importing 'os' is not allowed." }],
+      warnings: [],
+      message: '1 problem to fix before this can run here.',
+      assembledSource: 'class MyStrategy(BasePortfolio):\n    def OnData(self, context):\n        import os\n',
+      bodyOffset: 13,
+    });
+
+    renderWithProviders(<StrategyEditor />);
+
+    await userEvent.click(await screen.findByRole('button', { name: /check compatibility/i }));
+
+    await waitFor(() => {
+      expect(post).toHaveBeenCalledWith('/strategies/check/draft', expect.anything());
+    });
+    // L3 is line 3 of what they wrote, which is the entire reason for this mode.
+    expect(await screen.findByText(/L3/)).toBeInTheDocument();
+  });
+
+  it('shows the generated file from the response rather than rebuilding it', async () => {
+    get.mockResolvedValue({
+      filename: 'strategy.py',
+      source: 'x',
+      body: 'pass',
+      indicators: [],
+      state: {},
+    });
+    post.mockResolvedValue({
+      status: 'compatible',
+      ok: true,
+      className: 'MyStrategy',
+      issues: [],
+      warnings: [],
+      message: 'ok',
+      assembledSource: 'GENERATED BY THE BACKEND',
+      bodyOffset: 13,
+    });
+
+    renderWithProviders(<StrategyEditor />);
+    await userEvent.click(await screen.findByRole('button', { name: /check compatibility/i }));
+
+    // Verbatim from assembledSource: a second assembler in the client is the
+    // drift the duplicated template already cost this repo once.
+    expect(await screen.findByText('GENERATED BY THE BACKEND')).toBeInTheDocument();
+  });
+
+  it('retires the generated-file preview when the body is edited after the check', async () => {
+    get.mockResolvedValue({
+      filename: 'strategy.py',
+      source: 'x',
+      body: 'pass',
+      indicators: [],
+      state: {},
+    });
+    post.mockResolvedValue({
+      status: 'compatible',
+      ok: true,
+      className: 'MyStrategy',
+      issues: [],
+      warnings: [],
+      message: 'ok',
+      assembledSource: 'GENERATED BY THE BACKEND',
+      bodyOffset: 13,
+    });
+
+    renderWithProviders(<StrategyEditor />);
+    await userEvent.click(await screen.findByRole('button', { name: /check compatibility/i }));
+
+    expect(await screen.findByText('GENERATED BY THE BACKEND')).toBeInTheDocument();
+
+    // The preview describes the draft it was assembled from, so a new body
+    // makes it the same lie as a verdict above changed code.
+    await userEvent.type(screen.getByLabelText(/onData body/i), '\n# edited');
+    expect(screen.queryByText('GENERATED BY THE BACKEND')).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Compatible$/)).not.toBeInTheDocument();
+  });
+
+  it('retires the verdict when an indicator row is edited after the check', async () => {
+    get.mockResolvedValue({
+      filename: 'strategy.py',
+      source: 'class MyStrategy(BasePortfolio):\n    pass\n',
+      body: 'pass',
+      indicators: [{ attribute: 'fast_sma', indicator: 'SimpleMovingAverage', params: { period: 20 } }],
+      state: {},
+    });
+    post.mockResolvedValue({
+      status: 'compatible',
+      ok: true,
+      className: 'MyStrategy',
+      issues: [],
+      warnings: [],
+      message: 'ok',
+      assembledSource: 'GENERATED BY THE BACKEND',
+      bodyOffset: 13,
+    });
+
+    renderWithProviders(<StrategyEditor />);
+    await userEvent.click(await screen.findByRole('button', { name: /check compatibility/i }));
+
+    expect(await screen.findByText(/^Compatible$/)).toBeInTheDocument();
+
+    // The verdict belongs to body, indicators and state together — editing a
+    // row is an edit of the draft, not a different draft that happens to share
+    // a body.
+    await userEvent.type(screen.getByLabelText('Indicator 1 name in code'), 'x');
+    expect(screen.queryByText(/^Compatible$/)).not.toBeInTheDocument();
+  });
+
+  it('opens with the starter’s state shown as rows', async () => {
+    get.mockResolvedValue({
+      filename: 'strategy.py',
+      source: 'class MyStrategy(BasePortfolio):\n    pass\n',
+      body: 'pass',
+      indicators: [],
+      state: { last_price: {} },
+    });
+
+    renderWithProviders(<StrategyEditor />);
+
+    // The state the seeded body reads is visible and editable, not fixed.
+    expect(await screen.findByDisplayValue('last_price')).toBeInTheDocument();
+    // The default is offered as a shape the backend can render, not as raw
+    // Python the member has to type.
+    expect(screen.getByLabelText('State 1 default')).toHaveValue('{}');
+  });
+
+  it('saves the member’s own state with the draft', async () => {
+    get.mockResolvedValue({
+      filename: 'strategy.py',
+      source: 'class MyStrategy(BasePortfolio):\n    pass\n',
+      body: 'pass',
+      indicators: [],
+      state: {},
+    });
+    post.mockResolvedValue({
+      id: 'draft-1',
+      name: 'Mine',
+      status: 'draft',
+      message: 'Saved as a draft.',
+      validationRunId: null,
+    });
+
+    renderWithProviders(<StrategyEditor />);
+
+    await userEvent.click(await screen.findByRole('button', { name: /add state/i }));
+    await userEvent.type(screen.getByLabelText('State 1 name in code'), 'last_price');
+    await userEvent.type(screen.getByLabelText(/strategy name/i), 'Mine');
+    await userEvent.click(screen.getByRole('button', { name: /save strategy/i }));
+
+    // The declared state rides along with the body and indicators, so the
+    // class the backend generates can build `self.last_price`.
+    await waitFor(() => {
+      expect(post).toHaveBeenCalledWith(
+        '/strategies/draft',
+        expect.objectContaining({ state: { last_price: {} } }),
+      );
+    });
+  });
+
+  it('retires the verdict when a state row is edited after the check', async () => {
+    get.mockResolvedValue({
+      filename: 'strategy.py',
+      source: 'class MyStrategy(BasePortfolio):\n    pass\n',
+      body: 'pass',
+      indicators: [],
+      state: { last_price: {} },
+    });
+    post.mockResolvedValue({
+      status: 'compatible',
+      ok: true,
+      className: 'MyStrategy',
+      issues: [],
+      warnings: [],
+      message: 'ok',
+      assembledSource: 'GENERATED BY THE BACKEND',
+      bodyOffset: 13,
+    });
+
+    renderWithProviders(<StrategyEditor />);
+    await userEvent.click(await screen.findByRole('button', { name: /check compatibility/i }));
+
+    expect(await screen.findByText(/^Compatible$/)).toBeInTheDocument();
+
+    // A state name is part of the draft: changing one retires a verdict that
+    // claims to describe it, exactly as an indicator edit does.
+    await userEvent.type(screen.getByLabelText('State 1 name in code'), 'x');
+    expect(screen.queryByText(/^Compatible$/)).not.toBeInTheDocument();
   });
 });

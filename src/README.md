@@ -19,20 +19,22 @@ Nothing on the right may import from the left. A `util` never imports a
 | `features/`   | Self-contained domain modules. Where nearly all real code lives.          |
 | `components/` | Shared presentational components. Domain-agnostic by definition.          |
 | `hooks/`      | Shared hooks used by more than one feature.                               |
-| `lib/`        | Third-party integration points: axios, query client, chart theming, `cn`. |
+| `lib/`        | Browser and third-party integration: axios, query client, chart theming, `saveBlob`, `cn`. |
 | `config/`     | Validated env vars and app-wide constants.                                |
 | `types/`      | Types shared across features. Feature-specific types stay in the feature. |
 | `utils/`      | Pure functions. No React, no imports from features.                       |
 | `test/`       | Test setup and `renderWithProviders`.                                     |
 
-## The four features
+## The features
 
-| Feature       | Product             | Owns                                                    |
-| ------------- | ------------------- | ------------------------------------------------------- |
-| `backtests`   | Backtest Visualiser | Runs, metrics, round-trip trades                        |
-| `performance` | both                | Equity/drawdown charts, metrics grid, tearsheet table   |
-| `portfolios`  | MQS Master          | Live sleeves, positions, fills, correlations, config    |
-| `system`      | MQS Master          | Per-service engine health, log tail                     |
+| Feature       | Product             | Owns                                                     |
+| ------------- | ------------------- | -------------------------------------------------------- |
+| `backtests`   | Backtest Visualiser | Runs, metrics, trades, report downloads                  |
+| `strategies`  | Backtest Visualiser | The catalogue, the source editor, compatibility checks   |
+| `performance` | both                | Equity/drawdown charts, metrics grid, tearsheet table    |
+| `market`      | both                | Indicators and news, still fixture-backed                |
+| `portfolios`  | MQS Master          | Live sleeves, positions, fills, correlations, config     |
+| `system`      | MQS Master          | Per-service engine health, log tail                      |
 
 `performance` is the shared one, and it is shared *on purpose*: the live
 portfolio page renders its charts unchanged. If you find yourself writing a
@@ -41,8 +43,14 @@ never happens. `EquityCurveChart` grows props (`trades`, `showDrawdownPane`)
 rather than sprouting variants.
 
 Its non-component modules are pure and testable on their own: `tearsheet.ts`
-returns plain rows so the numbers can be asserted without rendering a table, and
-so a CSV export later would not have to scrape JSX.
+returns plain rows so the numbers can be asserted without rendering a table.
+
+That row shape was also meant to feed a CSV export one day. It no longer has to:
+the backend serves `equity.csv`, `trades.csv`, `metrics.csv` and `report.json`
+from the stored report, and `features/backtests/report-exports.tsx` offers them
+in the run page's header. Keep it that way — a CSV built in the browser and one
+built from the database will disagree the first time either side rounds
+differently, and only one of them is the report of record.
 
 Cross-feature imports go through the barrel (`@/features/backtests`), which is
 how `performance` reaches `EquityPoint` today.
