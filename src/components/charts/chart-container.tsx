@@ -3,7 +3,6 @@ import { type ReactNode } from 'react';
 import { ErrorBoundary } from '@/components/common/error-boundary';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { cn } from '@/lib/utils';
 
 interface ChartContainerProps {
   title: string;
@@ -32,14 +31,18 @@ export function ChartContainer({
   return (
     <Card className={className}>
       <CardHeader className="flex-row items-start justify-between space-y-0 pb-2">
-        <div className="space-y-1">
+        <div className="min-w-0 flex-1 space-y-1">
           <CardTitle className="text-base">{title}</CardTitle>
           {description ? <CardDescription>{description}</CardDescription> : null}
         </div>
         {actions}
       </CardHeader>
       <CardContent>
-        <div style={{ height }} className={cn('w-full')}>
+        <div
+          data-slot="chart-viewport"
+          style={{ height }}
+          className="relative w-full max-w-full min-w-0 overflow-hidden [contain:inline-size]"
+        >
           {isLoading ? (
             <Skeleton className="size-full" />
           ) : (

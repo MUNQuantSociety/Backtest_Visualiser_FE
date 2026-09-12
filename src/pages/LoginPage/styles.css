@@ -1,4 +1,6 @@
 .login-page {
+  /* The login card is light even when the rest of the app uses dark mode. */
+  color-scheme: light;
   min-height: 100dvh;
   display: grid;
   place-items: center;
@@ -95,14 +97,33 @@
 }
 
 .login-field__input input {
+  flex: 1;
   width: 100%;
   min-width: 0;
+  min-height: calc(3rem - 2px);
+  margin: 0;
   padding: 0;
   color: #101828;
+  caret-color: #101828;
   font: inherit;
+  appearance: none;
   background: transparent;
   border: 0;
+  border-radius: 0;
   outline: 0;
+  /* The wrapper owns focus; suppress the app-wide focus-visible shadow here. */
+  box-shadow: none;
+}
+
+.login-field__input input:is(:autofill, :-webkit-autofill) {
+  /* Cover the browser's autofill paint without disabling saved credentials. */
+  -webkit-text-fill-color: #101828;
+  box-shadow: 0 0 0 1000px #ffffff inset;
+}
+
+.login-field__input input::selection {
+  color: #101828;
+  background: #dfe3ff;
 }
 
 .login-field__input input::placeholder {

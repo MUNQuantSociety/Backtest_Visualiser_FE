@@ -1,9 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { env } from '@/config/env';
-import { fetchBacktests } from '@/features/backtests';
-import { ApiError, apiClient } from '@/lib/api-client';
-import { createLogger } from '@/lib/logger';
+import { fetchBacktests } from '@/features/backtests/data';
+import { apiClient } from '@/lib/api-client';
 
 import { fixtureStrategyBlueprints } from './fixtures';
 import {
@@ -41,30 +40,13 @@ export const strategyKeys = {
  * own runs disagree with. The live endpoint is expected to return them
  * precomputed — the client should not be fetching every run to render a list.
  */
-const log = createLogger('strategies');
-
-/**
- * Same rule as the backtests feature: only in dev, and only when nothing
- * answered at all (status 0) or the Vite proxy answered for an absent server
- * (502/503/504). A 4xx from a running backend still surfaces as an error.
- */
-const UNREACHABLE = new Set([0, 502, 503, 504]);
-
-function canFallBack(error: unknown): boolean {
-  return env.isDev && error instanceof ApiError && UNREACHABLE.has(error.status);
-}
-
-export async function fetchStrategies(): Promise<Strategy[]> {
+export async function fetchStrategies(signal?: AbortSignal): Promise<Strategy[]> {
   if (env.useFixtures) return fixtureStrategies();
 
-  try {
-    const data = await apiClient.get<unknown>('/strategies');
-    return strategyListResponseSchema.parse(data).items;
-  } catch (error) {
-    if (!canFallBack(error)) throw error;
-    log.warn('backend unreachable, serving strategy fixtures');
-    return fixtureStrategies();
-  }
+  // Only explicitly selected fixture mode may serve sample strategies.
+  // In real mode the API/S3 catalogue is authoritative, including on failure.
+  const data = await apiClient.get<unknown>('/strategies', signal ? { signal } : undefined);
+  return strategyListResponseSchema.parse(data).items;
 }
 
 async function fixtureStrategies(): Promise<Strategy[]> {
@@ -100,7 +82,10 @@ async function fixtureStrategies(): Promise<Strategy[]> {
 }
 
 export function useStrategies() {
-  return useQuery({ queryKey: strategyKeys.lists(), queryFn: fetchStrategies });
+  return useQuery({
+    queryKey: strategyKeys.lists(),
+    queryFn: ({ signal }) => fetchStrategies(signal),
+  });
 }
 
 /**

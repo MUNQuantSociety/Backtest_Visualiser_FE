@@ -98,6 +98,7 @@ describe('BacktestList', () => {
     await screen.findByText('No backtests yet');
     expect(get).toHaveBeenCalledWith('/backtests', {
       params: { status: 'failed', pageSize: 10 },
+      signal: expect.any(AbortSignal),
     });
   });
 });

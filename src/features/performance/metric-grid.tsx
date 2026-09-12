@@ -10,55 +10,56 @@ interface MetricsGridProps {
 
 export function MetricsGrid({ metrics, isLoading = false }: MetricsGridProps) {
   const placeholder = '—';
+  type MetricKey = Exclude<keyof PerformanceMetrics, 'unavailable'>;
+  const display = (key: MetricKey, format: (value: number) => string) =>
+    metrics && !metrics.unavailable?.[key] ? format(metrics[key]) : placeholder;
+  const tone = (key: MetricKey) =>
+    metrics && !metrics.unavailable?.[key] ? toneFromValue(metrics[key]) : 'neutral';
 
   return (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <StatTile
         label="Total return"
-        value={metrics ? formatSigned(metrics.totalReturn, (n) => formatPercent(n)) : placeholder}
-        tone={metrics ? toneFromValue(metrics.totalReturn) : 'neutral'}
+        value={display('totalReturn', (value) => formatSigned(value, (n) => formatPercent(n)))}
+        tone={tone('totalReturn')}
         isLoading={isLoading}
       />
       <StatTile
         label="CAGR"
-        value={metrics ? formatSigned(metrics.cagr, (n) => formatPercent(n)) : placeholder}
-        tone={metrics ? toneFromValue(metrics.cagr) : 'neutral'}
+        value={display('cagr', (value) => formatSigned(value, (n) => formatPercent(n)))}
+        tone={tone('cagr')}
         isLoading={isLoading}
       />
       <StatTile
         label="Sharpe"
-        value={metrics ? formatNumber(metrics.sharpe) : placeholder}
-        tone={metrics ? toneFromValue(metrics.sharpe) : 'neutral'}
+        value={display('sharpe', formatNumber)}
+        tone={tone('sharpe')}
         hint="Annualised, risk-adjusted"
         isLoading={isLoading}
       />
       <StatTile
         label="Max drawdown"
-        value={metrics ? formatPercent(metrics.maxDrawdown) : placeholder}
+        value={display('maxDrawdown', formatPercent)}
         tone={metrics && metrics.maxDrawdown < 0 ? 'loss' : 'neutral'}
         isLoading={isLoading}
       />
       <StatTile
         label="Sortino"
-        value={metrics ? formatNumber(metrics.sortino) : placeholder}
+        value={display('sortino', formatNumber)}
         hint="Downside deviation only"
         isLoading={isLoading}
       />
       <StatTile
         label="Volatility"
-        value={metrics ? formatPercent(metrics.volatility) : placeholder}
+        value={display('volatility', formatPercent)}
         hint="Annualised"
         isLoading={isLoading}
       />
-      <StatTile
-        label="Win rate"
-        value={metrics ? formatPercent(metrics.winRate) : placeholder}
-        isLoading={isLoading}
-      />
+      <StatTile label="Win rate" value={display('winRate', formatPercent)} isLoading={isLoading} />
       <StatTile
         label="Profit factor"
-        value={metrics ? formatNumber(metrics.profitFactor) : placeholder}
-        hint={metrics ? `${String(metrics.totalTrades)} trades` : undefined}
+        value={display('profitFactor', formatNumber)}
+        hint={metrics ? `${String(metrics.totalTrades)} closed trades` : undefined}
         isLoading={isLoading}
       />
     </div>

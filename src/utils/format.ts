@@ -25,10 +25,20 @@ export function formatPercent(ratio: number, fractionDigits = 2): string {
 }
 
 export function formatNumber(value: number, fractionDigits = 2): string {
-  return new Intl.NumberFormat(DEFAULT_LOCALE, {
+  if (Number.isNaN(value)) return '—';
+  const formatted = new Intl.NumberFormat(DEFAULT_LOCALE, {
     minimumFractionDigits: fractionDigits,
     maximumFractionDigits: fractionDigits,
   }).format(value);
+  // Keep extreme magnitudes readable in metrics, table cells, and axis labels.
+  // Scientific notation preserves the sign and scale instead of clipping digits.
+  if (formatted.length > 12 && Number.isFinite(value)) {
+    return new Intl.NumberFormat(DEFAULT_LOCALE, {
+      notation: 'scientific',
+      maximumFractionDigits: fractionDigits,
+    }).format(value);
+  }
+  return formatted;
 }
 
 /** `1_250_000` -> `"1.25M"`. For axis ticks and stat tiles. */

@@ -60,12 +60,16 @@ export function MetricsTable({ detail, isLoading = false }: MetricsTableProps) {
   const sections = buildTearsheet(detail);
 
   return (
-    // Wide tables scroll inside their own container; the page itself must never
-    // scroll sideways.
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
+    // Keep long reports inside the card, with keyboard-accessible scrolling.
+    <div
+      className="report-table-scroll"
+      role="region"
+      aria-label="Performance summary rows"
+      tabIndex={0}
+    >
+      <table className="w-full min-w-[480px] text-sm">
         <caption className="sr-only">Backtest performance tearsheet</caption>
-        <thead>
+        <thead className="sticky top-0 z-10 bg-card">
           <tr className="border-b text-xs text-muted-foreground">
             <th scope="col" className="py-2 pr-4 text-left font-medium">
               Category

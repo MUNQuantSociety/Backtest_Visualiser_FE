@@ -68,6 +68,7 @@ export function StrategyPicker({
               return (
                 <button
                   key={strategy.id}
+                  data-slot="card"
                   type="button"
                   role="option"
                   aria-selected={selected}
@@ -75,7 +76,7 @@ export function StrategyPicker({
                     onSelect(strategy.id);
                   }}
                   className={cn(
-                    'flex w-full items-center justify-between rounded-md border px-3.5 py-2 text-left text-[13px] text-muted-foreground transition-colors',
+                    'flex w-full max-w-full min-w-0 flex-wrap items-center justify-between overflow-hidden rounded-md border px-3.5 py-2 text-left text-[13px] [overflow-wrap:anywhere] text-muted-foreground transition-colors',
                     selected
                       ? 'border-primary shadow-[inset_3px_0_0_var(--primary)]'
                       : 'hover:bg-muted/60',
@@ -93,6 +94,7 @@ export function StrategyPicker({
             return (
               <button
                 key={strategy.id}
+                data-slot="card"
                 type="button"
                 role="option"
                 aria-selected={selected}
@@ -100,7 +102,7 @@ export function StrategyPicker({
                   onSelect(strategy.id);
                 }}
                 className={cn(
-                  'w-full rounded-md border px-3.5 py-3 text-left transition-colors',
+                  'w-full max-w-full min-w-0 overflow-hidden rounded-md border px-3.5 py-3 text-left [overflow-wrap:anywhere] transition-colors',
                   draft && 'border-dashed border-[var(--border-strong)]',
                   selected
                     ? 'border-primary shadow-[inset_3px_0_0_var(--primary)]'

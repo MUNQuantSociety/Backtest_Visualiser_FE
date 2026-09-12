@@ -1,9 +1,11 @@
+import { useLocation } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { apiClient } from '@/lib/api-client';
 import type * as ApiClientModule from '@/lib/api-client';
-import { fireEvent, renderWithProviders, screen, userEvent, waitFor } from '@/test/test-utils';
+import { act, fireEvent, renderWithProviders, screen, userEvent, waitFor } from '@/test/test-utils';
 
+import { RunBacktestDialog } from './run-backtest-dialog';
 import { RunBacktestForm } from './run-backtest-form';
 
 /**
@@ -66,24 +68,30 @@ const COVERAGE = {
 
 beforeEach(() => {
   vi.resetAllMocks();
-  get.mockImplementation((url: string, config?: { params?: { strategyKey?: string } }) => {
-    if (url === '/strategies') {
-      return Promise.resolve({
-        items: [
-          strategy('portfolio_1', 'Vol Momentum'),
-          strategy('portfolio_2', 'Mean Reversion'),
-          strategy('portfolio_3', 'Broken Universe'),
-          strategy('draft_one', 'Unvalidated Draft', 'draft'),
-        ],
-        total: 4,
-      });
-    }
-    if (url === '/market-data/coverage') {
-      const key = config?.params?.strategyKey ?? '';
-      return Promise.resolve(COVERAGE[key as keyof typeof COVERAGE]);
-    }
-    throw new Error(`unexpected GET ${url}`);
-  });
+  vi.spyOn(globalThis, 'scrollTo').mockImplementation(() => undefined);
+  get.mockImplementation(
+    (url: string, config?: { params?: { strategyKey?: string; tickers?: string } }) => {
+      if (url === '/strategies') {
+        return Promise.resolve({
+          items: [
+            strategy('portfolio_1', 'Vol Momentum'),
+            strategy('portfolio_2', 'Mean Reversion'),
+            strategy('portfolio_3', 'Broken Universe'),
+            strategy('draft_one', 'Unvalidated Draft', 'draft'),
+          ],
+          total: 4,
+        });
+      }
+      if (url === '/market-data/coverage') {
+        if (config?.params?.tickers === 'AAPL,MSFT') {
+          return Promise.resolve({ ...COVERAGE.portfolio_1, start: '2022-01-03' });
+        }
+        const key = config?.params?.strategyKey ?? '';
+        return Promise.resolve(COVERAGE[key as keyof typeof COVERAGE]);
+      }
+      throw new Error(`unexpected GET ${url}`);
+    },
+  );
 });
 
 /**
@@ -107,9 +115,31 @@ async function pickStrategy(id: string) {
   return radio;
 }
 
+function CurrentPath() {
+  return <output aria-label="Current path">{useLocation().pathname}</output>;
+}
+
+function mockNativeDialog() {
+  // jsdom has the element but not the browser's showModal/close methods.
+  const dialog = document.querySelector('dialog')!;
+  dialog.showModal = () => {
+    dialog.open = true;
+  };
+  dialog.close = () => {
+    dialog.open = false;
+    dialog.dispatchEvent(new Event('close'));
+  };
+  return dialog;
+}
+
 describe('RunBacktestForm', () => {
   it('offers only strategies that have passed validation', async () => {
-    renderWithProviders(<RunBacktestForm />);
+    // Flush the already-resolved mocked query before starting the DOM wait.
+    // Cold schema initialization can otherwise exhaust the one-second wait.
+    await act(async () => {
+      renderWithProviders(<RunBacktestForm />);
+      await Promise.resolve();
+    });
 
     expect(await screen.findByRole('radio', { name: /Vol Momentum/ })).toBeInTheDocument();
     // A draft has not been proven to run; the backend would refuse it anyway.
@@ -126,7 +156,6 @@ describe('RunBacktestForm', () => {
     });
     expect(start).toHaveAttribute('max', '2026-07-15');
     expect(screen.getByLabelText('End')).toHaveValue('2026-07-15');
-    expect(screen.getByText(/Data runs 2020-01-02 to 2026-07-15/)).toBeInTheDocument();
   });
 
   it('re-derives the window and universe when the strategy changes', async () => {
@@ -146,7 +175,7 @@ describe('RunBacktestForm', () => {
     expect(screen.getByLabelText('Start')).toHaveAttribute('min', '2021-03-01');
   });
 
-  it('posts the run with a name derived from the strategy and window, and the extras in params', async () => {
+  it('posts the selected inputs and opens the accepted run without a Follow link', async () => {
     post.mockResolvedValue({
       id: 'bt-9',
       name: 'Vol Momentum 2025-07-15 to 2026-07-15',
@@ -165,7 +194,12 @@ describe('RunBacktestForm', () => {
       maxDrawdown: 0,
     });
 
-    renderWithProviders(<RunBacktestForm />);
+    renderWithProviders(
+      <>
+        <RunBacktestForm />
+        <CurrentPath />
+      </>,
+    );
     await pickStrategy('portfolio_1');
     await waitFor(() => {
       expect(screen.getByLabelText('End')).toHaveValue('2026-07-15');
@@ -196,7 +230,11 @@ describe('RunBacktestForm', () => {
       },
     });
 
-    expect(await screen.findByText(/Follow/)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByLabelText('Current path')).toHaveTextContent('/backtests/bt-9');
+    });
+    expect(screen.queryByText(/Follow/)).not.toBeInTheDocument();
+    expect(globalThis.scrollTo).toHaveBeenCalledWith({ top: 0, left: 0, behavior: 'instant' });
   });
 
   it('carries an added ticker into the universe', async () => {
@@ -227,6 +265,14 @@ describe('RunBacktestForm', () => {
     await userEvent.type(screen.getByLabelText('Add ticker'), 'msft{Enter}');
     expect(screen.getByRole('button', { name: 'Remove MSFT' })).toBeInTheDocument();
 
+    await waitFor(() => {
+      expect(get).toHaveBeenCalledWith('/market-data/coverage', {
+        params: { tickers: 'AAPL,MSFT' },
+      });
+      expect(screen.getByLabelText('Start')).toHaveAttribute('min', '2022-01-03');
+      expect(screen.getByRole('button', { name: /run backtest/i })).toBeEnabled();
+    });
+
     submitForm();
     await waitFor(() => {
       expect(post).toHaveBeenCalledTimes(1);
@@ -243,6 +289,12 @@ describe('RunBacktestForm', () => {
     expect(post).not.toHaveBeenCalled();
   });
 
+  it('disables unsupported signal and sentiment controls explicitly', () => {
+    renderWithProviders(<RunBacktestForm />);
+    expect(screen.getByRole('button', { name: 'RSI 14' })).toBeDisabled();
+    expect(screen.getByRole('switch', { name: 'Sentiment gate' })).toBeDisabled();
+  });
+
   it('rejects a backwards window without calling the API', async () => {
     renderWithProviders(<RunBacktestForm />);
     await pickStrategy('portfolio_1');
@@ -256,5 +308,79 @@ describe('RunBacktestForm', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/start date has to come before/i);
     expect(post).not.toHaveBeenCalled();
+  });
+
+  it('keeps the modal pending, then closes it and opens the exact accepted run', async () => {
+    let accept!: (value: unknown) => void;
+    post.mockReturnValueOnce(
+      new Promise((resolve) => {
+        accept = resolve;
+      }),
+    );
+    renderWithProviders(
+      <>
+        <RunBacktestDialog initialStrategyKey="portfolio_1" />
+        <CurrentPath />
+      </>,
+    );
+    const dialog = mockNativeDialog();
+    fireEvent.click(screen.getByRole('button', { name: /run backtest/i }));
+    expect(screen.getByRole('dialog')).toBe(dialog);
+    await waitFor(() => expect(screen.getByLabelText('End')).toHaveValue('2026-07-15'));
+    const form = screen.getByLabelText('Run name').closest('form')!;
+    fireEvent.submit(form);
+    const pendingButton = await screen.findByRole('button', { name: 'Starting backtest…' });
+    expect(pendingButton).toBeDisabled();
+    expect(dialog).toHaveAttribute('open');
+    expect(screen.getByLabelText('Current path')).toHaveTextContent(/^\/$/);
+    // Enter/programmatic submit while pending must not start a duplicate run.
+    fireEvent.submit(form);
+    expect(post).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      accept({
+        id: 'bt-direct',
+        name: 'Direct run',
+        strategyId: 'portfolio_1',
+        strategyName: 'Vol Momentum',
+        symbol: 'MULTI',
+        timeframe: '1d',
+        status: 'queued',
+        startDate: '2025-07-15',
+        endDate: '2026-07-15',
+        createdAt: '2026-09-01T10:00:00Z',
+        initialCapital: 100_000,
+        finalEquity: 100_000,
+        totalReturn: 0,
+        sharpe: 0,
+        maxDrawdown: 0,
+      });
+      await Promise.resolve();
+    });
+    await waitFor(() => {
+      expect(screen.getByLabelText('Current path')).toHaveTextContent('/backtests/bt-direct');
+      expect(dialog).not.toHaveAttribute('open');
+    });
+    expect(screen.queryByLabelText('Run name')).not.toBeInTheDocument();
+  });
+
+  it('keeps the modal and entered values when the API rejects submission', async () => {
+    post.mockRejectedValueOnce(new Error('Strategy storage is unavailable'));
+    renderWithProviders(
+      <>
+        <RunBacktestDialog initialStrategyKey="portfolio_1" />
+        <CurrentPath />
+      </>,
+    );
+    const dialog = mockNativeDialog();
+    fireEvent.click(screen.getByRole('button', { name: /run backtest/i }));
+    expect(screen.getByRole('dialog')).toBe(dialog);
+    await waitFor(() => expect(screen.getByLabelText('End')).toHaveValue('2026-07-15'));
+    fireEvent.change(screen.getByLabelText('Run name'), { target: { value: 'Keep my inputs' } });
+    fireEvent.submit(screen.getByLabelText('Run name').closest('form')!);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Strategy storage is unavailable');
+    expect(dialog).toHaveAttribute('open');
+    expect(screen.getByLabelText('Run name')).toHaveValue('Keep my inputs');
+    expect(screen.getByLabelText('Current path')).toHaveTextContent(/^\/$/);
+    expect(globalThis.scrollTo).not.toHaveBeenCalled();
   });
 });

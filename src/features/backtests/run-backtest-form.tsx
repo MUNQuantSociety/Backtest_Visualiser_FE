@@ -1,10 +1,12 @@
 import { Loader2, Play, X } from 'lucide-react';
 import { useId, useMemo, useState, type FormEvent, type ReactNode } from 'react';
-import { Link } from 'react-router';
+import { useNavigate } from 'react-router';
 
+import { paths } from '@/app/paths';
 import { Button } from '@/components/ui/button';
 import { Segmented } from '@/components/ui/segmented';
 import { useStrategies } from '@/features/strategies';
+import { createLogger } from '@/lib/logger';
 import { cn } from '@/lib/utils';
 import { formatNumber } from '@/utils/format';
 
@@ -24,6 +26,8 @@ import {
 } from './run-window';
 import { backtestRunRequestSchema } from './types';
 
+const log = createLogger('backtest-form');
+
 /**
  * Launches a backtest.
  *
@@ -37,9 +41,8 @@ import { backtestRunRequestSchema } from './types';
  * own universe.
  *
  * Universe, costs, signals and the sentiment gate travel inside `params`: the
- * request schema has no fields for them yet, and the record is where the
- * backend is being asked to read them from. Nothing typed here is dropped on
- * the client. The keys are documented on `buildParams`.
+ * backend separates these reserved execution controls from strategy specs.
+ * Signal overrides and sentiment gating are not implemented and stay disabled.
  */
 
 const DEFAULT_CAPITAL = 100_000;
@@ -80,11 +83,18 @@ interface RunBacktestFormProps {
   layout?: 'card' | 'dialog' | undefined;
   /** Start with this strategy chosen — "re-run" from a strategy's own page. */
   initialStrategyKey?: string | undefined;
+  /** Dismiss the containing dialog before opening the accepted run. */
+  onSubmitted?: (() => void) | undefined;
 }
 
-export function RunBacktestForm({ layout = 'card', initialStrategyKey }: RunBacktestFormProps) {
+export function RunBacktestForm({
+  layout = 'card',
+  initialStrategyKey,
+  onSubmitted,
+}: RunBacktestFormProps) {
   const strategies = useStrategies();
   const submit = useSubmitBacktest();
+  const navigate = useNavigate();
 
   const [strategyKey, setStrategyKey] = useState(initialStrategyKey ?? '');
   const [name, setName] = useState('');
@@ -110,7 +120,7 @@ export function RunBacktestForm({ layout = 'card', initialStrategyKey }: RunBack
   const [endOverride, setEndOverride] = useState<string | null>(null);
   const [universeOverride, setUniverseOverride] = useState<readonly string[] | null>(null);
 
-  const coverage = useCoverage(strategyKey || undefined);
+  const coverage = useCoverage(strategyKey || undefined, universeOverride ?? undefined);
 
   const nameId = useId();
   const startId = useId();
@@ -146,6 +156,10 @@ export function RunBacktestForm({ layout = 'card', initialStrategyKey }: RunBack
   const clampedTo = latestFirstBar(covered);
 
   function chooseStrategy(id: string) {
+    log.info('strategy selected; resetting universe and dates', {
+      previousStrategyKey: strategyKey,
+      strategyKey: id,
+    });
     setStrategyKey(id);
     // The old dates and tickers belonged to the old universe.
     setStartOverride(null);
@@ -158,6 +172,7 @@ export function RunBacktestForm({ layout = 'card', initialStrategyKey }: RunBack
   function applyPreset(preset: WindowPreset) {
     if (!covered?.start || !covered.end) return;
     const next = presetWindow(preset, { start: covered.start, end: covered.end });
+    log.info('date preset selected', { strategyKey, preset, ...next });
     setStartOverride(next.startDate);
     setEndOverride(next.endDate);
   }
@@ -165,11 +180,23 @@ export function RunBacktestForm({ layout = 'card', initialStrategyKey }: RunBack
   function addTicker() {
     const ticker = tickerDraft.trim().toUpperCase();
     if (!ticker) return;
-    if (!universe.includes(ticker)) setUniverseOverride([...universe, ticker]);
+    if (!universe.includes(ticker)) {
+      log.info('ticker added; checking updated universe', {
+        strategyKey,
+        ticker,
+        tickers: [...universe, ticker],
+      });
+      setUniverseOverride([...universe, ticker]);
+    }
     setTickerDraft('');
   }
 
   function removeTicker(ticker: string) {
+    log.info('ticker removed; checking updated universe', {
+      strategyKey,
+      ticker,
+      tickers: universe.filter((existing) => existing !== ticker),
+    });
     setUniverseOverride(universe.filter((existing) => existing !== ticker));
   }
 
@@ -181,8 +208,8 @@ export function RunBacktestForm({ layout = 'card', initialStrategyKey }: RunBack
 
   /**
    * Everything the request schema has no field for, keyed for the backend.
-   * Strategy parameters are spread last under their own keys, so a strategy
-   * cannot accidentally shadow one of these names — the reverse is fine.
+   * Execution keys are reserved by the backend; strategy parameters are
+   * validated against the selected strategy's published specification.
    */
   function buildParams(): Record<string, unknown> {
     const strategyParams: Record<string, number | boolean> = {};
@@ -208,6 +235,15 @@ export function RunBacktestForm({ layout = 'card', initialStrategyKey }: RunBack
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
+    if (submit.isPending) return;
+    log.info('run requested; validating form', {
+      strategyKey,
+      tickers: universe,
+      startDate,
+      endDate,
+      mode,
+      coverageStatus: coverage.status,
+    });
     setError(null);
     submit.reset();
 
@@ -222,11 +258,17 @@ export function RunBacktestForm({ layout = 'card', initialStrategyKey }: RunBack
     });
 
     if (!parsed.success) {
+      log.warn('run blocked by form validation', { strategyKey, issues: parsed.error.issues });
       setError(parsed.error.issues[0]?.message ?? 'Check the form and try again.');
       return;
     }
 
     if (parsed.data.startDate >= parsed.data.endDate) {
+      log.warn('run blocked: start date must precede end date', {
+        strategyKey,
+        startDate,
+        endDate,
+      });
       setError('The start date has to come before the end date.');
       return;
     }
@@ -236,12 +278,28 @@ export function RunBacktestForm({ layout = 'card', initialStrategyKey }: RunBack
     // is refused with a reason instead of becoming a run with no bars in it.
     if (covered?.start && covered.end) {
       if (parsed.data.startDate < covered.start || parsed.data.endDate > covered.end) {
+        log.warn('run blocked: dates outside market-data coverage', {
+          strategyKey,
+          startDate,
+          endDate,
+          coverageStart: covered.start,
+          coverageEnd: covered.end,
+        });
         setError(`There is only data from ${covered.start} to ${covered.end}.`);
         return;
       }
     }
 
-    submit.mutate(parsed.data);
+    log.info('form validation passed; submitting run', { strategyKey, tickers: universe });
+    submit.mutate(parsed.data, {
+      onSuccess: (run) => {
+        log.info('run accepted; opening progress page', { runId: run.id });
+        onSubmitted?.();
+        void navigate(paths.backtestDetail(run.id));
+        // The dashboard/library may have been scrolled behind the modal.
+        globalThis.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+      },
+    });
   }
 
   const sessions = window ? sessionsIn(window.startDate, window.endDate) : 0;
@@ -261,7 +319,7 @@ export function RunBacktestForm({ layout = 'card', initialStrategyKey }: RunBack
      */
     <form onSubmit={handleSubmit} noValidate>
       <div className={cn('space-y-[22px]', layout === 'dialog' ? 'px-6 py-5' : '')}>
-        <Row label="Strategy" help="Active only. Drafts must pass the compatibility check first.">
+        <Row label="Strategy">
           <div role="radiogroup" aria-label="Strategy" className="grid gap-2 sm:grid-cols-2">
             {runnable.map((strategy) => {
               const active = strategy.id === strategyKey;
@@ -325,7 +383,7 @@ export function RunBacktestForm({ layout = 'card', initialStrategyKey }: RunBack
           </div>
         </Row>
 
-        <Row label="Universe" help="Defaults to the strategy's own. The dot is data coverage.">
+        <Row label="Universe">
           <div className="flex min-h-9 flex-wrap items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1.5">
             {universe.map((ticker) => (
               <span
@@ -373,14 +431,7 @@ export function RunBacktestForm({ layout = 'card', initialStrategyKey }: RunBack
           ) : null}
         </Row>
 
-        <Row
-          label="Window"
-          help={
-            covered?.start && covered.end
-              ? `Coverage for this universe: ${covered.start} → ${covered.end}.`
-              : 'Pick a strategy to see how far its data goes.'
-          }
-        >
+        <Row label="Window">
           <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
             <div className="space-y-1.5">
               <label htmlFor={startId} className="text-[13px] font-medium">
@@ -441,7 +492,7 @@ export function RunBacktestForm({ layout = 'card', initialStrategyKey }: RunBack
           />
         </Row>
 
-        <Row label="Capital & costs" help="Slippage is applied per fill on top of commission.">
+        <Row label="Capital & costs">
           <div className="grid gap-3 sm:grid-cols-[1.4fr_1fr_1fr_1fr]">
             <UnitField id={capitalId} label="Initial capital" unit="USD">
               <input
@@ -489,10 +540,7 @@ export function RunBacktestForm({ layout = 'card', initialStrategyKey }: RunBack
           </div>
         </Row>
 
-        <Row
-          label="Signals"
-          help="Indicators the strategy reads, and whether news sentiment gates entries."
-        >
+        <Row label="Signals">
           <div className="flex flex-wrap gap-1.5">
             {SIGNALS.map((signal) => {
               const active = signals.includes(signal);
@@ -500,6 +548,7 @@ export function RunBacktestForm({ layout = 'card', initialStrategyKey }: RunBack
                 <button
                   key={signal}
                   type="button"
+                  disabled
                   aria-pressed={active}
                   onClick={() => {
                     toggleSignal(signal);
@@ -522,6 +571,7 @@ export function RunBacktestForm({ layout = 'card', initialStrategyKey }: RunBack
                 id={gateId}
                 type="checkbox"
                 role="switch"
+                disabled
                 aria-checked={gateEnabled}
                 checked={gateEnabled}
                 onChange={(event) => {
@@ -566,10 +616,7 @@ export function RunBacktestForm({ layout = 'card', initialStrategyKey }: RunBack
         </Row>
 
         {chosen && chosen.parameters.length > 0 ? (
-          <Row
-            label="Parameters"
-            help={`From ${chosen.className}'s spec. Defaults shown; changed values are marked.`}
-          >
+          <Row label="Parameters">
             <div className="grid gap-3 sm:grid-cols-3">
               {chosen.parameters.map((spec) => {
                 const raw = paramValues[spec.key];
@@ -651,7 +698,7 @@ export function RunBacktestForm({ layout = 'card', initialStrategyKey }: RunBack
           </Row>
         ) : null}
 
-        <Row label="Run name" help="Named from the strategy and window if left blank.">
+        <Row label="Run name">
           <input
             id={nameId}
             aria-label="Run name"
@@ -673,16 +720,6 @@ export function RunBacktestForm({ layout = 'card', initialStrategyKey }: RunBack
         {submit.isError ? (
           <p role="alert" className="text-[13px] text-[var(--loss)]">
             {submit.error.message}
-          </p>
-        ) : null}
-
-        {submit.isSuccess ? (
-          <p role="status" className="text-[13px] text-[var(--profit)]">
-            Queued.{' '}
-            <Link to={`/backtests/${submit.data.id}`} className="underline underline-offset-4">
-              Follow {submit.data.name}
-            </Link>{' '}
-            to watch it run.
           </p>
         ) : null}
       </div>
@@ -712,7 +749,7 @@ export function RunBacktestForm({ layout = 'card', initialStrategyKey }: RunBack
             ) : (
               <Play className="mr-2 size-4" aria-hidden />
             )}
-            Run backtest
+            {submit.isPending ? 'Starting backtest…' : 'Run backtest'}
           </Button>
         </div>
       </div>
@@ -720,14 +757,11 @@ export function RunBacktestForm({ layout = 'card', initialStrategyKey }: RunBack
   );
 }
 
-/** One `150px | 1fr` row: label and help on the left, the control on the right. */
-function Row({ label, help, children }: { label: string; help: string; children: ReactNode }) {
+/** One `150px | 1fr` row: section label on the left, controls on the right. */
+function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="grid gap-2 sm:grid-cols-[150px_1fr] sm:gap-4">
-      <div>
-        <p className="text-[13px] font-medium">{label}</p>
-        <p className="mt-0.5 text-xs text-muted-foreground">{help}</p>
-      </div>
+      <p className="text-[13px] font-medium">{label}</p>
       <div className="min-w-0">{children}</div>
     </div>
   );
@@ -840,34 +874,27 @@ function CoverageBar({
             />
           ))}
       </div>
-      <div className="relative mt-1 h-3.5">
-        {ticks.map((tick, index) => (
-          <span
-            key={`${tick.label}-${String(index)}`}
-            className="tabular absolute text-[10px] text-muted-foreground"
-            style={{
-              left: `${String(tick.at * 100)}%`,
-              transform:
-                index === 0
-                  ? undefined
-                  : index === ticks.length - 1
-                    ? 'translateX(-100%)'
-                    : 'translateX(-50%)',
-            }}
-          >
-            {tick.label}
-          </span>
-        ))}
+      {/* Endpoints describe the scale without colliding with nearby January
+          labels. Normal flow also reserves height if a narrow dialog wraps. */}
+      <div
+        data-slot="coverage-axis"
+        className="tabular mt-1 flex flex-wrap justify-between gap-x-4 gap-y-1 text-[10px] text-muted-foreground"
+      >
+        {ticks
+          .filter((_, index) => index === 0 || index === ticks.length - 1)
+          .map((tick, index) => (
+            <span key={`${tick.label}-${String(index)}`} className="whitespace-nowrap">
+              {tick.label}
+            </span>
+          ))}
       </div>
     </div>
   );
 }
 
 /**
- * Says what the date bounds are and why, or why there are none.
- *
- * Without this the picker silently refuses dates outside coverage, which reads
- * as a broken control rather than as a fact about the data.
+ * Show loading and unavailable-coverage states; the date inputs and scale
+ * already show the bounds when coverage is available.
  */
 function CoverageNote({
   strategyChosen,
@@ -895,8 +922,8 @@ function CoverageNote({
   if (isError) {
     return (
       <p className="mt-2 text-xs text-[var(--loss)]">
-        Could not read the data coverage, so the dates are unbounded. A window outside coverage will
-        produce a run with no bars in it.
+        Could not check market-data coverage. Check the backend connection and retry. Running is
+        disabled until coverage is available.
       </p>
     );
   }
@@ -913,9 +940,5 @@ function CoverageNote({
       <p className="mt-2 text-xs text-muted-foreground">No coverage reported for this universe.</p>
     );
   }
-  return (
-    <p className="mt-2 text-xs text-muted-foreground">
-      Data runs {start} to {end}. Dates outside that have no prices.
-    </p>
-  );
+  return null;
 }

@@ -1,12 +1,5 @@
-import type { BacktestDetail } from '@/features/backtests';
-import {
-  averageLoss,
-  averageWin,
-  calmarRatio,
-  payoffRatio,
-  profitFactor,
-  winRate,
-} from '@/utils/metrics';
+import { recordedFillCount, type BacktestDetail } from '@/features/backtests';
+import { averageLoss, averageWin, calmarRatio, payoffRatio } from '@/utils/metrics';
 
 /**
  * The classic backtest tearsheet, in the layout QuantStats and pyfolio produce.
@@ -38,13 +31,15 @@ export interface TearsheetSection {
 
 export function buildTearsheet(detail: BacktestDetail): TearsheetSection[] {
   const { metrics, trades, initialCapital, finalEquity } = detail;
-  const pnls = trades.map((trade) => trade.pnl);
+  const pnls = trades.filter((trade) => trade.exitDate !== null).map((trade) => trade.pnl);
   const equity = detail.equityCurve.map((point) => point.equity);
 
   const closed = trades.filter((trade) => trade.exitDate !== null);
   const winners = pnls.filter((pnl) => pnl > 0);
   const losers = pnls.filter((pnl) => pnl < 0);
 
+  const metric = (key: Exclude<keyof typeof metrics, 'unavailable'>) =>
+    metrics.unavailable?.[key] ? null : metrics[key];
   return [
     {
       category: 'Backtest summary',
@@ -58,8 +53,13 @@ export function buildTearsheet(detail: BacktestDetail): TearsheetSection[] {
     {
       category: 'Overall performance',
       rows: [
-        { label: 'Cumulative return', value: metrics.totalReturn, format: 'percent', signed: true },
-        { label: 'Annualised return', value: metrics.cagr, format: 'percent', signed: true },
+        {
+          label: 'Cumulative return',
+          value: metric('totalReturn'),
+          format: 'percent',
+          signed: true,
+        },
+        { label: 'Annualised return', value: metric('cagr'), format: 'percent', signed: true },
         {
           label: 'Net profit',
           value: finalEquity - initialCapital,
@@ -71,24 +71,34 @@ export function buildTearsheet(detail: BacktestDetail): TearsheetSection[] {
     {
       category: 'Risk (annualised)',
       rows: [
-        { label: 'Maximum drawdown', value: metrics.maxDrawdown, format: 'percent', signed: true },
-        { label: 'Volatility', value: metrics.volatility, format: 'percent' },
-        { label: 'Sharpe ratio', value: metrics.sharpe, format: 'ratio', signed: true },
-        { label: 'Sortino ratio', value: metrics.sortino, format: 'ratio', signed: true },
+        {
+          label: 'Maximum drawdown',
+          value: metric('maxDrawdown'),
+          format: 'percent',
+          signed: true,
+        },
+        { label: 'Volatility', value: metric('volatility'), format: 'percent' },
+        { label: 'Sharpe ratio', value: metric('sharpe'), format: 'ratio', signed: true },
+        { label: 'Sortino ratio', value: metric('sortino'), format: 'ratio', signed: true },
         { label: 'Calmar ratio', value: calmarRatio(equity), format: 'ratio', signed: true },
       ],
     },
     {
       category: 'Trade statistics',
       rows: [
-        { label: 'Total orders', value: trades.length, format: 'integer' },
+        { label: 'Trade lots', value: trades.length, format: 'integer' },
+        {
+          label: 'Total fills',
+          value: recordedFillCount(detail.reportMetadata),
+          format: 'integer',
+        },
         { label: 'Total closed trades', value: closed.length, format: 'integer' },
         { label: 'Winning trades', value: winners.length, format: 'integer' },
         { label: 'Losing trades', value: losers.length, format: 'integer' },
-        { label: 'Win rate', value: metrics.winRate || winRate(pnls), format: 'percent' },
+        { label: 'Win rate', value: metric('winRate'), format: 'percent' },
         {
           label: 'Profit factor',
-          value: metrics.profitFactor || profitFactor(pnls),
+          value: metric('profitFactor'),
           format: 'ratio',
         },
         { label: 'Payoff ratio', value: payoffRatio(pnls), format: 'ratio' },

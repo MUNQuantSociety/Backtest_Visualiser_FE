@@ -1,6 +1,7 @@
 import { Check } from 'lucide-react';
-import { useNavigate } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 
+import { paths } from '@/app/paths';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { formatNumber, formatPercent, formatRelativeDay, formatSigned } from '@/utils/format';
@@ -52,7 +53,7 @@ export function RunsTable({ runs, isLoading, selectedIds, onToggle }: RunsTableP
   return (
     <div className="min-w-[820px]">
       <div
-        className="tabular grid items-center gap-2 border-b pb-2 text-[10px] font-medium tracking-[0.06em] text-muted-foreground uppercase"
+        className="tabular sticky top-0 z-10 grid items-center gap-2 border-b bg-card py-2 text-[10px] font-medium tracking-[0.06em] text-muted-foreground uppercase"
         style={{ gridTemplateColumns: COLUMNS }}
       >
         <span />
@@ -78,7 +79,7 @@ export function RunsTable({ runs, isLoading, selectedIds, onToggle }: RunsTableP
             )}
             style={{ gridTemplateColumns: COLUMNS }}
             onClick={() => {
-              void navigate(`/backtests/${run.id}`);
+              void navigate(paths.backtestDetail(run.id));
             }}
           >
             <label
@@ -108,7 +109,13 @@ export function RunsTable({ runs, isLoading, selectedIds, onToggle }: RunsTableP
                 {checked ? <Check className="size-2.5" strokeWidth={3} /> : null}
               </span>
             </label>
-            <span className="truncate font-medium">{run.name}</span>
+            <Link
+              to={paths.backtestDetail(run.id)}
+              className="truncate rounded-sm font-medium underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+              onClick={(event) => event.stopPropagation()}
+            >
+              {run.name}
+            </Link>
             <span className="tabular truncate text-muted-foreground">
               {monthSpan(run.startDate, run.endDate)}
             </span>

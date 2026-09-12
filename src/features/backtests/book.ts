@@ -10,13 +10,15 @@ import {
 
 import type { BacktestDetail, BacktestSummary, EquityPoint } from './types';
 
+type BookRun = Pick<BacktestDetail, 'id' | 'symbol' | 'equityCurve'>;
+
 /**
- * The "book": every active strategy's best run, held equal-weight, against the
+ * Shared comparison maths over series keyed by run or strategy. The dashboard
+ * supplies every saved run as a separate series, held equal-weight against the
  * benchmark. Pure functions over already-fetched payloads — no React, no
  * fetching — so the dashboard's numbers can be asserted without rendering.
  *
- * "Best" is highest Sharpe among completed runs, not highest return: return
- * alone rewards the run that took the most risk.
+ * The best-run selector remains available to views that explicitly request it.
  */
 
 export interface BookStrategy {
@@ -102,7 +104,7 @@ export function bookCurve(curves: readonly (readonly EquityPoint[])[]): EquityPo
  * SPY; otherwise every run's own benchmark, equal-weighted, and the caller
  * should label it "Benchmark" rather than "SPY".
  */
-export function benchmarkCurve(details: readonly BacktestDetail[]): {
+export function benchmarkCurve(details: readonly BookRun[]): {
   title: string;
   points: EquityPoint[];
 } {
@@ -118,7 +120,7 @@ export function benchmarkCurve(details: readonly BacktestDetail[]): {
 
 export interface AlphaRow {
   strategy: BookStrategy;
-  run: BacktestDetail;
+  run: BookRun;
   /** Annualised, as a ratio. */
   alpha: number;
   beta: number;
@@ -144,7 +146,7 @@ export function regressOnBenchmark(
 
 export function alphaRows(
   strategies: readonly BookStrategy[],
-  runs: ReadonlyMap<string, BacktestDetail>,
+  runs: ReadonlyMap<string, BookRun>,
   period: DashboardPeriod,
 ): AlphaRow[] {
   const rows: AlphaRow[] = [];
@@ -171,7 +173,7 @@ export function alphaRows(
 /** Pairwise correlation of daily returns, in the strategies' order. */
 export function returnCorrelation(
   strategies: readonly BookStrategy[],
-  runs: ReadonlyMap<string, BacktestDetail>,
+  runs: ReadonlyMap<string, BookRun>,
   period: DashboardPeriod,
 ): { labels: string[]; matrix: number[][]; averagePairwise: number } {
   const present = strategies.filter((strategy) => runs.has(strategy.id));

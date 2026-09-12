@@ -12,6 +12,8 @@
  *   log.info('request finished', { status: 200, ms: 42 });
  */
 
+import { sanitiseLogData } from '@/lib/log-data';
+
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 export interface LogEntry {
@@ -21,6 +23,8 @@ export interface LogEntry {
   scope: string;
   message: string;
   data?: unknown;
+  clientId?: string;
+  sequence?: number;
 }
 
 const SEVERITY: Record<LogLevel, number> = { debug: 10, info: 20, warn: 30, error: 40 };
@@ -42,73 +46,82 @@ const threshold: LogLevel = import.meta.env.DEV ? 'debug' : 'warn';
 
 const pending: LogEntry[] = [];
 let flushHandle: number | null = null;
+let flushing = false;
+let deliveryFailures = 0;
+let sequence = 0;
+const clientId = crypto.randomUUID();
+const MAX_PENDING = 500;
+// Small batches remain below fetch keepalive's 64 KiB limit, even with UTF-8.
+const MAX_BATCH_BYTES = 48 * 1024;
+const terminalEnabled = import.meta.env.DEV && import.meta.env.MODE !== 'test';
 
 /**
  * Batched rather than one request per line. A page load emits dozens of
  * entries, and a fetch each would both flood the network panel and reorder
  * them — the queue keeps them in the order they were written.
  */
-function scheduleFlush(): void {
+function scheduleFlush(delay = 200): void {
   if (flushHandle !== null) return;
   flushHandle = window.setTimeout(() => {
     flushHandle = null;
     void flush();
-  }, 200);
+  }, delay);
 }
 
 async function flush(): Promise<void> {
-  if (pending.length === 0) return;
-  const batch = pending.splice(0, pending.length);
+  if (flushing || pending.length === 0) return;
+  flushing = true;
+  const batch: LogEntry[] = [];
+  let bytes = 2;
+  while (pending.length > 0) {
+    const entry = pending[0]!;
+    const size = new TextEncoder().encode(JSON.stringify(entry)).length + 1;
+    if (batch.length > 0 && bytes + size > MAX_BATCH_BYTES) break;
+    batch.push(pending.shift()!);
+    bytes += size;
+  }
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 5000);
 
   try {
-    await fetch(TERMINAL_SINK, {
+    const response = await fetch(TERMINAL_SINK, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(batch),
       // Survives a navigation that happens mid-flush.
-      keepalive: true,
+      keepalive: bytes <= MAX_BATCH_BYTES,
+      signal: controller.signal,
     });
-  } catch {
-    // Terminal logging is best-effort. Never let it surface as an app error,
-    // and never log the failure — that would queue another entry and recurse.
+    // A SPA fallback can answer 200 without receiving any logs.
+    if (response.status !== 204 || response.headers.get('X-Client-Log-Sink') !== 'ready') {
+      throw new Error(
+        `Log receiver did not acknowledge delivery (HTTP ${String(response.status)})`,
+      );
+    }
+    if (deliveryFailures > 0)
+      console.info('[logging] Terminal delivery restored; queued logs delivered.');
+    deliveryFailures = 0;
+  } catch (error) {
+    deliveryFailures += 1;
+    pending.unshift(...batch);
+    if (pending.length > MAX_PENDING) {
+      const dropped = pending.splice(MAX_PENDING).length;
+      console.warn(
+        `[logging] Queue full; ${String(dropped)} new entries remain in the browser console only.`,
+      );
+    }
+    // Direct console output avoids recursively sending transport failures.
+    if (deliveryFailures === 1) {
+      console.warn(
+        '[logging] Terminal delivery failed; retaining logs and retrying. Check the Vite server.',
+        error,
+      );
+    }
+  } finally {
+    window.clearTimeout(timeout);
+    flushing = false;
+    if (pending.length > 0) scheduleFlush(Math.min(1000 * 2 ** deliveryFailures, 10_000));
   }
-}
-
-/**
- * Structured-cloneable copy of `data`.
- *
- * `JSON.stringify` throws on cycles and silently drops `Error` (its fields are
- * non-enumerable), which would lose exactly the detail worth logging.
- */
-function serialise(value: unknown, depth = 0): unknown {
-  if (value instanceof Error) {
-    return {
-      name: value.name,
-      message: value.message,
-      ...(import.meta.env.DEV ? { stack: value.stack } : {}),
-      // ApiError carries status/code; pick them up without importing it here
-      // (api-client imports this module, so the reverse would be a cycle).
-      ...Object.fromEntries(
-        Object.entries(value).filter(([, v]) => typeof v !== 'function' && v !== undefined),
-      ),
-    };
-  }
-
-  if (value === null || typeof value !== 'object') return value;
-  if (depth >= 4) return '[depth limit]';
-
-  if (Array.isArray(value)) {
-    // Long arrays are noise in a terminal; the length is the useful part.
-    if (value.length > 20) return `[array of ${String(value.length)}]`;
-    return value.map((item) => serialise(item, depth + 1));
-  }
-
-  const out: Record<string, unknown> = {};
-  for (const [key, item] of Object.entries(value)) {
-    if (typeof item === 'function') continue;
-    out[key] = serialise(item, depth + 1);
-  }
-  return out;
 }
 
 /* ------------------------------------------------------------------ *
@@ -130,13 +143,23 @@ function emit(level: LogLevel, scope: string, message: string, data?: unknown): 
     level,
     scope,
     message,
-    ...(data === undefined ? {} : { data: serialise(data) }),
+    clientId,
+    sequence: ++sequence,
+    ...(data === undefined ? {} : { data: sanitiseLogData(data) }),
   };
+  const encodedData = entry.data === undefined ? '' : JSON.stringify(entry.data);
+  if (encodedData && new TextEncoder().encode(encodedData).length > 32 * 1024) {
+    entry.data = {
+      truncated: true,
+      preview: encodedData.slice(0, 6000),
+      originalCharacters: encodedData.length,
+    };
+  }
 
   // Called through `console` rather than pulled into a local: detaching a
   // console method loses its `this` binding in some engines.
   const args: unknown[] = [`%c[${scope}]%c ${message}`, CONSOLE_STYLE[level], ''];
-  if (data !== undefined) args.push(data);
+  if (entry.data !== undefined) args.push(entry.data);
 
   switch (level) {
     case 'debug':
@@ -153,7 +176,11 @@ function emit(level: LogLevel, scope: string, message: string, data?: unknown): 
       break;
   }
 
-  if (import.meta.env.DEV) {
+  if (terminalEnabled) {
+    if (pending.length >= MAX_PENDING) {
+      console.warn('[logging] Terminal queue full; this entry remains in the browser console.');
+      return;
+    }
     pending.push(entry);
     scheduleFlush();
   }
@@ -187,10 +214,16 @@ export function createLogger(scope: string): Logger {
 }
 
 /* A tab close would otherwise drop whatever is still queued. */
-if (import.meta.env.DEV && typeof window !== 'undefined') {
+if (terminalEnabled && typeof window !== 'undefined') {
   window.addEventListener('pagehide', () => {
     if (pending.length === 0) return;
-    const batch = pending.splice(0, pending.length);
-    navigator.sendBeacon(TERMINAL_SINK, JSON.stringify(batch));
+    // Do not remove entries unless the browser accepts the beacon.
+    const body = JSON.stringify(pending);
+    if (
+      new TextEncoder().encode(body).length <= MAX_BATCH_BYTES &&
+      navigator.sendBeacon(TERMINAL_SINK, body)
+    ) {
+      pending.length = 0;
+    }
   });
 }

@@ -46,13 +46,17 @@ npm run dev
 The app runs at http://localhost:5173.
 
 Requests to `/api/*` are proxied to `DEV_API_PROXY_TARGET` (default
-`http://localhost:8000`), so the browser sees a same-origin URL and there is no
+`http://127.0.0.1:8000`), so the browser sees a same-origin URL and there is no
 CORS setup in development. Point that variable at your API.
 
-**No backend yet?** Nothing to configure — with nothing listening on that port,
-backtest views fall back to the committed dataset at `mock-data/backtests.json`
-and every chart still renders. Set `VITE_USE_FIXTURES=true` to force demo data
-for the `/live` views too. See [Demo data and fixtures](#demo-data-and-fixtures)
+Sign-in starts dashboard data requests while the lazy page and chart modules
+load. The page reads the same query cache. A full request timeout is not retried
+automatically; the error state offers a manual retry instead of another minute
+of loading. HTTP 5xx responses still receive bounded retries.
+
+**No backend yet?** Set `VITE_USE_FIXTURES=true` to use the committed dataset at
+`mock-data/backtests.json` and demo data for the `/live` views too. In real mode,
+backtest and strategy API failures remain errors. See [Demo data and fixtures](#demo-data-and-fixtures)
 — a stopgap, not the plan.
 
 ## Routes
@@ -60,16 +64,17 @@ for the `/live` views too. See [Demo data and fixtures](#demo-data-and-fixtures)
 | Path                        | Page                                                             |
 | --------------------------- | ---------------------------------------------------------------- |
 | `/`                         | Backtest dashboard                                               |
-| `/library`                  | Strategies and their runs side by side; selection and filters in the URL |
+| `/backtests`                | All saved runs, strategy filters, and run/create actions          |
+| `/library`                  | Redirect to Backtests, preserving selection and filters           |
 | `/compare?runs=a,b`         | Two to four runs: metrics with A − B, parameter diff, overlaid charts |
-| `/backtests/:backtestId`    | Run detail — performance vs. benchmark, drawdown, tearsheet      |
+| `/backtests/:backtestId`    | Run results, trade ledger, no-trade diagnostics, and tearsheet     |
 | `/live`                     | MQS Master overview — balance, P&L, server status                |
 | `/live/portfolios`          | Every sleeve the live engine runs                                |
 | `/live/portfolios/:id`      | Summary, equity, drawdowns, risk, positions, correlations, fills |
 | `/live/log`                 | Tail of the engine's Python log, filtered by level               |
 | `/live/settings`            | Theme and build info                                             |
 
-Build links through `paths` in `src/app/router/paths.ts` — never a string
+Build links through `paths` in `src/app/paths.ts` — never a string
 literal — so a route rename is one edit.
 
 ## Scripts
@@ -181,21 +186,45 @@ readable message rather than surfacing later as `undefined`.
 with `z.coerce.boolean()`, which treats every non-empty string as true and would
 make `VITE_USE_FIXTURES=false` silently mean *true*.
 
+## Terminal logging
+
+Run `npm run dev` and look for `[server:logging] terminal logging ready`. This
+prints the server PID, API proxy target, browser log receiver and the absolute
+path to `logs/dev.log`. Logs append to that ignored file and Vite keeps terminal
+history visible across reloads. Timestamps include the date and use UTC.
+
+Browser entries use `[client:...]`; API traffic observed by Vite uses
+`[server:api]`. Same-origin requests share a `requestId` across both. Requests
+log their parameters, timeout, completion status and duration, with a waiting
+update every five seconds. Query logs include the full key (including custom
+tickers), retries, failures and cache updates. Coverage logs identify the data
+source, validation, ticker date ranges and missing data. Run logs show form
+actions, validation failures, submission acceptance and polled run progress.
+
+Browser log delivery is acknowledged and retried; a failed receiver produces a
+browser-console warning rather than silently discarding entries. Credentials
+are redacted and request/response bodies are not dumped. Development logging
+does not expose the backend's internal database or worker steps; those require
+the API/worker process logs. `npm run preview` serves a production build and
+does not forward browser diagnostics to this development receiver.
+
+To follow the saved log in another PowerShell terminal:
+
+```powershell
+Get-Content .\logs\dev.log -Tail 100 -Wait
+```
+
 ## Demo data and fixtures
 
 Backtests read from **`mock-data/backtests.json`**, a dataset committed at the
 repo root — 6 runs, ~1,400 equity-curve points, ~1,250 trades. Every chart
-renders from it, so a fresh clone is fully functional with no backend running.
+renders from it when `VITE_USE_FIXTURES=true`, with no backend required.
 
-It is served in two situations:
-
-- **The backend is unreachable.** In dev only, a request that reaches no server
-  (status 0) or gets a gateway answer (502/503/504 — what the Vite proxy returns
-  when nothing is listening on `DEV_API_PROXY_TARGET`) falls back to the dataset
-  and logs a warning naming the file. A 4xx or a 5xx from a backend that *is*
-  running still surfaces as an error: quietly swapping in demo data would hide a
-  real bug behind plausible numbers. Production never falls back.
-- **`VITE_USE_FIXTURES=true`.** Forces demo data regardless of the backend.
+Backtests and strategies serve demo data only in that explicit fixture mode.
+Network failures, timeouts and gateway errors remain errors in real mode,
+including during development. Failed polling stops after the query's bounded
+retries; a manual retry or a new subscription can fetch again. Static fixture
+runs do not poll, even when their sample status is queued or running.
 
 To change the data, edit the blueprints in
 `src/features/backtests/mock-source.ts` and regenerate:
@@ -208,7 +237,7 @@ The generator runs through `vite-node`, so it resolves the same `@/` aliases as
 the app and shares `@/utils/metrics` rather than reimplementing it. Output is
 committed on purpose — a clone should render charts with no build step. It loads
 through a dynamic import pinned to its own bundle chunk, so the ~570 KB never
-reaches anyone who does not hit one of the two paths above.
+reaches anyone who does not enable fixture mode.
 
 With `VITE_USE_FIXTURES=true`, **both** products render demo data
 shaped like the real payloads — including the actual portfolio IDs, ticker sets

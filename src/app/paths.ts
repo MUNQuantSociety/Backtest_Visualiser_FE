@@ -1,8 +1,9 @@
 export const paths = {
   dashboard: '/',
-  /** Strategies and their runs, one page. Replaced /strategies and /backtests. */
-  library: '/library',
-  libraryStrategy: (id: string) => `/library?strategy=${encodeURIComponent(id)}`,
+  /** Strategies and their runs share the Backtests hub. */
+  backtests: '/backtests',
+  library: '/backtests',
+  libraryStrategy: (id: string) => `/backtests?strategy=${encodeURIComponent(id)}`,
   backtestDetail: (id: string) => `/backtests/${id}`,
   compare: '/compare',
   /* MQS Master — the live trading system. */

@@ -1,9 +1,10 @@
 import { Lock, LogIn, Mail } from 'lucide-react';
-import './styles.css';
 import { Navigate } from 'react-router';
 
 import { paths } from '@/app/paths';
 import { useAuthCtx } from '@/app/providers/auth-provider.context';
+
+import './styles.css';
 
 /**
  * Discord's wordless mark, inline.
@@ -23,31 +24,15 @@ function DiscordIcon() {
   );
 }
 
-// interface LoginCredentials {
-//   email: string;
-//   password: string;
-// }
-
 export default function LoginPage() {
   const { authState, login } = useAuthCtx();
   if (authState.isAuthenticated) {
-    return <Navigate to={paths.dashboard} />;
+    return <Navigate to={paths.dashboard} replace />;
   }
   function handleLogin(event: React.SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
-    login('access_token');
-
-    // const formData = new FormData(event.currentTarget);
-    //
-    // const credentials: LoginCredentials = {
-    //   email: String(formData.get("email") ?? ""),
-    //   password: String(formData.get("password") ?? ""),
-    // };
-
-    // TODO: Connect to the login API.
-    // if (ENV.DEBUG) {
-    //   console.log("Login credentials:", credentials);
-    // }
+    // TODO: Replace local sign-in with a validated backend session.
+    login();
   }
 
   function registerWithDiscord() {

@@ -1,4 +1,4 @@
-import { QueryClient, type Query } from '@tanstack/react-query';
+import { QueryClient, type Mutation, type Query } from '@tanstack/react-query';
 
 import { ApiError } from '@/lib/api-client';
 import { createLogger } from '@/lib/logger';
@@ -26,12 +26,13 @@ export function createQueryClient(): QueryClient {
         gcTime: 30 * 60 * 1000,
         refetchOnWindowFocus: false,
         retry: (failureCount, error) => {
+          // A full timeout already spent the request budget. Repeating it
+          // twice kept sign-in loading for ~93 seconds during an outage.
+          if (error instanceof ApiError && ['ECONNABORTED', 'ETIMEDOUT'].includes(error.code)) {
+            return false;
+          }
           const willRetry =
             error instanceof ApiError && !error.isRetryable ? false : failureCount < 2;
-          log.debug(willRetry ? 'retrying' : 'giving up', {
-            attempt: failureCount + 1,
-            error: error.message,
-          });
           return willRetry;
         },
         retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 15_000),
@@ -41,6 +42,7 @@ export function createQueryClient(): QueryClient {
       },
     },
   });
+  const queryStarts = new Map<string, number>();
 
   /*
    * Cache subscriptions rather than per-hook callbacks: this covers every
@@ -50,23 +52,60 @@ export function createQueryClient(): QueryClient {
    * a skeleton and nothing says why.
    */
   client.getQueryCache().subscribe((event) => {
+    if (event.type === 'removed') queryStarts.delete(event.query.queryHash);
     if (event.type !== 'updated') return;
 
     const query = event.query as Query;
     const name = describeKey(query.queryKey);
+    const context = {
+      queryKey: query.queryKey,
+      ms: queryStarts.has(query.queryHash)
+        ? Math.round(performance.now() - queryStarts.get(query.queryHash)!)
+        : undefined,
+    };
 
     switch (event.action.type) {
       case 'fetch':
-        log.debug(`fetching ${name}`);
+        queryStarts.set(query.queryHash, performance.now());
+        log.info(`query started: ${name}`, {
+          queryKey: query.queryKey,
+          hasCachedData: query.state.data !== undefined,
+        });
         break;
       case 'success':
-        log.info(`resolved ${name}`);
+        log.info(`query resolved: ${name}`, {
+          ...context,
+          manualCacheUpdate: Boolean(event.action.manual),
+        });
+        queryStarts.delete(query.queryHash);
         break;
       case 'error':
-        log.error(`failed ${name}`, { error: query.state.error?.message });
+        log.error(`query failed: ${name}`, {
+          ...context,
+          attempts: query.state.fetchFailureCount,
+          error: query.state.error,
+        });
+        queryStarts.delete(query.queryHash);
+        break;
+      case 'failed':
+        log.warn(`query retry scheduled: ${name}`, {
+          ...context,
+          failedAttempts: event.action.failureCount,
+          nextAttempt: event.action.failureCount + 1,
+          error: event.action.error as unknown,
+        });
+        break;
+      case 'invalidate':
+        log.debug(`query invalidated: ${name}`, context);
+        break;
+      case 'continue':
+        log.info(`query resumed: ${name}`, context);
         break;
       case 'pause':
-        log.warn(`paused ${name}`, { reason: 'offline — request held until reconnect' });
+        log.warn(`query paused: ${name}`, {
+          ...context,
+          reason: 'request held until reconnect or focus permits retry',
+        });
         break;
       default:
         break;
@@ -75,16 +114,36 @@ export function createQueryClient(): QueryClient {
 
   client.getMutationCache().subscribe((event) => {
     if (event.type !== 'updated') return;
-    const status = event.mutation.state.status;
-    if (status === 'success') {
-      log.info('mutation succeeded');
-    } else if (status === 'error') {
-      // Mutation errors are typed `unknown` by default, so narrow rather than
-      // assuming an Error and reading `.message` off `any`.
-      const error: unknown = event.mutation.state.error;
-      log.error('mutation failed', {
-        error: error instanceof Error ? error.message : String(error),
-      });
+    const mutation = event.mutation as Mutation;
+    const context = {
+      mutationId: mutation.mutationId,
+      mutationKey: mutation.options.mutationKey,
+      operation: mutation.options.mutationFn?.name,
+      ms: mutation.state.submittedAt ? Date.now() - mutation.state.submittedAt : 0,
+    };
+    switch (event.action.type) {
+      case 'pending':
+        log.info('mutation started', context);
+        break;
+      case 'success':
+        log.info('mutation succeeded', context);
+        break;
+      case 'error':
+        log.error('mutation failed', { ...context, error: mutation.state.error });
+        break;
+      case 'failed':
+        log.warn('mutation retry scheduled', {
+          ...context,
+          error: event.action.error as unknown,
+          failedAttempts: event.action.failureCount,
+        });
+        break;
+      case 'pause':
+        log.warn('mutation paused', context);
+        break;
+      case 'continue':
+        log.info('mutation resumed', context);
+        break;
     }
   });
 

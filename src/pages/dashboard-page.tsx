@@ -7,21 +7,21 @@ import { Sparkline } from '@/components/charts/sparkline';
 import { DemoBadge } from '@/components/common/demo-badge';
 import { PageHeader } from '@/components/common/page-header';
 import { StatTile } from '@/components/common/stat-tile';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Segmented } from '@/components/ui/segmented';
 import {
   alphaRows,
   benchmarkCurve,
-  bestRunByStrategy,
   bookCurve,
+  dashboardEndDate,
   RecentRunsTable,
   returnCorrelation,
   RunBacktestDialog,
-  sliceToPeriod,
   summariseBook,
   universeRows,
-  useBacktestDetails,
-  useBacktests,
+  useBacktestEquities,
+  useAllBacktests,
   type BookStrategy,
 } from '@/features/backtests';
 import {
@@ -53,8 +53,6 @@ const NEWS_SCOPES = [
   { value: 'all', label: 'All' },
 ] as const satisfies readonly { value: NewsScope; label: string }[];
 
-const ALPHA_COLUMNS = 'minmax(0,1fr) 54px 36px 44px 54px 84px';
-
 const toneClass = {
   profit: 'text-[var(--profit)]',
   loss: 'text-[var(--loss)]',
@@ -62,16 +60,9 @@ const toneClass = {
 } as const;
 
 /**
- * The book: every active strategy's best run, equal-weight, against SPY.
- *
- * The earlier dashboard answered "how did the last few runs go". This answers
- * the question a book has — are these one bet or five, what does the whole
- * earn over doing nothing, and what is it costing in drawdown — which is what
- * anyone allocating across strategies needs before the run-level pages.
- *
- * Every number is derived on the client from the list payload plus one detail
- * per active strategy, so the page never fans out into a request per run. The
- * maths lives in `features/backtests/book.ts`, where it can be tested.
+ * Every saved run remains a separate comparison series, including reruns of
+ * the same strategy and history whose strategy is no longer in the catalogue.
+ * Curves share the selected calendar window; aggregate metrics use shared dates.
  */
 export default function DashboardPage() {
   const period = useDashboardPeriod();
@@ -79,7 +70,7 @@ export default function DashboardPage() {
   const palette = useChartPalette();
 
   const strategiesQuery = useStrategies();
-  const runsQuery = useBacktests();
+  const runsQuery = useAllBacktests();
   const runs = useMemo(() => runsQuery.data?.items ?? [], [runsQuery.data]);
 
   const strategies = useMemo<BookStrategy[]>(
@@ -96,38 +87,48 @@ export default function DashboardPage() {
     [strategiesQuery.data],
   );
 
-  const bestRuns = useMemo(() => bestRunByStrategy(runs), [runs]);
-  const bestIds = useMemo(
-    () => strategies.flatMap((strategy) => bestRuns.get(strategy.id)?.id ?? []),
-    [strategies, bestRuns],
+  const selectedRuns = useMemo(() => runs.filter((run) => run.status === 'completed'), [runs]);
+  const runIds = selectedRuns.map((run) => run.id);
+  const endDate = dashboardEndDate(selectedRuns) ?? '';
+  const detailsQuery = useBacktestEquities(endDate ? runIds : [], { period, endDate });
+
+  const runSeries = useMemo<BookStrategy[]>(
+    () =>
+      selectedRuns.map((run, index) => ({
+        id: run.id,
+        name: run.name,
+        shortName: run.name,
+        universe: run.symbol === 'MULTI' ? [] : [run.symbol],
+        colorIndex: index,
+      })),
+    [selectedRuns],
   );
-  const detailsQuery = useBacktestDetails(bestIds);
+  const runIndex = new Map(runs.map((run) => [run.id, run]));
 
   const model = useMemo(() => {
-    const byStrategy = new Map(
-      detailsQuery.data.map((detail) => [detail.strategyId, detail] as const),
+    const byRun = new Map(
+      detailsQuery.data
+        .filter((detail) => detail.equityCurve.length > 0)
+        .map((detail) => [detail.id, detail] as const),
     );
-    const lines: ComparisonSeries[] = strategies.flatMap((strategy) => {
-      const detail = byStrategy.get(strategy.id);
+    const lines: ComparisonSeries[] = runSeries.flatMap((run) => {
+      const detail = byRun.get(run.id);
       return detail
         ? [
             {
-              id: strategy.id,
-              title: strategy.shortName,
-              points: sliceToPeriod(detail.equityCurve, period),
-              colorIndex: strategy.colorIndex,
+              id: run.id,
+              title: run.name,
+              points: detail.equityCurve,
+              colorIndex: run.colorIndex,
             },
           ]
         : [];
     });
-    const windows = detailsQuery.data.map((detail) => ({
-      ...detail,
-      equityCurve: [...sliceToPeriod(detail.equityCurve, period)],
-    }));
     const book = bookCurve(lines.map((line) => line.points));
-    const benchmark = benchmarkCurve(windows);
-    const rows = alphaRows(strategies, byStrategy, period);
-    const corr = returnCorrelation(strategies, byStrategy, period);
+    const benchmark = benchmarkCurve([...byRun.values()]);
+    // The backend has already applied the shared calendar window.
+    const rows = alphaRows(runSeries, byRun, 'max');
+    const corr = returnCorrelation(runSeries, byRun, 'max');
     const summary = summariseBook(
       book,
       benchmark.points,
@@ -136,8 +137,16 @@ export default function DashboardPage() {
       strategies,
       runs,
     );
-    return { lines, benchmark, rows, corr, summary, universe: universeRows(strategies, runs) };
-  }, [detailsQuery.data, strategies, period, runs]);
+    return {
+      lines,
+      benchmark,
+      rows,
+      corr,
+      summary,
+      hasBook: book.length > 2,
+      universe: universeRows(strategies, runs),
+    };
+  }, [detailsQuery.data, strategies, runSeries, runs]);
 
   const universeTickers = useMemo(() => model.universe.map((row) => row.ticker), [model.universe]);
   const indicators = useIndicators(universeTickers);
@@ -150,12 +159,17 @@ export default function DashboardPage() {
     return rows.reduce((sum, row) => sum + row.sentiment7d, 0) / rows.length;
   }, [indicators.data]);
 
-  const loading = strategiesQuery.isPending || runsQuery.isPending;
-  const loadingBook = loading || (bestIds.length > 0 && detailsQuery.isPending);
+  const strategiesUnavailable = strategiesQuery.isError && strategiesQuery.data === undefined;
+  const runsUnavailable = runsQuery.isError && runsQuery.data === undefined;
+  const bookUnavailable = runsUnavailable || Boolean(detailsQuery.error);
+  const loadingBook =
+    !bookUnavailable && (runsQuery.isPending || (runIds.length > 0 && detailsQuery.isPending));
   const { summary } = model;
   const periodLabel = PERIODS.find((option) => option.value === period)?.label ?? '';
-  const first = model.lines[0]?.points[0]?.date;
-  const last = model.lines[0]?.points.at(-1)?.date;
+  const last = model.lines
+    .flatMap((line) => line.points.at(-1)?.date ?? [])
+    .sort()
+    .at(-1);
   const strategyIndex = new Map(strategies.map((strategy) => [strategy.id, strategy.colorIndex]));
   const widestUniverse = model.universe[0]?.strategyIndexes.length ?? 1;
 
@@ -163,11 +177,6 @@ export default function DashboardPage() {
     <>
       <PageHeader
         title="Dashboard"
-        description={
-          strategies.length > 0 && first && last
-            ? `${String(strategies.length)} active strategies as an equal-weight book, against ${model.benchmark.title} buy & hold. ${first} → ${last}.`
-            : 'Every active strategy as an equal-weight book, against buy & hold.'
-        }
         actions={
           <>
             <Segmented
@@ -181,123 +190,236 @@ export default function DashboardPage() {
         }
       />
 
+      {[
+        { label: 'strategies', query: strategiesQuery },
+        { label: 'run history', query: runsQuery },
+      ].map(({ label, query }) =>
+        query.error ? (
+          <div
+            key={label}
+            role="alert"
+            className="flex items-center gap-3 text-sm text-destructive"
+          >
+            <span>
+              Could not {query.data === undefined ? 'load' : 'refresh'} {label}:{' '}
+              {query.error.message}
+              {query.data !== undefined ? ' Showing previously loaded data.' : ''}
+            </span>
+            <Button
+              variant="outline"
+              disabled={query.isFetching}
+              onClick={() => {
+                void query.refetch();
+              }}
+            >
+              Retry {label}
+            </Button>
+          </div>
+        ) : null,
+      )}
+
+      {detailsQuery.error ? (
+        <div role="alert" className="flex items-center gap-3 text-sm text-destructive">
+          <span>
+            Could not load {periodLabel} history: {detailsQuery.error.message}
+          </span>
+          <Button
+            variant="outline"
+            disabled={detailsQuery.isFetching}
+            onClick={() => {
+              void detailsQuery.refetch();
+            }}
+          >
+            Try again
+          </Button>
+        </div>
+      ) : null}
+
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <StatTile
           label="Active strategies"
-          value={formatNumber(strategies.length, 0)}
-          hint={`${String(runs.length)} runs · ${String(summary.runsLast30d)} in 30d`}
-          isLoading={loading}
+          value={strategiesQuery.data === undefined ? '—' : formatNumber(strategies.length, 0)}
+          hint={
+            runsQuery.data !== undefined
+              ? `${String(runs.length)} runs · ${String(summary.runsLast30d)} in 30d`
+              : runsUnavailable
+                ? 'Run history unavailable'
+                : 'Loading run history…'
+          }
+          isLoading={strategiesQuery.isPending}
           size="dense"
         />
         <StatTile
           label="Book Sharpe"
-          value={formatNumber(summary.sharpe)}
+          value={!bookUnavailable && model.hasBook ? formatNumber(summary.sharpe) : '—'}
           tone={toneFromValue(summary.sharpe)}
-          hint={`Equal-weight, ${periodLabel}`}
+          hint={`Equal-weight runs, ${periodLabel}`}
           isLoading={loadingBook}
           size="dense"
         />
         <StatTile
           label={`Alpha vs ${model.benchmark.title}`}
-          value={formatSigned(summary.alpha, (n) => formatPercent(n, 1))}
+          value={
+            !bookUnavailable && model.hasBook
+              ? formatSigned(summary.alpha, (n) => formatPercent(n, 1))
+              : '—'
+          }
           tone={toneFromValue(summary.alpha)}
-          hint={`β ${formatNumber(summary.beta)} · annualised`}
+          hint={
+            model.hasBook && !bookUnavailable
+              ? `β ${formatNumber(summary.beta)} · annualised`
+              : 'Annualised'
+          }
           isLoading={loadingBook}
           size="dense"
         />
         <StatTile
           label="Book max drawdown"
-          value={formatPercent(summary.maxDrawdown, 1)}
+          value={!bookUnavailable && model.hasBook ? formatPercent(summary.maxDrawdown, 1) : '—'}
           tone={summary.maxDrawdown < 0 ? 'loss' : 'neutral'}
-          hint={`vs ${formatPercent(summary.worstSingleDrawdown, 0)} worst single`}
+          hint={
+            model.hasBook && !bookUnavailable
+              ? `vs ${formatPercent(summary.worstSingleDrawdown, 0)} worst single`
+              : undefined
+          }
           isLoading={loadingBook}
           size="dense"
         />
         <StatTile
           label="Avg pairwise ρ"
-          value={formatNumber(summary.averagePairwise)}
+          value={
+            !bookUnavailable && model.hasBook && model.lines.length > 1
+              ? formatNumber(summary.averagePairwise)
+              : '—'
+          }
           hint="Lower is more diversified"
           isLoading={loadingBook}
           size="dense"
         />
         <StatTile
           label="Data through"
-          value={summary.dataThrough ?? '—'}
-          hint={`Coverage ${String(summary.coverageTickers)} tickers`}
-          isLoading={loading}
+          value={bookUnavailable ? '—' : (last ?? '—')}
+          hint={
+            strategiesQuery.data !== undefined
+              ? `Coverage ${String(summary.coverageTickers)} tickers`
+              : 'Universe unavailable'
+          }
+          isLoading={loadingBook}
           size="dense"
         />
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[680px_minmax(0,1fr)]">
+      <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
         <ChartContainer
-          title={`Strategies vs. ${model.benchmark.title} — rebased to 100`}
-          description="Best runs per strategy. Vertical distance is the difference in return; the dashed line is what doing nothing earned."
+          title={`All runs vs. ${model.benchmark.title} — rebased to 100`}
           height={300}
           isLoading={loadingBook}
         >
-          <ComparisonChart series={model.lines} benchmark={model.benchmark} />
+          {bookUnavailable ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              Book history unavailable.
+            </p>
+          ) : (
+            <ComparisonChart
+              series={model.lines}
+              benchmark={model.benchmark}
+              showSeriesLabels={false}
+            />
+          )}
         </ChartContainer>
 
-        <Card>
+        <Card className="flex h-[380px] min-w-0 flex-col">
           <CardHeader className="pb-3">
-            <CardTitle className="text-[15px]">Alpha table</CardTitle>
+            <CardTitle className="text-[15px]">Run alpha table</CardTitle>
             <CardDescription>
               Against {model.benchmark.title}. Sparkline is rolling 63d Sharpe over the last year;
               the tick is zero.
             </CardDescription>
           </CardHeader>
-          <CardContent className="overflow-x-auto">
-            <div
-              className="tabular grid gap-2 border-b pb-2 text-[10px] font-medium tracking-[0.06em] text-muted-foreground uppercase"
-              style={{ gridTemplateColumns: ALPHA_COLUMNS }}
-            >
-              <span>Strategy</span>
-              {/* `normal-case`: the header is uppercase, and uppercasing α and
-                  β turns them into Α and Β, which read as Latin A and B. */}
-              <span className="text-right normal-case">α</span>
-              <span className="text-right normal-case">β</span>
-              <span className="text-right">Sharpe</span>
-              <span className="text-right">Max DD</span>
-              <span>63d Sharpe</span>
-            </div>
-            {model.rows.map((row) => (
-              <div
-                key={row.strategy.id}
-                className="grid items-center gap-2 border-b py-2 text-xs last:border-b-0"
-                style={{ gridTemplateColumns: ALPHA_COLUMNS }}
-              >
-                <div className="flex min-w-0 items-center gap-2">
-                  <span
-                    className="size-2 shrink-0 rounded-[2px]"
-                    style={{ background: seriesColor(palette, row.strategy.colorIndex) }}
-                    aria-hidden
-                  />
-                  <div className="min-w-0">
-                    <p className="truncate font-medium">{row.strategy.name}</p>
-                    <p className="tabular truncate text-[10px] text-muted-foreground">
-                      {row.strategy.universe.join(' ')}
-                    </p>
-                  </div>
-                </div>
-                <span className={cn('tabular text-right', toneClass[toneFromValue(row.alpha)])}>
-                  {formatSigned(row.alpha, (n) => formatPercent(n, 1))}
-                </span>
-                <span className="tabular text-right">{formatNumber(row.beta)}</span>
-                <span className="tabular text-right">{formatNumber(row.sharpe)}</span>
-                <span className="tabular text-right text-[var(--loss)]">
-                  {formatPercent(row.maxDrawdown, 1)}
-                </span>
-                <Sparkline
-                  values={row.sparkline}
-                  zeroTick={0}
-                  stroke={seriesColor(palette, row.strategy.colorIndex)}
-                />
-              </div>
-            ))}
+          <CardContent
+            className="min-h-0 flex-1 [scrollbar-gutter:stable] overflow-auto"
+            tabIndex={0}
+            role="region"
+            aria-label="Scrollable run alpha table"
+          >
+            <table className="w-full text-xs" aria-label="Run alpha metrics">
+              <thead className="tabular sticky top-0 z-10 border-b bg-card text-[10px] font-medium tracking-[0.06em] text-muted-foreground uppercase">
+                <tr className="[&>th]:px-2 [&>th]:pb-2 [&>th]:whitespace-nowrap [&>th:first-child]:pl-0 [&>th:last-child]:pr-0">
+                  <th scope="col" className="text-left">
+                    Run
+                  </th>
+                  <th scope="col" className="text-right normal-case">
+                    α
+                  </th>
+                  <th scope="col" className="text-right normal-case">
+                    β
+                  </th>
+                  <th scope="col" className="text-right">
+                    Sharpe
+                  </th>
+                  <th scope="col" className="text-right">
+                    Max DD
+                  </th>
+                  <th scope="col" className="text-left">
+                    63d Sharpe
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {model.rows.map((row) => (
+                  <tr
+                    key={row.strategy.id}
+                    className="border-b last:border-b-0 [&>td]:px-2 [&>td]:py-2 [&>td]:whitespace-nowrap [&>td:first-child]:pl-0 [&>td:last-child]:pr-0"
+                  >
+                    <td>
+                      <div className="flex min-w-36 items-center gap-2">
+                        <span
+                          className="size-2 shrink-0 rounded-[2px]"
+                          style={{ background: seriesColor(palette, row.strategy.colorIndex) }}
+                          aria-hidden
+                        />
+                        <div className="max-w-64 whitespace-normal">
+                          <Link
+                            to={paths.backtestDetail(row.run.id)}
+                            className="font-medium hover:underline"
+                          >
+                            {row.strategy.name}
+                          </Link>
+                          <p className="tabular text-[10px] text-muted-foreground">
+                            {runIndex.get(row.run.id)?.strategyName} · {row.run.symbol}
+                          </p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className={cn('tabular text-right', toneClass[toneFromValue(row.alpha)])}>
+                      {formatSigned(row.alpha, (n) => formatPercent(n, 1))}
+                    </td>
+                    <td className="tabular text-right">{formatNumber(row.beta)}</td>
+                    <td
+                      className="tabular text-right"
+                      title={Number.isFinite(row.sharpe) ? String(row.sharpe) : undefined}
+                    >
+                      {formatNumber(row.sharpe)}
+                    </td>
+                    <td className="tabular text-right text-[var(--loss)]">
+                      {formatPercent(row.maxDrawdown, 1)}
+                    </td>
+                    <td>
+                      <Sparkline
+                        values={row.sparkline}
+                        zeroTick={0}
+                        stroke={seriesColor(palette, row.strategy.colorIndex)}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
             {!loadingBook && model.rows.length === 0 ? (
               <p className="py-6 text-center text-sm text-muted-foreground">
-                No completed runs for an active strategy yet.
+                {bookUnavailable
+                  ? 'Run metrics unavailable.'
+                  : 'No completed-run observations in this window.'}
               </p>
             ) : null}
           </CardContent>
@@ -338,9 +460,11 @@ export default function DashboardPage() {
                 </span>
               </div>
             ))}
-            {!loading && model.universe.length === 0 ? (
+            {!strategiesQuery.isPending && model.universe.length === 0 ? (
               <p className="py-6 text-center text-sm text-muted-foreground">
-                No active strategy declares a universe.
+                {strategiesUnavailable
+                  ? 'Strategy universe unavailable.'
+                  : 'No active strategy declares a universe.'}
               </p>
             ) : null}
           </CardContent>
@@ -350,22 +474,28 @@ export default function DashboardPage() {
           title="Return vs. drawdown — all runs"
           description="Up and left is better. Dot size is Sharpe; colour is the strategy. Each strategy's best run is labelled; hover for the rest."
           height={380}
-          isLoading={loading}
+          isLoading={runsQuery.isPending}
         >
-          <RiskReturnScatter
-            backtests={runs}
-            colorIndexFor={(run) => strategyIndex.get(run.strategyId)}
-            legend={[
-              ...new Map(
-                runs.flatMap((run) => {
-                  const colorIndex = strategyIndex.get(run.strategyId);
-                  return colorIndex === undefined
-                    ? []
-                    : [[run.strategyId, { label: run.strategyName, colorIndex }] as const];
-                }),
-              ).values(),
-            ]}
-          />
+          {runsUnavailable ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              Run history unavailable.
+            </p>
+          ) : (
+            <RiskReturnScatter
+              backtests={runs}
+              colorIndexFor={(run) => strategyIndex.get(run.strategyId)}
+              legend={[
+                ...new Map(
+                  runs.flatMap((run) => {
+                    const colorIndex = strategyIndex.get(run.strategyId);
+                    return colorIndex === undefined
+                      ? []
+                      : [[run.strategyId, { label: run.strategyName, colorIndex }] as const];
+                  }),
+                ).values(),
+              ]}
+            />
+          )}
         </ChartContainer>
       </div>
 
@@ -381,10 +511,21 @@ export default function DashboardPage() {
                 article-weighted score over 7 days, −1 to +1.
               </CardDescription>
             </div>
-            <SentimentGauge label="Book sentiment" score={bookSentiment} />
+            {indicators.data?.length ? (
+              <SentimentGauge label="Book sentiment" score={bookSentiment} />
+            ) : null}
           </CardHeader>
           <CardContent className="overflow-x-auto">
-            <IndicatorsTable rows={indicators.data ?? []} isLoading={indicators.isPending} />
+            {strategiesUnavailable || indicators.error ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                Universe indicators unavailable.
+              </p>
+            ) : (
+              <IndicatorsTable
+                rows={indicators.data ?? []}
+                isLoading={strategiesQuery.isPending || indicators.isLoading}
+              />
+            )}
           </CardContent>
         </Card>
 
@@ -407,23 +548,38 @@ export default function DashboardPage() {
             />
           </CardHeader>
           <CardContent>
-            <NewsList articles={news.data ?? []} isLoading={news.isPending} />
+            {(newsScope === 'universe' && strategiesUnavailable) || news.error ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">News unavailable.</p>
+            ) : (
+              <NewsList
+                articles={news.data ?? []}
+                isLoading={
+                  (newsScope === 'universe' && strategiesQuery.isPending) || news.isLoading
+                }
+              />
+            )}
           </CardContent>
         </Card>
       </div>
 
       <Card>
         <CardHeader className="flex-row items-start justify-between gap-4 space-y-0 pb-3">
-          <CardTitle className="text-[15px]">Recent runs</CardTitle>
+          <CardTitle className="text-[15px]">All saved runs</CardTitle>
           <Link
-            to={paths.library}
+            to={paths.backtests}
             className="text-xs text-selected-foreground underline-offset-4 hover:underline"
           >
-            All {String(runs.length)} in Library →
+            View all backtests →
           </Link>
         </CardHeader>
         <CardContent className="overflow-x-auto">
-          <RecentRunsTable runs={runs.slice(0, 8)} isLoading={runsQuery.isPending} />
+          {runsUnavailable ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              Run history unavailable. Use Retry run history above to reload it.
+            </p>
+          ) : (
+            <RecentRunsTable runs={runs} isLoading={runsQuery.isPending} />
+          )}
         </CardContent>
       </Card>
     </>

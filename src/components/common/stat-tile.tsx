@@ -42,10 +42,11 @@ export function StatTile({
         ) : (
           <p
             className={cn(
-              'tabular mt-1 font-semibold whitespace-nowrap',
+              'tabular mt-1 min-w-0 font-semibold [overflow-wrap:anywhere] whitespace-normal',
               size === 'dense' ? 'text-xl' : 'text-2xl',
               toneClass[tone],
             )}
+            title={value}
           >
             {value}
           </p>

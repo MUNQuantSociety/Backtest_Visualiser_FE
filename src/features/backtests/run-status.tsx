@@ -1,11 +1,11 @@
-import { CircleX, Loader2, Timer } from 'lucide-react';
+import { CircleX, Info, Loader2, Timer } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 
 import { isInFlight, type BacktestDetail, type BacktestSummary } from './types';
 
 /**
- * What a run that has not produced results yet has to say for itself.
+ * Explains progress, failures and completed runs with no recorded fills.
  *
  * Everything else on the detail page assumes a finished backtest: metrics,
  * curve, trades. For a queued, running or failed run all of those are empty,
@@ -15,6 +15,23 @@ import { isInFlight, type BacktestDetail, type BacktestSummary } from './types';
  * them, which is why a queued run looked identical to a broken one.
  */
 export function RunStatusBanner({ run }: { run: BacktestDetail | BacktestSummary }) {
+  if (run.status === 'completed') {
+    const execution = 'reportMetadata' in run ? run.reportMetadata?.execution : undefined;
+    if (execution?.fillCount !== 0 || !execution.message?.trim()) return null;
+
+    // The backend distinguishes missing signals from unfilled orders and fast
+    // mode, where an empty trade list does not imply the strategy stayed in cash.
+    return (
+      <div role="status" className="flex items-start gap-2.5 rounded-md border p-3">
+        <Info className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
+        <div className="min-w-0 space-y-0.5">
+          <p className="text-sm font-medium">Run completed</p>
+          <p className="text-sm break-words text-muted-foreground">{execution.message}</p>
+        </div>
+      </div>
+    );
+  }
+
   const failed = run.status === 'failed';
 
   if (!failed && !isInFlight(run.status)) return null;

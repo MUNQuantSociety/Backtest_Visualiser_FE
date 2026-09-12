@@ -1,4 +1,4 @@
-import { createBrowserRouter } from 'react-router';
+import { createBrowserRouter, redirect } from 'react-router';
 
 import { RootLayout } from '@/app/root-layout';
 import LoginPage from '@/pages/LoginPage';
@@ -8,7 +8,8 @@ import { paths } from '../paths';
 /** Route patterns as react-router expects them (with `:params`). */
 export const routePatterns = {
   dashboard: '/',
-  backtests: '/backtests',
+  library: '/library',
+  backtests: paths.backtests,
   backtestDetail: '/backtests/:backtestId',
   strategies: '/strategies',
   compare: '/compare',
@@ -33,13 +34,17 @@ export const router = createBrowserRouter([
           return { Component: DashboardPage.default };
         },
       },
-      // {
-      //     path: routePatterns.backtests,
-      //     lazy: async () => {
-      //         const BacktestsPage = await import('@/pages/backtests-page');
-      //         return { Component: BacktestsPage.default };
-      //     },
-      // },
+      {
+        path: routePatterns.backtests,
+        lazy: async () => {
+          const LibraryPage = await import('@/pages/library-page');
+          return { Component: LibraryPage.default };
+        },
+      },
+      {
+        path: routePatterns.library,
+        loader: ({ request }) => redirect(`${paths.backtests}${new URL(request.url).search}`),
+      },
       {
         path: routePatterns.backtestDetail,
         lazy: async () => {

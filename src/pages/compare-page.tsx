@@ -125,13 +125,13 @@ export default function ComparePage() {
         ) : (
           <EmptyState
             title="Nothing to compare yet"
-            description="Add runs here, or tick them in the Library and press Compare."
+            description="Add runs here, or select them in Backtests and press Compare."
             action={
               <Link
-                to={paths.library}
+                to={paths.backtests}
                 className="text-sm text-selected-foreground underline-offset-4 hover:underline"
               >
-                Open the Library →
+                Open Backtests →
               </Link>
             }
           />
@@ -161,8 +161,8 @@ export default function ComparePage() {
       <div className="space-y-1">
         {context.sameStrategy && context.strategyName && strategyId ? (
           <nav aria-label="Breadcrumb" className="tabular text-xs text-muted-foreground">
-            <Link to={paths.library} className="hover:text-foreground">
-              Library
+            <Link to={paths.backtests} className="hover:text-foreground">
+              Backtests
             </Link>
             <span className="mx-1.5">›</span>
             <Link to={paths.libraryStrategy(strategyId)} className="hover:text-foreground">

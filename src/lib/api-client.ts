@@ -6,6 +6,7 @@ import axios, {
 } from 'axios';
 
 import { env } from '@/config/env';
+import { sanitiseLogUrl } from '@/lib/log-data';
 import { createLogger } from '@/lib/logger';
 
 const log = createLogger('api');
@@ -29,6 +30,7 @@ export class ApiError extends Error {
 
   /** 5xx and network blips are worth retrying; 4xx are not. */
   get isRetryable(): boolean {
+    if (this.code === 'ERR_CANCELED') return false;
     return this.status === 0 || this.status === 408 || this.status === 429 || this.status >= 500;
   }
 }
@@ -51,7 +53,11 @@ function toApiError(error: unknown): ApiError {
     if (!error.response) {
       const isTimeout = error.code === 'ECONNABORTED';
       return new ApiError(
-        isTimeout ? 'The request timed out.' : 'Could not reach the server.',
+        isTimeout
+          ? 'The request timed out.'
+          : error.code === 'ERR_CANCELED'
+            ? 'The request was cancelled.'
+            : 'Could not reach the server.',
         0,
         error.code ?? 'NETWORK_ERROR',
       );
@@ -81,15 +87,34 @@ function toApiError(error: unknown): ApiError {
 /** Carries the send timestamp so the response side can report a duration. */
 interface TimedConfig extends InternalAxiosRequestConfig {
   startedAt?: number;
+  requestId?: string;
+  waitingTimer?: ReturnType<typeof setInterval>;
 }
 
 function describe(config: { method?: string | undefined; url?: string | undefined }): string {
-  return `${(config.method ?? 'get').toUpperCase()} ${config.url ?? '(no url)'}`;
+  return `${(config.method ?? 'get').toUpperCase()} ${config.url ? sanitiseLogUrl(config.url) : '(no url)'}`;
 }
 
 function elapsedMs(config: TimedConfig | undefined): number | undefined {
   if (config?.startedAt === undefined) return undefined;
   return Math.round(performance.now() - config.startedAt);
+}
+
+function requestContext(config: TimedConfig | undefined) {
+  const params: unknown = config?.params;
+  return {
+    requestId: config?.requestId,
+    params,
+    timeoutMs: config?.timeout,
+    ms: elapsedMs(config),
+  };
+}
+
+function stopWaiting(config: TimedConfig | undefined) {
+  if (config?.waitingTimer !== undefined) {
+    clearInterval(config.waitingTimer);
+    delete config.waitingTimer;
+  }
 }
 
 function createApiClient(): AxiosInstance {
@@ -103,17 +128,54 @@ function createApiClient(): AxiosInstance {
   });
 
   instance.interceptors.request.use((config) => {
-    (config as TimedConfig).startedAt = performance.now();
-    // `config.params` is typed `any`; widen to `unknown` so it cannot spread.
-    const params: unknown = config.params;
-    log.debug(`→ ${describe(config)}`, params === undefined ? undefined : { params });
+    const timed = config as TimedConfig;
+    timed.startedAt = performance.now();
+    timed.requestId = crypto.randomUUID();
+    // Correlate the same-origin dev proxy without adding cross-origin CORS requirements.
+    const url = new URL(instance.getUri(config), window.location.href);
+    if (env.isDev && env.devUserId) {
+      const backend = new URL(env.apiBaseUrl, window.location.href);
+      const backtestsPath = `${backend.pathname.replace(/\/$/, '')}/backtests`;
+      const strategiesPath = `${backend.pathname.replace(/\/$/, '')}/strategies`;
+      const isStrategyUpload =
+        config.method?.toLowerCase() === 'post' &&
+        (url.pathname === strategiesPath || url.pathname === `${strategiesPath}/upload`);
+      // The explicit local account owns backtests and strategy validation uploads.
+      // Absolute third-party URLs and unrelated endpoints must not receive it.
+      if (
+        url.origin === backend.origin &&
+        (url.pathname === backtestsPath ||
+          url.pathname.startsWith(`${backtestsPath}/`) ||
+          isStrategyUpload)
+      ) {
+        config.headers.set('X-User-Id', env.devUserId);
+      }
+    }
+    if (env.isDev && url.origin === window.location.origin) {
+      config.headers.set('X-Client-Request-Id', timed.requestId);
+    }
+    log.info(`request started: ${describe(config)}`, requestContext(timed));
+    if (env.isDev) {
+      timed.waitingTimer = setInterval(() => {
+        log.warn(`request still waiting: ${describe(config)}`, {
+          ...requestContext(timed),
+          remainingMs: timed.timeout ? Math.max(0, timed.timeout - (elapsedMs(timed) ?? 0)) : null,
+        });
+      }, 5000);
+    }
     return config;
   });
 
   instance.interceptors.response.use(
     (response) => {
-      const ms = elapsedMs(response.config as TimedConfig);
-      log.info(`← ${String(response.status)} ${describe(response.config)}`, { ms });
+      const config = response.config as TimedConfig;
+      const serverRequestId: unknown = response.headers['x-request-id'];
+      stopWaiting(config);
+      log.info(`request completed: ${describe(config)}`, {
+        ...requestContext(config),
+        status: response.status,
+        serverRequestId,
+      });
       return response;
     },
     (error: unknown) => {
@@ -121,13 +183,20 @@ function createApiClient(): AxiosInstance {
       const config =
         error instanceof AxiosError ? (error.config as TimedConfig | undefined) : undefined;
 
-      log.error(`✗ ${config ? describe(config) : 'request failed'}`, {
-        status: apiError.status,
-        code: apiError.code,
-        message: apiError.message,
-        retryable: apiError.isRetryable,
-        ms: elapsedMs(config),
-      });
+      stopWaiting(config);
+      const cancelled = apiError.code === 'ERR_CANCELED';
+      const write = cancelled ? log.info : log.error;
+      write(
+        `request ${cancelled ? 'cancelled' : 'failed'}: ${config ? describe(config) : 'unknown request'}`,
+        {
+          ...requestContext(config),
+          status: apiError.status,
+          code: apiError.code,
+          message: apiError.message,
+          retryable: apiError.isRetryable,
+          details: apiError.details,
+        },
+      );
 
       return Promise.reject(apiError);
     },

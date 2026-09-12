@@ -34,20 +34,23 @@ interface PnlHistogramProps {
  */
 export function PnlHistogram({ trades, binsPerSide = 12 }: PnlHistogramProps) {
   const palette = useChartPalette();
+  const closedTrades = useMemo(() => trades.filter((trade) => trade.exitDate !== null), [trades]);
 
   const bins = useMemo(
     () =>
       histogram(
-        trades.map((trade) => trade.pnl),
+        closedTrades.map((trade) => trade.pnl),
         binsPerSide,
       ).map((bin) => ({ ...bin, midpoint: (bin.from + bin.to) / 2 })),
-    [trades, binsPerSide],
+    [closedTrades, binsPerSide],
   );
 
   if (bins.length === 0) {
     return (
       <p className="flex h-full items-center justify-center text-sm text-muted-foreground">
-        No closed trades to plot.
+        {closedTrades.length > 0
+          ? 'All closed trades broke even. Zero P&L is not included in the win/loss histogram.'
+          : 'No closed trades to plot.'}
       </p>
     );
   }

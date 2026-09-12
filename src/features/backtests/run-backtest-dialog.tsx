@@ -2,8 +2,11 @@ import { Play, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
+import { createLogger } from '@/lib/logger';
 
 import { RunBacktestForm } from './run-backtest-form';
+
+const log = createLogger('backtest-dialog');
 
 /**
  * "Run backtest" as a header action, opening the existing form in a modal.
@@ -55,9 +58,11 @@ export function RunBacktestDialog({
     setOpen(true);
     // `showModal()` throws InvalidStateError if the dialog is already open.
     if (!dialog.open) dialog.showModal();
+    log.info('run dialog opened', { initialStrategyKey: initialStrategyKey ?? null });
   }
 
   function closeDialog() {
+    log.info('run dialog closed');
     dialogRef.current?.close();
     // Cleared here rather than left to the element's `close` event. That event
     // is not reliably observed, and leaving the flag set keeps the form mounted
@@ -84,6 +89,7 @@ export function RunBacktestDialog({
         // Escape and the backdrop close the dialog without React knowing, so
         // the element's own close event is what puts the flag back in step.
         onClose={() => {
+          if (open) log.info('run dialog dismissed');
           setOpen(false);
         }}
         // A backdrop click reaches the <dialog> element itself, but so does a
@@ -128,7 +134,13 @@ export function RunBacktestDialog({
         {/* Mounted only while open: the form fetches the strategy list and then
             the chosen strategy's data coverage, and the dashboard should not
             pay for either until someone actually asks to run something. */}
-        {open ? <RunBacktestForm layout="dialog" initialStrategyKey={initialStrategyKey} /> : null}
+        {open ? (
+          <RunBacktestForm
+            layout="dialog"
+            initialStrategyKey={initialStrategyKey}
+            onSubmitted={closeDialog}
+          />
+        ) : null}
       </dialog>
     </>
   );

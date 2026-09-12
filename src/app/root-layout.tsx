@@ -33,7 +33,7 @@ export function RootLayout() {
 
   // Go back and login you cheeky boy
   if (!authState.isAuthenticated) {
-    return <Navigate to={paths.login} />;
+    return <Navigate to={paths.login} replace />;
   }
 
   return (

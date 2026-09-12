@@ -1,12 +1,20 @@
-import { FlaskConical } from 'lucide-react';
+import { ArrowLeft, ChevronRight, FlaskConical } from 'lucide-react';
 import { useState } from 'react';
-import { useParams, useSearchParams } from 'react-router';
+import { Link, useParams, useSearchParams } from 'react-router';
 
+import { paths } from '@/app/paths';
 import { ChartContainer } from '@/components/charts/chart-container';
 import { EmptyState } from '@/components/common/empty-state';
 import { PageHeader } from '@/components/common/page-header';
+import { buttonVariants } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { RunStatusBanner, useBacktest } from '@/features/backtests';
+import {
+  NoTradesExplanation,
+  RunBacktestDialog,
+  RunStatusBanner,
+  TradesTable,
+  useBacktest,
+} from '@/features/backtests';
 import {
   BetaScatter,
   DailyPnlBars,
@@ -64,13 +72,49 @@ export default function BacktestDetailPage() {
     setSearchParams(next, { replace: true });
   };
 
+  const breadcrumbs = (
+    <nav aria-label="Breadcrumb">
+      <ol className="flex min-w-0 flex-wrap items-center gap-1.5 text-sm text-muted-foreground">
+        <li>
+          <Link to={paths.dashboard} className="hover:text-foreground hover:underline">
+            Dashboard
+          </Link>
+        </li>
+        <li aria-hidden>
+          <ChevronRight className="size-3.5" />
+        </li>
+        <li>
+          <Link to={paths.backtests} className="hover:text-foreground hover:underline">
+            Backtests
+          </Link>
+        </li>
+        <li aria-hidden>
+          <ChevronRight className="size-3.5" />
+        </li>
+        <li className="min-w-0 break-words text-foreground" aria-current="page">
+          {data?.name ?? 'Results'}
+        </li>
+      </ol>
+    </nav>
+  );
+  const backLink = (
+    <Link to={paths.backtests} className={buttonVariants({ variant: 'outline' })}>
+      <ArrowLeft aria-hidden />
+      Back to backtests
+    </Link>
+  );
+
   if (isError) {
     return (
-      <EmptyState
-        icon={FlaskConical}
-        title="Could not load this backtest"
-        description={error.message}
-      />
+      <>
+        {breadcrumbs}
+        <PageHeader title="Backtest results" actions={backLink} />
+        <EmptyState
+          icon={FlaskConical}
+          title="Could not load this backtest"
+          description={error.message}
+        />
+      </>
     );
   }
 
@@ -79,18 +123,37 @@ export default function BacktestDetailPage() {
 
   return (
     <>
+      {breadcrumbs}
       <PageHeader
-        title={data?.name ?? 'Backtest'}
+        title="Backtest results"
         description={
           data
-            ? `${data.strategyName} · ${data.symbol} · ${data.startDate} → ${data.endDate}`
-            : undefined
+            ? `${data.name} · ${data.strategyName} · ${data.symbol} · ${data.startDate} → ${data.endDate}`
+            : 'Loading run details…'
+        }
+        actions={
+          <>
+            {backLink}
+            <RunBacktestDialog initialStrategyKey={data?.strategyId} />
+          </>
         }
       />
 
-      {/* Above the metrics on purpose: for an unfinished or failed run every
-          panel below is empty, and this is the explanation for why. */}
+      {/* Keep execution context visible alongside progress and failure reasons,
+          before readers interpret empty panels or unavailable metrics. */}
       {data ? <RunStatusBanner run={data} /> : null}
+      {data ? <NoTradesExplanation run={data} /> : null}
+      {data?.status === 'completed' && data.reportMetadata?.execution?.fillCount === 0 ? (
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+          Explore another strategy or run a different date window.
+          <Link
+            to={paths.backtests}
+            className="font-medium text-primary underline-offset-4 hover:underline"
+          >
+            Choose a strategy →
+          </Link>
+        </p>
+      ) : null}
 
       <MetricsGrid metrics={data?.metrics} isLoading={isPending} />
 
@@ -149,7 +212,7 @@ export default function BacktestDetailPage() {
             height={280}
             isLoading={isPending}
           >
-            <DailyPnlBars data={equityCurve} />
+            <DailyPnlBars data={equityCurve} initialCapital={data?.initialCapital} />
           </ChartContainer>
         </>
       ) : null}
@@ -221,6 +284,7 @@ export default function BacktestDetailPage() {
 
       {active === 'trades' ? (
         <>
+          <TradesTable detail={data} isLoading={isPending} />
           <ChartContainer
             title="Distribution of profit &amp; loss per trade"
             description="Realised P&amp;L per closed trade. Bins split at zero, so colour always matches sign."
