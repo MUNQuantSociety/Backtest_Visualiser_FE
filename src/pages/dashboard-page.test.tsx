@@ -3,6 +3,7 @@ import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { backtestKeys, type BacktestSummary } from '@/features/backtests';
+import type { ComparisonSeries } from '@/features/performance';
 import { ApiError, apiClient } from '@/lib/api-client';
 import type * as ApiClientModule from '@/lib/api-client';
 import {
@@ -25,7 +26,21 @@ vi.mock('@/lib/api-client', async (importOriginal) => {
   return { ...actual, apiClient: { ...actual.apiClient, get: vi.fn() } };
 });
 vi.mock('@/features/performance', () => ({
-  ComparisonChart: () => <div data-testid="comparison-chart" />,
+  ComparisonChart: ({
+    series,
+    showSeriesLabels,
+  }: {
+    series: ComparisonSeries[];
+    showSeriesLabels: boolean;
+  }) => (
+    <div data-testid="comparison-chart" data-show-labels={String(showSeriesLabels)}>
+      {series.map((line) => (
+        <span key={line.id} data-series-id={line.id}>
+          {line.title}
+        </span>
+      ))}
+    </div>
+  ),
   RiskReturnScatter: ({ backtests }: { backtests: BacktestSummary[] }) => (
     <div data-testid="run-scatter">{backtests.map((run) => run.name).join(', ')}</div>
   ),
@@ -185,14 +200,13 @@ describe('Dashboard request isolation', () => {
     renderWithProviders(<DashboardPage />);
     expect(await screen.findByText('Book history unavailable.')).toBeInTheDocument();
     expect(tile('Book Sharpe').getByText('—')).toBeInTheDocument();
-    expect(screen.getByRole('status')).toHaveTextContent('book metrics are unavailable');
     expect(screen.queryByTestId('comparison-chart')).not.toBeInTheDocument();
     expect(screen.getAllByRole('link', { name: /Saved user run/ })).toHaveLength(2);
   });
 
   it('preserves cached run history with a refresh warning when refreshing it fails', async () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    client.setQueryData(backtestKeys.list({}), runPage);
+    client.setQueryData(backtestKeys.completeList(), runPage);
     const initial = vi.mocked(apiClient.get).getMockImplementation()!;
     vi.mocked(apiClient.get).mockImplementation((url, config) =>
       url === '/backtests' ? Promise.reject(timeout()) : initial(url, config),
@@ -209,5 +223,74 @@ describe('Dashboard request isolation', () => {
     );
     expect(screen.getByRole('link', { name: /Saved user run/ })).toBeInTheDocument();
     expect(screen.getByTestId('run-scatter')).toHaveTextContent('Saved user run');
+  });
+});
+
+describe('Dashboard saved run comparison', () => {
+  it('shows every page and keeps same-strategy and unlisted-strategy runs as separate named curves', async () => {
+    const savedRuns = Array.from({ length: 26 }, (_, index) => ({
+      ...run,
+      id: `run-${index}`,
+      name: index === 0 ? 'temp' : index === 1 ? 'neo' : `Run ${index}`,
+      strategyId: index === 25 ? 'archived-strategy' : 'current',
+      sharpe: index,
+    }));
+    const initial = vi.mocked(apiClient.get).getMockImplementation()!;
+    vi.mocked(apiClient.get).mockImplementation((url, config) => {
+      if (url === '/backtests') {
+        const page = (config?.params as { page: number }).page;
+        return Promise.resolve({
+          items: savedRuns.slice((page - 1) * 25, page * 25),
+          total: 26,
+          page,
+          pageSize: 25,
+        });
+      }
+      if (url.endsWith('/equity')) {
+        const id = url.split('/')[2];
+        const saved = savedRuns.find((item) => item.id === id)!;
+        return Promise.resolve({
+          id,
+          strategyId: saved.strategyId,
+          symbol: saved.symbol,
+          equityCurve: [
+            { date: '2025-12-29', equity: 100, benchmark: 100 },
+            { date: '2025-12-30', equity: 101, benchmark: 102 },
+            { date: '2025-12-31', equity: 103, benchmark: 103 },
+          ],
+          window: {
+            period: '1y',
+            requestedStart: '2024-12-31',
+            requestedEnd: '2025-12-31',
+            availableStart: '2025-12-29',
+            availableEnd: '2025-12-31',
+          },
+        });
+      }
+      return initial(url, config);
+    });
+    renderWithProviders(<DashboardPage />);
+    const chart = await screen.findByTestId('comparison-chart');
+    await waitFor(() => expect(chart.querySelectorAll('[data-series-id]')).toHaveLength(26));
+    expect(chart).toHaveAttribute('data-show-labels', 'false');
+    expect(screen.getByRole('region', { name: 'Scrollable run alpha table' })).toHaveAttribute(
+      'tabindex',
+      '0',
+    );
+    expect(within(chart).getByText('temp')).toBeInTheDocument();
+    expect(within(chart).getByText('neo')).toBeInTheDocument();
+    expect(within(chart).getByText('Run 25')).toBeInTheDocument();
+    const alpha = within(screen.getByRole('table', { name: 'Run alpha metrics' }));
+    expect(alpha.getByRole('link', { name: 'temp' })).toHaveAttribute('href', '/backtests/run-0');
+    expect(alpha.getByRole('link', { name: 'neo' })).toHaveAttribute('href', '/backtests/run-1');
+    expect(alpha.getAllByRole('row')).toHaveLength(27);
+    expect(screen.getByTestId('run-scatter')).toHaveTextContent('Run 25');
+    const history = screen.getByText('All saved runs').closest('[data-slot="card"]') as HTMLElement;
+    expect(within(history).getAllByRole('link')).toHaveLength(27); // 26 runs and library link
+    expect(
+      vi.mocked(apiClient.get).mock.calls.filter(([url]) => url === '/backtests'),
+    ).toHaveLength(2);
+    expect(screen.queryByText(/with observations in this window/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Available observations:/)).not.toBeInTheDocument();
   });
 });

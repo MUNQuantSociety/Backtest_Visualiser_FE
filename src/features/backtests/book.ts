@@ -13,12 +13,12 @@ import type { BacktestDetail, BacktestSummary, EquityPoint } from './types';
 type BookRun = Pick<BacktestDetail, 'id' | 'symbol' | 'equityCurve'>;
 
 /**
- * The "book": every active strategy's best run, held equal-weight, against the
+ * Shared comparison maths over series keyed by run or strategy. The dashboard
+ * supplies every saved run as a separate series, held equal-weight against the
  * benchmark. Pure functions over already-fetched payloads — no React, no
  * fetching — so the dashboard's numbers can be asserted without rendering.
  *
- * "Best" is highest Sharpe among completed runs, not highest return: return
- * alone rewards the run that took the most risk.
+ * The best-run selector remains available to views that explicitly request it.
  */
 
 export interface BookStrategy {

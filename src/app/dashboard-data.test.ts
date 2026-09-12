@@ -5,7 +5,7 @@ import {
   backtestKeys,
   equityKey,
   fetchBacktestEquity,
-  fetchBacktests,
+  fetchAllBacktests,
 } from '@/features/backtests/data';
 import type * as BacktestData from '@/features/backtests/data';
 import { fetchStrategies, strategyKeys } from '@/features/strategies/data';
@@ -16,7 +16,7 @@ import { prefetchDashboardData } from './dashboard-data';
 
 vi.mock('@/features/backtests/data', async (importOriginal) => ({
   ...(await importOriginal<typeof BacktestData>()),
-  fetchBacktests: vi.fn(),
+  fetchAllBacktests: vi.fn(),
   fetchBacktestEquity: vi.fn(),
 }));
 vi.mock('@/features/strategies/data', async (importOriginal) => ({
@@ -70,8 +70,10 @@ describe('dashboard data prefetch', () => {
         resolveStrategies = resolve;
       }),
     );
-    const page = { items: [run], total: 1, page: 1, pageSize: 25 };
-    vi.mocked(fetchBacktests).mockResolvedValue(page);
+    const rerun = { ...run, id: 'run-2', name: 'Second run', sharpe: 0.1 };
+    const historical = { ...run, id: 'run-3', strategyId: 'not-in-catalogue' };
+    const page = { items: [run, rerun, historical], total: 3, page: 1, pageSize: 100 };
+    vi.mocked(fetchAllBacktests).mockResolvedValue(page);
     const detail = {
       ...run,
       progressPct: 100,
@@ -106,7 +108,7 @@ describe('dashboard data prefetch', () => {
 
     const prefetch = prefetchDashboardData(client);
     expect(fetchStrategies).toHaveBeenCalledTimes(1);
-    expect(fetchBacktests).toHaveBeenCalledTimes(1);
+    expect(fetchAllBacktests).toHaveBeenCalledTimes(1);
     expect(fetchBacktestEquity).not.toHaveBeenCalled();
     // React StrictMode temporarily unsubscribes a mounting page. Its prefetch
     // must keep running so this cannot double the API/S3 work.
@@ -117,12 +119,14 @@ describe('dashboard data prefetch', () => {
     resolveStrategies(strategies);
     await prefetch;
     expect(client.getQueryData(strategyKeys.lists())).toEqual(strategies);
-    expect(client.getQueryData(backtestKeys.list({}))).toEqual(page);
+    expect(client.getQueryData(backtestKeys.completeList())).toEqual(page);
     expect(client.getQueryData(equityKey(run.id, window))).toEqual(equity);
     await prefetchDashboardData(client);
     expect(fetchStrategies).toHaveBeenCalledTimes(1);
-    expect(fetchBacktests).toHaveBeenCalledTimes(1);
-    expect(fetchBacktestEquity).toHaveBeenCalledTimes(1);
+    expect(fetchAllBacktests).toHaveBeenCalledTimes(1);
+    expect(fetchBacktestEquity).toHaveBeenCalledTimes(3);
+    expect(fetchBacktestEquity).toHaveBeenCalledWith(rerun.id, window);
+    expect(fetchBacktestEquity).toHaveBeenCalledWith(historical.id, window);
     client.clear();
   });
 
@@ -130,7 +134,7 @@ describe('dashboard data prefetch', () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const error = new Error('Backend unavailable');
     vi.mocked(fetchStrategies).mockRejectedValue(error);
-    vi.mocked(fetchBacktests).mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 25 });
+    vi.mocked(fetchAllBacktests).mockResolvedValue({ items: [], total: 0, page: 1, pageSize: 25 });
     await expect(prefetchDashboardData(client)).resolves.toBeUndefined();
     expect(client.getQueryState(strategyKeys.lists())?.error).toBe(error);
     expect(fetchBacktestEquity).not.toHaveBeenCalled();

@@ -136,11 +136,17 @@ function createApiClient(): AxiosInstance {
     if (env.isDev && env.devUserId) {
       const backend = new URL(env.apiBaseUrl, window.location.href);
       const backtestsPath = `${backend.pathname.replace(/\/$/, '')}/backtests`;
-      // The explicit local account only owns backtest requests to this backend.
+      const strategiesPath = `${backend.pathname.replace(/\/$/, '')}/strategies`;
+      const isStrategyUpload =
+        config.method?.toLowerCase() === 'post' &&
+        (url.pathname === strategiesPath || url.pathname === `${strategiesPath}/upload`);
+      // The explicit local account owns backtests and strategy validation uploads.
       // Absolute third-party URLs and unrelated endpoints must not receive it.
       if (
         url.origin === backend.origin &&
-        (url.pathname === backtestsPath || url.pathname.startsWith(`${backtestsPath}/`))
+        (url.pathname === backtestsPath ||
+          url.pathname.startsWith(`${backtestsPath}/`) ||
+          isStrategyUpload)
       ) {
         config.headers.set('X-User-Id', env.devUserId);
       }

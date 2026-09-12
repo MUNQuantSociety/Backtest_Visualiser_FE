@@ -96,7 +96,26 @@ describe('temporary development backtest ownership', () => {
     );
   });
 
+  it.each(['/strategies', '/strategies/upload'])(
+    'includes the owner when uploading to %s for validation',
+    async (url) => {
+      await apiClient.post(url, {});
+      expect(requests[0]!.headers.get('X-User-Id')).toBe(config.devUserId);
+    },
+  );
+
   it.each([
+    '/strategies/check',
+    '/strategies/upload/check',
+    '/strategies-other',
+    'https://third-party.example/api/strategies',
+  ])('does not send the temporary identity on unrelated POST %s', async (url) => {
+    await apiClient.post(url, {});
+    expect(requests[0]!.headers.has('X-User-Id')).toBe(false);
+  });
+
+  it.each([
+    '/strategies',
     '/market-data/coverage',
     '/backtests-other',
     'https://third-party.example/api/backtests',

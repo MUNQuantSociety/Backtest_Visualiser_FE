@@ -81,6 +81,24 @@ export async function fetchBacktests(filters: BacktestFilters = {}, signal?: Abo
   return backtestListResponseSchema.parse(data);
 }
 
+/** Complete saved history for the dashboard; ordinary lists remain paginated. */
+export async function fetchAllBacktests(signal?: AbortSignal) {
+  const first = await fetchBacktests({ page: 1, pageSize: 100 }, signal);
+  const items = [...first.items];
+  let page = first;
+  while (page.page * page.pageSize < page.total) {
+    page = await fetchBacktests({ page: page.page + 1, pageSize: first.pageSize }, signal);
+    if (page.items.length === 0)
+      throw new Error('Run history changed while loading. Please retry.');
+    items.push(...page.items);
+  }
+  return {
+    ...first,
+    items: [...new Map(items.map((run) => [run.id, run])).values()],
+    total: page.total,
+  };
+}
+
 export async function fetchBacktest(id: string, signal?: AbortSignal): Promise<BacktestDetail> {
   if (env.useFixtures) {
     log.info('loading backtest detail', { id, source: 'fixtures' });
@@ -224,6 +242,7 @@ export async function deleteBacktest(id: string): Promise<void> {
 export const backtestKeys = {
   all: ['backtests'] as const,
   lists: () => [...backtestKeys.all, 'list'] as const,
+  completeList: () => [...backtestKeys.lists(), 'all'] as const,
   list: (filters: BacktestFilters) => [...backtestKeys.lists(), filters] as const,
   details: () => [...backtestKeys.all, 'detail'] as const,
   detail: (id: string) => [...backtestKeys.details(), id] as const,
@@ -239,6 +258,15 @@ export const backtestKeys = {
  * be polling a database for no added information.
  */
 const IN_FLIGHT_POLL_MS = 3_000;
+
+export function useAllBacktests() {
+  return useQuery({
+    queryKey: backtestKeys.completeList(),
+    queryFn: ({ signal }) => fetchAllBacktests(signal),
+    // A run may have finished while its detail page was open.
+    refetchOnMount: 'always',
+  });
+}
 
 export function useBacktests(filters: BacktestFilters = {}) {
   return useQuery({

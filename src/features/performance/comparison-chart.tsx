@@ -23,6 +23,8 @@ export interface ComparisonSeries {
 }
 
 interface ComparisonChartProps {
+  /** Hide labels on dense dashboards whose adjacent table identifies each run. */
+  showSeriesLabels?: boolean | undefined;
   /** Runs to overlay; each is titled by its run name. */
   backtests?: readonly BacktestDetail[] | undefined;
   /** Or arbitrary series — a book of strategies, say — with their own titles. */
@@ -52,7 +54,12 @@ function rebased(points: readonly EquityPoint[]): LineData<Time>[] {
  * Lines rather than areas: filled areas would occlude each other and the whole
  * point here is reading several series against one another.
  */
-export function ComparisonChart({ backtests, series, benchmark }: ComparisonChartProps) {
+export function ComparisonChart({
+  backtests,
+  series,
+  benchmark,
+  showSeriesLabels = true,
+}: ComparisonChartProps) {
   // Either prop shape becomes the same list, so the drawing code has one path.
   const lines = useMemo<readonly ComparisonSeries[]>(
     () =>
@@ -143,8 +150,8 @@ export function ComparisonChart({ backtests, series, benchmark }: ComparisonChar
         color: seriesColor(palette, line.colorIndex ?? index),
         lineWidth: 2,
         priceLineVisible: false,
-        lastValueVisible: true,
-        title: line.title,
+        lastValueVisible: showSeriesLabels,
+        title: showSeriesLabels ? line.title : '',
         /*
          * The name-and-value badge on the price scale, not a price line: that
          * is already off. Its background otherwise defaults to the series
@@ -169,8 +176,8 @@ export function ComparisonChart({ backtests, series, benchmark }: ComparisonChar
           lineWidth: 1,
           lineStyle: LineStyle.Dashed,
           priceLineVisible: false,
-          lastValueVisible: true,
-          title: benchmark.title,
+          lastValueVisible: showSeriesLabels,
+          title: showSeriesLabels ? benchmark.title : '',
           priceLineColor: palette.background,
         });
         series.setData(points);
@@ -179,7 +186,7 @@ export function ComparisonChart({ backtests, series, benchmark }: ComparisonChar
     }
 
     chart.timeScale().fitContent();
-  }, [lines, benchmark, palette]);
+  }, [lines, benchmark, palette, showSeriesLabels]);
 
   return (
     <div ref={containerRef} className="size-full" role="img" aria-label="Strategy comparison" />

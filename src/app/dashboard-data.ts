@@ -2,11 +2,10 @@ import type { QueryClient } from '@tanstack/react-query';
 
 import {
   backtestKeys,
-  bestRunByStrategy,
   dashboardEndDate,
   equityKey,
   fetchBacktestEquity,
-  fetchBacktests,
+  fetchAllBacktests,
 } from '@/features/backtests/data';
 import { fetchStrategies, strategyKeys } from '@/features/strategies/data';
 import { useUiStore } from '@/lib/ui-store';
@@ -19,20 +18,17 @@ import { useUiStore } from '@/lib/ui-store';
  */
 export async function prefetchDashboardData(client: QueryClient): Promise<void> {
   try {
-    const [strategies, runs] = await Promise.all([
+    const [, runs] = await Promise.all([
       client.fetchQuery({
         queryKey: strategyKeys.lists(),
         queryFn: () => fetchStrategies(),
       }),
       client.fetchQuery({
-        queryKey: backtestKeys.list({}),
-        queryFn: () => fetchBacktests(),
+        queryKey: backtestKeys.completeList(),
+        queryFn: () => fetchAllBacktests(),
       }),
     ]);
-    const best = bestRunByStrategy(runs.items);
-    const selected = strategies
-      .filter((strategy) => strategy.status === 'active')
-      .flatMap((strategy) => best.get(strategy.id) ?? []);
+    const selected = runs.items.filter((run) => run.status === 'completed');
     const endDate = dashboardEndDate(selected);
     if (!endDate) return;
     const window = { period: useUiStore.getState().dashboardPeriod, endDate };

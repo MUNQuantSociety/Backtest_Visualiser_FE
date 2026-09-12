@@ -341,16 +341,23 @@ export default function LibraryPage() {
             </div>
 
             <Card>
-              <CardContent className="overflow-x-auto p-4">
+              <CardContent className="p-4">
                 <p className="mb-4 text-sm text-muted-foreground">
                   Open a run to view its results. Select two or more runs to compare them.
                 </p>
-                <RunsTable
-                  runs={runView.rows}
-                  isLoading={runsQuery.isPending}
-                  selectedIds={selectedIds}
-                  onToggle={toggleComparison}
-                />
+                <div
+                  className="report-table-scroll"
+                  role="region"
+                  aria-label="Run history rows"
+                  tabIndex={0}
+                >
+                  <RunsTable
+                    runs={runView.rows}
+                    isLoading={runsQuery.isPending}
+                    selectedIds={selectedIds}
+                    onToggle={toggleComparison}
+                  />
+                </div>
                 <div className="tabular mt-3 flex items-center justify-between text-xs text-muted-foreground">
                   <span>
                     {formatNumber(runView.rows.length, 0)} of {formatNumber(runView.total, 0)} runs

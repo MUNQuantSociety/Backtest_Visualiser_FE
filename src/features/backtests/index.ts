@@ -63,11 +63,13 @@ export { RunStatusBanner } from './run-status';
 export { NoTradesExplanation } from './no-trades-explanation';
 export {
   fetchBacktests,
+  fetchAllBacktests,
   fetchCoverage,
   submitBacktest,
   useBacktest,
   useBacktestDetails,
   useBacktests,
+  useAllBacktests,
   useCoverage,
   useDeleteBacktest,
   useSubmitBacktest,

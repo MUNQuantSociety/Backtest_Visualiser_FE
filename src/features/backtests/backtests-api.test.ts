@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, apiClient } from '@/lib/api-client';
 import type * as ApiClientModule from '@/lib/api-client';
 
-import { fetchBacktest, fetchBacktests, fetchCoverage } from './backtests-api';
+import { fetchAllBacktests, fetchBacktest, fetchBacktests, fetchCoverage } from './backtests-api';
 import { fixtureBacktest, fixtureBacktests } from './fixtures';
 
 vi.mock('@/config/env', () => ({
@@ -31,6 +31,52 @@ describe('real backtest failures', () => {
       expect(fixtureBacktest).not.toHaveBeenCalled();
     },
   );
+});
+
+describe('complete dashboard history', () => {
+  beforeEach(() => vi.resetAllMocks());
+
+  const savedRun = (id: string) => ({
+    id,
+    name: id,
+    strategyId: 'same-strategy',
+    strategyName: 'Same strategy',
+    symbol: 'AAPL',
+    timeframe: '1d',
+    status: 'completed',
+    startDate: '2025-01-01',
+    endDate: '2025-12-31',
+    createdAt: '2026-01-01T00:00:00Z',
+    initialCapital: 100,
+    finalEquity: 110,
+    totalReturn: 0.1,
+    sharpe: 1,
+    maxDrawdown: -0.1,
+  });
+
+  it('fetches every page without collapsing reruns of the same strategy', async () => {
+    const first = Array.from({ length: 100 }, (_, index) => savedRun(`run-${index}`));
+    const older = [savedRun('temp'), savedRun('neo')];
+    vi.mocked(apiClient.get)
+      .mockResolvedValueOnce({ items: first, total: 102, page: 1, pageSize: 100 })
+      .mockResolvedValueOnce({ items: older, total: 102, page: 2, pageSize: 100 });
+    const signal = new AbortController().signal;
+    const result = await fetchAllBacktests(signal);
+    expect(result.items).toEqual([...first, ...older]);
+    expect(result.total).toBe(102);
+    expect(apiClient.get).toHaveBeenLastCalledWith('/backtests', {
+      params: { page: 2, pageSize: 100 },
+      signal,
+    });
+  });
+
+  it('reports a failed later page instead of presenting partial history as complete', async () => {
+    const error = new ApiError('History unavailable', 503, 'UNAVAILABLE');
+    vi.mocked(apiClient.get)
+      .mockResolvedValueOnce({ items: [savedRun('one')], total: 2, page: 1, pageSize: 1 })
+      .mockRejectedValueOnce(error);
+    await expect(fetchAllBacktests()).rejects.toBe(error);
+  });
 });
 
 describe('real coverage for selected tickers', () => {

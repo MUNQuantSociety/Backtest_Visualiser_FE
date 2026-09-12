@@ -58,6 +58,19 @@ function count(label: string) {
 }
 
 describe('trade ledger', () => {
+  it('contains long ledgers in a keyboard-scrollable region with sticky headings', () => {
+    const lots = Array.from({ length: 100 }, (_, index) => ({ ...openLot, id: `run:${index}` }));
+    render(<TradesTable detail={report(lots, 100)} />);
+    const region = screen.getByRole('region', { name: 'Trade ledger rows' });
+    expect(region).toHaveClass('report-table-scroll');
+    expect(region).toHaveAttribute('tabindex', '0');
+    expect(within(region).getAllByRole('row')).toHaveLength(101);
+    expect(
+      within(region).getByRole('columnheader', { name: 'Ticker' }).closest('thead'),
+    ).toHaveClass('sticky', 'top-0', 'bg-card');
+    expect(region).not.toContainElement(screen.getByText('Recorded fills'));
+  });
+
   it('shows an entry-only open lot without inventing an exit or realized P&L', () => {
     render(<TradesTable detail={report([openLot], 1)} />);
     const row = within(screen.getByRole('row', { name: /AAPL Long Open/ }));

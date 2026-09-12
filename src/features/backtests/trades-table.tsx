@@ -57,12 +57,17 @@ export function TradesTable({
                   : 'No trade lots are available for this report.'}
               </p>
             ) : (
-              <div className="overflow-x-auto">
+              <div
+                className="report-table-scroll"
+                role="region"
+                aria-label="Trade ledger rows"
+                tabIndex={0}
+              >
                 <table className="w-full min-w-[980px] text-xs">
                   <caption className="sr-only">
                     Recorded trade lots, including open positions
                   </caption>
-                  <thead className="border-b text-left text-muted-foreground">
+                  <thead className="sticky top-0 z-10 border-b bg-card text-left text-muted-foreground">
                     <tr className="[&>th]:px-2 [&>th]:py-2 [&>th]:font-medium [&>th]:whitespace-nowrap">
                       <th scope="col">Ticker</th>
                       <th scope="col">Direction</th>

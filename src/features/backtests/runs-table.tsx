@@ -53,7 +53,7 @@ export function RunsTable({ runs, isLoading, selectedIds, onToggle }: RunsTableP
   return (
     <div className="min-w-[820px]">
       <div
-        className="tabular grid items-center gap-2 border-b pb-2 text-[10px] font-medium tracking-[0.06em] text-muted-foreground uppercase"
+        className="tabular sticky top-0 z-10 grid items-center gap-2 border-b bg-card py-2 text-[10px] font-medium tracking-[0.06em] text-muted-foreground uppercase"
         style={{ gridTemplateColumns: COLUMNS }}
       >
         <span />

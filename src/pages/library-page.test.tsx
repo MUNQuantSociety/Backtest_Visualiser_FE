@@ -108,6 +108,16 @@ describe('Backtests hub', () => {
     const picker = screen.getByRole('option', { name: /Current strategy/ });
     expect(within(picker).getByText('Runs').nextElementSibling).toHaveTextContent('1');
     expect(within(picker).queryByText('13')).not.toBeInTheDocument();
+    const scrollRegion = screen.getByRole('region', { name: 'Run history rows' });
+    expect(scrollRegion).toHaveClass('report-table-scroll');
+    expect(scrollRegion).toHaveAttribute('tabindex', '0');
+    expect(within(scrollRegion).getAllByRole('row')).toHaveLength(2);
+    expect(within(scrollRegion).getByText('Return').parentElement).toHaveClass(
+      'sticky',
+      'top-0',
+      'bg-card',
+    );
+    expect(scrollRegion).not.toContainElement(screen.getByText('2 of 2 runs'));
   });
 
   it('keeps bookmarked strategy filters, then returns to all saved runs with one click', async () => {

@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { backtestDetailSchema, type BacktestDetail } from '@/features/backtests';
 
 import { MetricsGrid } from './metric-grid';
+import { MetricsTable } from './metric-table';
 import { buildTearsheet } from './tearsheet';
 
 const detail: BacktestDetail = {
@@ -47,6 +48,19 @@ const detail: BacktestDetail = {
 };
 
 describe('persisted backend report contract', () => {
+  it('keeps the complete tearsheet in a keyboard-scrollable region with sticky headings', () => {
+    render(<MetricsTable detail={detail} />);
+    const region = screen.getByRole('region', { name: 'Performance summary rows' });
+    expect(region).toHaveClass('report-table-scroll');
+    expect(region).toHaveAttribute('tabindex', '0');
+    expect(region).toContainElement(screen.getByText('Largest loss'));
+    expect(screen.getByRole('columnheader', { name: 'Category' }).closest('thead')).toHaveClass(
+      'sticky',
+      'top-0',
+      'bg-card',
+    );
+  });
+
   it('preserves availability, provenance and separate unrealized values at the API boundary', () => {
     const parsed = backtestDetailSchema.parse(detail);
     expect(parsed.metrics.unavailable?.winRate).toBe('No closed trades.');
