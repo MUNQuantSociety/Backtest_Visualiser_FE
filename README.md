@@ -129,7 +129,7 @@ far worse past a few thousand points. Chart.js was considered and rejected: it
 adds a third dependency without covering either case better than the incumbent.
 
 **The equity chart is one component, not several.** `EquityCurveChart` takes
-optional `trades` (entry markers) and `showDrawdownPane` (a second pane sharing
+optional `trades` (buy/sell triangles for entries and exits) and `showDrawdownPane` (a second pane sharing
 the time axis). The backtest detail page passes both; the live portfolio page
 passes neither and gets the plain curve. If you find yourself writing a second
 equity chart, stop — that is the reason both products live in one app.
@@ -304,6 +304,48 @@ flatten that "succeeded" against demo data would be a lie about real money.
 Portfolio config is displayed but never edited here, because MQSMaster loads it
 by file location and places real orders from it. Changing a config is a pull
 request against the trading repo, with review.
+
+## Amplify Hosting
+
+Connect this repository's `main` branch with automatic builds enabled. A push
+or merged PR to `main` then rebuilds the site. `amplify.yml` installs Node 22,
+uses the lockfile, runs lint/tests/build, and publishes only `dist`.
+
+Set these in **Amplify > Hosting > Environment variables**, not in Git:
+
+| Key | Value |
+| --- | --- |
+| `VITE_API_BASE_URL` | The deployed backend's HTTPS base URL, including `/api` |
+| `VITE_USE_FIXTURES` | `false` |
+| `VITE_API_TIMEOUT` | `30000` |
+| `VITE_AUTH_AUTHORITY` | Cognito user-pool issuer URL, including `https://` |
+| `VITE_AUTH_CLIENT_ID` | Public Cognito SPA client ID (no client secret) |
+| `VITE_AUTH_DOMAIN` | Cognito managed-login domain, including `https://` |
+
+`.env` is local and ignored. Vite embeds `VITE_*` values into public JavaScript;
+never add passwords, AWS credentials, or a shared user ID. The build rejects
+HTTP backend URLs, fixture mode, and missing Cognito configuration.
+`DEV_API_PROXY_TARGET` is development-only. Allow this site's `/auth/callback`
+and `/auth/login` URLs on the Cognito client for sign-in and sign-out respectively.
+The optional `VITE_AUTH_REDIRECT_URI` and `VITE_AUTH_LOGOUT_REDIRECT_URI` overrides
+must use the same site origin and those paths.
+
+In **Rewrites and redirects**, import the SPA rewrite from
+[`deploy/amplify-rewrites.json`](deploy/amplify-rewrites.json). This serves
+`index.html` for application routes without redirecting them or rewriting
+JavaScript, CSS, and other static asset requests.
+
+Associate only `backtest.munquantsociety.com` with `main`; keep DNS at Porkbun.
+Copy both Amplify-generated CNAME records (certificate validation and traffic)
+to Porkbun. Keep the validation record for certificate renewal. This does not
+require changing the root domain, nameservers, email, or other subdomains.
+
+Configure backend CORS for the exact HTTPS frontend origin with credential
+support. Sign-in uses Cognito authorization code flow with PKCE; the backend
+must verify the access token and enforce report ownership. `VITE_DEV_USER_ID`
+is intentionally ignored in production. Verify sign-in, direct-route reloads, run history, and one existing
+report against the deployed API. If a release breaks these flows, redeploy the
+last known-good Amplify build or revert the release through a PR.
 
 ## Conventions worth knowing before your first PR
 

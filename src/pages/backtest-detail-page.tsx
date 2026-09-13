@@ -189,9 +189,8 @@ export default function BacktestDetailPage() {
               axis so a dip and the hole it dug line up vertically — reading them
               off two separately-scaled charts meant re-anchoring on the dates. */}
           <ChartContainer
-            title="Performance vs. benchmark and drawdown"
-            description="Account value against buy-and-hold, with trade entries and distance below the running peak."
-            height={520}
+            title={`Performance vs. benchmark and drawdown${data ? ` — ${data.name}` : ''}`}
+            height={600}
             isLoading={isPending}
           >
             <EquityCurveChart data={equityCurve} trades={data?.trades} showDrawdownPane />
@@ -199,16 +198,16 @@ export default function BacktestDetailPage() {
 
           <ChartContainer
             title="Monthly returns"
-            description="Compounded return per calendar month, with the year to date on the right. Shading is scaled to the largest month in this grid."
+            description="Compounded returns from this run’s equity. The Year column includes only the dates covered by the run."
             height={200}
             isLoading={isPending}
           >
-            <MonthlyReturnsHeatmap data={equityCurve} />
+            <MonthlyReturnsHeatmap data={equityCurve} initialCapital={data?.initialCapital} />
           </ChartContainer>
 
           <ChartContainer
             title="Daily profit &amp; loss"
-            description="Bars are the day; the line is the run to date on the right axis."
+            description="Bars show daily account-value changes ($); the line shows total P&L since the run started ($, right axis)."
             height={280}
             isLoading={isPending}
           >
@@ -222,7 +221,7 @@ export default function BacktestDetailPage() {
           <div className="grid gap-6 lg:grid-cols-2">
             <ChartContainer
               title="Rolling Sharpe (63d)"
-              description="Below zero the quarter underperformed cash — a stronger statement than “did badly”."
+              description="Trailing 63 daily returns, annualised with 252 trading days and a 2% annual risk-free rate."
               height={280}
               isLoading={isPending}
             >
@@ -230,7 +229,7 @@ export default function BacktestDetailPage() {
             </ChartContainer>
             <ChartContainer
               title="Rolling volatility (63d)"
-              description="A vol-targeted strategy should be a flat line here. This is the test it passes or fails."
+              description="Sample standard deviation of 63 daily returns, annualised with 252 trading days."
               height={280}
               isLoading={isPending}
             >
@@ -241,7 +240,7 @@ export default function BacktestDetailPage() {
           <div className="grid gap-6 lg:grid-cols-2">
             <ChartContainer
               title="Daily return distribution"
-              description="Sharpe, volatility and VaR all assume this shape is roughly normal. The overlay is where you check."
+              description="Observed daily returns. The dashed threshold is the empirical 5th percentile; the normal curve is a visual comparison."
               height={300}
               isLoading={isPending}
             >
@@ -249,7 +248,7 @@ export default function BacktestDetailPage() {
             </ChartContainer>
             <ChartContainer
               title="Strategy vs. benchmark"
-              description="β near 1 with a high R² is the market wearing a different name, however good the Sharpe looks."
+              description="Paired daily returns and their linear fit. α is the raw-return intercept × 252; β is the slope; R² measures the fit."
               height={300}
               isLoading={isPending}
             >
@@ -270,8 +269,8 @@ export default function BacktestDetailPage() {
               <CardHeader className="pb-3">
                 <CardTitle className="text-base">Worst drawdowns</CardTitle>
                 <CardDescription>
-                  Two runs with the same −18% can be a three-week dip and a nine-month grind. Only
-                  the duration tells you which.
+                  Peak-to-trough declines in this run’s equity. Durations count trading
+                  observations.
                 </CardDescription>
               </CardHeader>
               <CardContent>

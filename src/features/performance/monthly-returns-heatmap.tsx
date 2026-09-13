@@ -11,6 +11,7 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 interface MonthlyReturnsHeatmapProps {
   data: readonly EquityPoint[];
   isLoading?: boolean;
+  initialCapital?: number | undefined;
 }
 
 /**
@@ -34,8 +35,12 @@ interface MonthlyReturnsHeatmapProps {
  * Alpha is applied with `color-mix` rather than a `--chart-N` slot: this is a
  * magnitude ramp on a domain token, not a series.
  */
-export function MonthlyReturnsHeatmap({ data, isLoading = false }: MonthlyReturnsHeatmapProps) {
-  const rows = useMemo(() => monthlyReturns(data), [data]);
+export function MonthlyReturnsHeatmap({
+  data,
+  isLoading = false,
+  initialCapital,
+}: MonthlyReturnsHeatmapProps) {
+  const rows = useMemo(() => monthlyReturns(data, initialCapital), [data, initialCapital]);
 
   if (isLoading) return <Skeleton className="h-48 w-full" />;
 
@@ -62,11 +67,10 @@ export function MonthlyReturnsHeatmap({ data, isLoading = false }: MonthlyReturn
   };
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full border-separate border-spacing-0.5 text-xs">
-        <caption className="caption-top pb-3 text-left text-xs text-muted-foreground">
-          Compounded return per calendar month. Shading is scaled to the largest month in this grid;
-          the YTD column is not shaded — it is a different quantity.
+    <div className="h-full overflow-auto">
+      <table className="w-full min-w-[640px] border-separate border-spacing-0.5 text-xs">
+        <caption className="sr-only">
+          Compounded monthly returns. Year returns include only the dates covered by this run.
         </caption>
         <thead>
           <tr>
@@ -84,7 +88,7 @@ export function MonthlyReturnsHeatmap({ data, isLoading = false }: MonthlyReturn
               scope="col"
               className="border-l border-border pb-1.5 pl-2 text-right font-mono text-xs font-medium text-muted-foreground"
             >
-              YTD
+              Year
             </th>
           </tr>
         </thead>

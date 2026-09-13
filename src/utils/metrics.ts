@@ -220,32 +220,33 @@ export function payoffRatio(pnls: readonly number[]): number {
  * steadily good strategy from one that earned everything in a single quarter.
  */
 export function rollingSharpe(
-  returns: readonly number[],
+  returns: readonly (number | null)[],
   window = 63,
   periodsPerYear = TRADING_DAYS_PER_YEAR,
 ): (number | null)[] {
   return returns.map((_, index) => {
     if (index < window - 1) return null;
-    const value = sharpeRatio(
-      returns.slice(index - window + 1, index + 1),
-      DEFAULT_RISK_FREE_RATE,
-      periodsPerYear,
-    );
+    const slice = returns.slice(index - window + 1, index + 1);
+    if (!slice.every((value): value is number => value !== null && Number.isFinite(value)))
+      return null;
+    const value = sharpeRatio(slice, DEFAULT_RISK_FREE_RATE, periodsPerYear);
     return Number.isNaN(value) ? null : value;
   });
 }
 
 /** Annualised volatility over a trailing window. Leading positions are `null`. */
 export function rollingVolatility(
-  returns: readonly number[],
+  returns: readonly (number | null)[],
   window = 63,
   periodsPerYear = TRADING_DAYS_PER_YEAR,
 ): (number | null)[] {
-  return returns.map((_, index) =>
-    index < window - 1
-      ? null
-      : stdDev(returns.slice(index - window + 1, index + 1)) * Math.sqrt(periodsPerYear),
-  );
+  return returns.map((_, index) => {
+    if (index < window - 1) return null;
+    const slice = returns.slice(index - window + 1, index + 1);
+    if (!slice.every((value): value is number => value !== null && Number.isFinite(value)))
+      return null;
+    return stdDev(slice) * Math.sqrt(periodsPerYear);
+  });
 }
 
 export interface MonthlyReturnRow {
@@ -268,16 +269,17 @@ export interface MonthlyReturnRow {
  */
 export function monthlyReturns(
   points: readonly { date: string; equity: number }[],
+  initialCapital?: number,
 ): MonthlyReturnRow[] {
-  if (points.length < 2) return [];
+  if (points.length === 0) return [];
 
   const factorByMonth = new Map<string, number>();
-  for (let i = 1; i < points.length; i += 1) {
-    const previous = points[i - 1];
+  for (let i = initialCapital === undefined ? 1 : 0; i < points.length; i += 1) {
+    const previousEquity = points[i - 1]?.equity ?? initialCapital;
     const current = points[i];
-    if (!previous || !current || previous.equity === 0) continue;
+    if (previousEquity === undefined || !current || previousEquity === 0) continue;
     const key = current.date.slice(0, 7);
-    factorByMonth.set(key, (factorByMonth.get(key) ?? 1) * (current.equity / previous.equity));
+    factorByMonth.set(key, (factorByMonth.get(key) ?? 1) * (current.equity / previousEquity));
   }
 
   const rows = new Map<string, MonthlyReturnRow>();

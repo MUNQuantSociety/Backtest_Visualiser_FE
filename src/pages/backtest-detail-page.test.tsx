@@ -4,7 +4,8 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type * as Backtests from '@/features/backtests';
-import { backtestDetailSchema, type BacktestDetail } from '@/features/backtests';
+import { backtestDetailSchema, useBacktest, type BacktestDetail } from '@/features/backtests';
+import * as Performance from '@/features/performance';
 
 import BacktestDetailPage from './backtest-detail-page';
 
@@ -19,24 +20,24 @@ const state = vi.hoisted(
 
 vi.mock('@/features/backtests', async (importOriginal) => ({
   ...(await importOriginal<typeof Backtests>()),
-  useBacktest: () => state,
+  useBacktest: vi.fn(() => state),
   RunBacktestDialog: ({ initialStrategyKey }: { initialStrategyKey?: string }) => (
     <button data-strategy={initialStrategyKey}>Run backtest</button>
   ),
 }));
 vi.mock('@/features/performance', () => ({
-  BetaScatter: () => null,
-  DailyPnlBars: () => null,
-  DrawdownChart: () => null,
-  DrawdownTable: () => null,
-  EquityCurveChart: () => null,
+  BetaScatter: vi.fn(() => null),
+  DailyPnlBars: vi.fn(() => null),
+  DrawdownChart: vi.fn(() => null),
+  DrawdownTable: vi.fn(() => null),
+  EquityCurveChart: vi.fn(() => null),
   MetricsGrid: () => null,
   MetricsTable: () => null,
-  MonthlyReturnsHeatmap: () => null,
+  MonthlyReturnsHeatmap: vi.fn(() => null),
   PnlHistogram: () => null,
-  ReturnsDistribution: () => null,
-  RollingSharpeChart: () => null,
-  RollingVolatilityChart: () => null,
+  ReturnsDistribution: vi.fn(() => null),
+  RollingSharpeChart: vi.fn(() => null),
+  RollingVolatilityChart: vi.fn(() => null),
   TradeDurationScatter: () => null,
 }));
 
@@ -109,12 +110,49 @@ function renderPage() {
 }
 
 beforeEach(() => {
+  vi.clearAllMocks();
   state.data = detail();
   state.isPending = false;
   state.isError = false;
 });
 
 describe('backtest results context', () => {
+  it('uses the selected run for every performance and risk chart', async () => {
+    state.data!.equityCurve = [
+      { date: '2026-01-01', equity: 95, benchmark: 100 },
+      { date: '2026-01-02', equity: 110, benchmark: 102 },
+    ];
+    renderPage();
+    expect(useBacktest).toHaveBeenCalledWith('run-1');
+    for (const component of [
+      Performance.EquityCurveChart,
+      Performance.MonthlyReturnsHeatmap,
+      Performance.DailyPnlBars,
+    ]) {
+      expect(vi.mocked(component).mock.calls.at(-1)?.[0].data).toBe(state.data!.equityCurve);
+    }
+    expect(vi.mocked(Performance.MonthlyReturnsHeatmap).mock.calls.at(-1)?.[0].initialCapital).toBe(
+      state.data!.initialCapital,
+    );
+    expect(vi.mocked(Performance.DailyPnlBars).mock.calls.at(-1)?.[0].initialCapital).toBe(
+      state.data!.initialCapital,
+    );
+    expect(vi.mocked(Performance.EquityCurveChart).mock.calls.at(-1)?.[0].trades).toBe(
+      state.data!.trades,
+    );
+    await userEvent.click(screen.getByRole('tab', { name: 'Risk' }));
+    for (const component of [
+      Performance.RollingSharpeChart,
+      Performance.RollingVolatilityChart,
+      Performance.ReturnsDistribution,
+      Performance.BetaScatter,
+      Performance.DrawdownChart,
+      Performance.DrawdownTable,
+    ]) {
+      expect(vi.mocked(component).mock.calls.at(-1)?.[0].data).toBe(state.data!.equityCurve);
+    }
+  });
+
   it('identifies the run, keeps its execution notice, and links back to the hub', async () => {
     renderPage();
     const breadcrumb = screen.getByRole('navigation', { name: 'Breadcrumb' });
