@@ -3,8 +3,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, apiClient } from '@/lib/api-client';
 import type * as ApiClientModule from '@/lib/api-client';
 
-import { fetchAllBacktests, fetchBacktest, fetchBacktests, fetchCoverage } from './backtests-api';
+import {
+  fetchAllBacktests,
+  fetchBacktest,
+  fetchBacktests,
+  fetchCoverage,
+  validateTickers,
+} from './backtests-api';
 import { fixtureBacktest, fixtureBacktests } from './fixtures';
+import { backtestRunRequestSchema } from './types';
 
 vi.mock('@/config/env', () => ({
   env: { apiBaseUrl: '/api', apiTimeout: 30_000, useFixtures: false, isDev: true, isProd: false },
@@ -106,4 +113,62 @@ describe('real coverage for selected tickers', () => {
       expect(fixtureBacktests).not.toHaveBeenCalled();
     },
   );
+});
+
+describe('ticker recognition', () => {
+  beforeEach(() => vi.resetAllMocks());
+
+  it('sends symbols and cancellation through the authenticated API transport', async () => {
+    const result = {
+      tickers: [
+        { ticker: '^GSPC', status: 'valid' },
+        { ticker: 'XZCER', status: 'unknown' },
+      ],
+      unknown: ['XZCER'],
+    };
+    vi.mocked(apiClient.get).mockResolvedValue(result);
+    const signal = new AbortController().signal;
+    expect(await validateTickers(['^GSPC', 'XZCER'], signal)).toEqual(result);
+    expect(apiClient.get).toHaveBeenCalledWith('/market-data/validate-tickers', {
+      params: { tickers: '^GSPC,XZCER' },
+      signal,
+    });
+  });
+
+  it('does not turn an unavailable provider into an unknown symbol', async () => {
+    const error = new ApiError('Provider unavailable', 503, 'UNAVAILABLE');
+    vi.mocked(apiClient.get).mockRejectedValue(error);
+    await expect(validateTickers(['AAPL'])).rejects.toBe(error);
+  });
+
+  it('normalizes and deduplicates strategy symbols before checking response completeness', async () => {
+    const result = { tickers: [{ ticker: 'AAPL', status: 'valid' }], unknown: [] };
+    vi.mocked(apiClient.get).mockResolvedValue(result);
+    expect(await validateTickers([' aapl ', 'AAPL'])).toEqual(result);
+    expect(apiClient.get).toHaveBeenCalledWith('/market-data/validate-tickers', {
+      params: { tickers: 'AAPL' },
+    });
+  });
+
+  it.each([
+    { tickers: [], unknown: [] },
+    { tickers: [{ ticker: 'MSFT', status: 'valid' }], unknown: [] },
+    { tickers: [{ ticker: 'AAPL', status: 'unknown' }], unknown: [] },
+    { tickers: [{ ticker: 'AAPL', status: 'valid' }], unknown: ['AAPL'] },
+  ])('rejects incomplete or contradictory verification: %j', async (response) => {
+    vi.mocked(apiClient.get).mockResolvedValue(response);
+    await expect(validateTickers(['AAPL'])).rejects.toThrow('incomplete response');
+  });
+});
+
+it('allows only Event mode for new run requests', () => {
+  const request = {
+    name: 'Run',
+    strategyKey: 'portfolio_1',
+    startDate: '2025-01-01',
+    endDate: '2025-12-31',
+    initialCapital: 100_000,
+  };
+  expect(backtestRunRequestSchema.safeParse({ ...request, mode: 'event' }).success).toBe(true);
+  expect(backtestRunRequestSchema.safeParse({ ...request, mode: 'fast' }).success).toBe(false);
 });
