@@ -1,9 +1,17 @@
 import { useLocation } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { apiClient } from '@/lib/api-client';
+import { ApiError, apiClient } from '@/lib/api-client';
 import type * as ApiClientModule from '@/lib/api-client';
-import { act, fireEvent, renderWithProviders, screen, userEvent, waitFor } from '@/test/test-utils';
+import {
+  act,
+  fireEvent,
+  renderWithProviders,
+  screen,
+  userEvent,
+  waitFor,
+  within,
+} from '@/test/test-utils';
 
 import { RunBacktestDialog } from './run-backtest-dialog';
 import { RunBacktestForm } from './run-backtest-form';
@@ -89,10 +97,29 @@ beforeEach(() => {
         const key = config?.params?.strategyKey ?? '';
         return Promise.resolve(COVERAGE[key as keyof typeof COVERAGE]);
       }
+      if (url === '/market-data/validate-tickers') {
+        return Promise.resolve({
+          tickers: (config?.params?.tickers ?? '')
+            .split(',')
+            .map((ticker) => ({ ticker, status: 'valid' })),
+          unknown: [],
+        });
+      }
       throw new Error(`unexpected GET ${url}`);
     },
   );
 });
+
+function interceptTickerCheck(ticker: string, response: () => Promise<unknown>) {
+  const fallback = get.getMockImplementation()!;
+  get.mockImplementation((url, config) => {
+    const params = config?.params as { tickers?: string } | undefined;
+    if (url === '/market-data/validate-tickers' && params?.tickers === ticker) {
+      return response();
+    }
+    return fallback(url, config);
+  });
+}
 
 /**
  * Submit the form, rather than clicking the button that submits it.
@@ -133,6 +160,11 @@ function mockNativeDialog() {
 }
 
 describe('RunBacktestForm', () => {
+  it('does not offer an execution-mode selector', () => {
+    renderWithProviders(<RunBacktestForm />);
+    expect(screen.queryByRole('radiogroup', { name: 'Run mode' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Fast')).not.toBeInTheDocument();
+  });
   it('offers only strategies that have passed validation', async () => {
     // Flush the already-resolved mocked query before starting the DOM wait.
     // Cold schema initialization can otherwise exhaust the one-second wait.
@@ -225,10 +257,10 @@ describe('RunBacktestForm', () => {
         universe: ['AAPL'],
         slippageBps: 5,
         commissionPerShare: 0.005,
-        signals: [],
         sentimentGate: { enabled: false, threshold: -0.25 },
       },
     });
+    expect((body as { params: Record<string, unknown> }).params).not.toHaveProperty('signals');
 
     await waitFor(() => {
       expect(screen.getByLabelText('Current path')).toHaveTextContent('/backtests/bt-9');
@@ -263,7 +295,7 @@ describe('RunBacktestForm', () => {
     });
 
     await userEvent.type(screen.getByLabelText('Add ticker'), 'msft{Enter}');
-    expect(screen.getByRole('button', { name: 'Remove MSFT' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Remove MSFT' })).toBeInTheDocument();
 
     await waitFor(() => {
       expect(get).toHaveBeenCalledWith('/market-data/coverage', {
@@ -289,10 +321,160 @@ describe('RunBacktestForm', () => {
     expect(post).not.toHaveBeenCalled();
   });
 
-  it('disables unsupported signal and sentiment controls explicitly', () => {
+  it('uses the strategy indicators without offering placeholder controls', () => {
     renderWithProviders(<RunBacktestForm />);
-    expect(screen.getByRole('button', { name: 'RSI 14' })).toBeDisabled();
+    expect(
+      screen.getByText('Indicators are defined by the selected strategy.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'RSI 14' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'VWAP' })).not.toBeInTheDocument();
     expect(screen.getByRole('switch', { name: 'Sentiment gate' })).toBeDisabled();
+  });
+
+  it('checks a draft before adding it, deduplicates Enter/blur, and blocks submission while pending', async () => {
+    let resolve!: (value: unknown) => void;
+    const check = vi.fn(
+      () =>
+        new Promise((accept) => {
+          resolve = accept;
+        }),
+    );
+    interceptTickerCheck('MSFT', check);
+    renderWithProviders(<RunBacktestForm initialStrategyKey="portfolio_1" />);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /run backtest/i })).toBeEnabled(),
+    );
+    const input = screen.getByLabelText('Add ticker');
+    await userEvent.type(input, 'msft{Enter}');
+    fireEvent.blur(input);
+    expect(check).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('Checking MSFT with FMP…')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Remove MSFT' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /run backtest/i })).toBeDisabled();
+    submitForm();
+    expect(post).not.toHaveBeenCalled();
+    await act(async () => {
+      resolve({ tickers: [{ ticker: 'MSFT', status: 'valid' }], unknown: [] });
+      await Promise.resolve();
+    });
+    expect(await screen.findByRole('button', { name: 'Remove MSFT' })).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /run backtest/i })).toBeEnabled(),
+    );
+  });
+
+  it('rejects an unknown draft without changing the universe or selected dates', async () => {
+    interceptTickerCheck('XZCER', () =>
+      Promise.resolve({ tickers: [{ ticker: 'XZCER', status: 'unknown' }], unknown: ['XZCER'] }),
+    );
+    renderWithProviders(<RunBacktestForm initialStrategyKey="portfolio_1" />);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /run backtest/i })).toBeEnabled(),
+    );
+    fireEvent.change(screen.getByLabelText('Start'), { target: { value: '2024-01-03' } });
+    await userEvent.type(screen.getByLabelText('Add ticker'), 'xzcer{Enter}');
+    expect(await screen.findByRole('alert')).toHaveTextContent('XZCER was not found by FMP');
+    expect(screen.getByLabelText('Start')).toHaveValue('2024-01-03');
+    expect(screen.getByLabelText('End')).toHaveValue('2026-07-15');
+    expect(screen.queryByRole('button', { name: 'Remove XZCER' })).not.toBeInTheDocument();
+    expect(get.mock.calls.filter(([url]) => url === '/market-data/coverage')).toHaveLength(1);
+    submitForm();
+    expect(post).not.toHaveBeenCalled();
+    await userEvent.clear(screen.getByLabelText('Add ticker'));
+    expect(screen.getByRole('button', { name: /run backtest/i })).toBeEnabled();
+  });
+
+  it('treats provider failure as retryable verification failure, not an unknown symbol', async () => {
+    const check = vi
+      .fn()
+      .mockRejectedValueOnce(new ApiError('Unavailable', 503, 'UNAVAILABLE'))
+      .mockResolvedValue({ tickers: [{ ticker: 'MSFT', status: 'valid' }], unknown: [] });
+    interceptTickerCheck('MSFT', check);
+    renderWithProviders(<RunBacktestForm initialStrategyKey="portfolio_1" />);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /run backtest/i })).toBeEnabled(),
+    );
+    await userEvent.type(screen.getByLabelText('Add ticker'), 'msft{Enter}');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not verify MSFT right now');
+    expect(screen.queryByText(/was not found/)).not.toBeInTheDocument();
+    await userEvent.keyboard('{Enter}');
+    expect(await screen.findByRole('button', { name: 'Remove MSFT' })).toBeInTheDocument();
+    expect(check).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(['edit', 'strategy change'] as const)(
+    'ignores a late successful draft check after %s',
+    async (action) => {
+      let resolve!: (value: unknown) => void;
+      interceptTickerCheck(
+        'MSFT',
+        () =>
+          new Promise((accept) => {
+            resolve = accept;
+          }),
+      );
+      renderWithProviders(<RunBacktestForm initialStrategyKey="portfolio_1" />);
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: /run backtest/i })).toBeEnabled(),
+      );
+      await userEvent.type(screen.getByLabelText('Add ticker'), 'msft{Enter}');
+      const request = get.mock.calls.find(([url, config]) => {
+        const params = config?.params as { tickers?: string } | undefined;
+        return url === '/market-data/validate-tickers' && params?.tickers === 'MSFT';
+      });
+      if (action === 'edit') {
+        await userEvent.clear(screen.getByLabelText('Add ticker'));
+      } else {
+        await pickStrategy('portfolio_2');
+      }
+      expect(request?.[1]?.signal?.aborted).toBe(true);
+      await act(async () => {
+        resolve({ tickers: [{ ticker: 'MSFT', status: 'valid' }], unknown: [] });
+        await Promise.resolve();
+      });
+      expect(screen.queryByRole('button', { name: 'Remove MSFT' })).not.toBeInTheDocument();
+      expect(screen.getByLabelText('Add ticker')).toHaveValue('');
+    },
+  );
+
+  it('verifies the default strategy universe before permitting a run', async () => {
+    let resolve!: (value: unknown) => void;
+    interceptTickerCheck(
+      'AAPL',
+      () =>
+        new Promise((accept) => {
+          resolve = accept;
+        }),
+    );
+    renderWithProviders(<RunBacktestForm initialStrategyKey="portfolio_1" />);
+    await waitFor(() => expect(screen.getByLabelText('End')).toHaveValue('2026-07-15'));
+    expect(screen.getByRole('button', { name: /run backtest/i })).toBeDisabled();
+    submitForm();
+    expect(post).not.toHaveBeenCalled();
+    await act(async () => {
+      resolve({ tickers: [{ ticker: 'AAPL', status: 'unknown' }], unknown: ['AAPL'] });
+      await Promise.resolve();
+    });
+    expect(await screen.findByText(/FMP did not recognize: AAPL/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /run backtest/i })).toBeDisabled();
+  });
+
+  it('can retry an unavailable universe check without discarding the selected window', async () => {
+    const check = vi
+      .fn()
+      .mockRejectedValueOnce(new ApiError('Unavailable', 503, 'UNAVAILABLE'))
+      .mockResolvedValue({ tickers: [{ ticker: 'AAPL', status: 'valid' }], unknown: [] });
+    interceptTickerCheck('AAPL', check);
+    renderWithProviders(<RunBacktestForm initialStrategyKey="portfolio_1" />);
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Ticker verification is unavailable',
+    );
+    await waitFor(() => expect(screen.getByLabelText('End')).toHaveValue('2026-07-15'));
+    await userEvent.click(screen.getByRole('button', { name: 'Retry verification' }));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /run backtest/i })).toBeEnabled(),
+    );
+    expect(screen.getByLabelText('End')).toHaveValue('2026-07-15');
   });
 
   it('rejects a backwards window without calling the API', async () => {
@@ -327,6 +509,9 @@ describe('RunBacktestForm', () => {
     fireEvent.click(screen.getByRole('button', { name: /run backtest/i }));
     expect(screen.getByRole('dialog')).toBe(dialog);
     await waitFor(() => expect(screen.getByLabelText('End')).toHaveValue('2026-07-15'));
+    await waitFor(() =>
+      expect(within(dialog).getByRole('button', { name: /run backtest/i })).toBeEnabled(),
+    );
     const form = screen.getByLabelText('Run name').closest('form')!;
     fireEvent.submit(form);
     const pendingButton = await screen.findByRole('button', { name: 'Starting backtest…' });
@@ -375,6 +560,9 @@ describe('RunBacktestForm', () => {
     fireEvent.click(screen.getByRole('button', { name: /run backtest/i }));
     expect(screen.getByRole('dialog')).toBe(dialog);
     await waitFor(() => expect(screen.getByLabelText('End')).toHaveValue('2026-07-15'));
+    await waitFor(() =>
+      expect(within(dialog).getByRole('button', { name: /run backtest/i })).toBeEnabled(),
+    );
     fireEvent.change(screen.getByLabelText('Run name'), { target: { value: 'Keep my inputs' } });
     fireEvent.submit(screen.getByLabelText('Run name').closest('form')!);
     expect(await screen.findByRole('alert')).toHaveTextContent('Strategy storage is unavailable');
