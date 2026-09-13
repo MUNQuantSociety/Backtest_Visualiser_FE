@@ -1,10 +1,12 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import type { ReactNode } from 'react';
-import { MemoryRouter, Route, Routes } from 'react-router';
+import { StrictMode, type ReactNode } from 'react';
+import { createBrowserRouter, MemoryRouter, Route, RouterProvider, Routes } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { paths } from '@/app/paths';
 import { RootLayout } from '@/app/root-layout';
+import { ApiError } from '@/lib/api-client';
+import type * as ApiModule from '@/lib/api-client';
 import type * as AuthModule from '@/lib/auth-session';
 import AuthCallbackPage from '@/pages/auth-callback-page';
 import LoginPage from '@/pages/LoginPage';
@@ -12,6 +14,8 @@ import LoginPage from '@/pages/LoginPage';
 import { AuthProvider } from './auth-provider';
 import { useAuthCtx } from './auth-provider.context';
 import { QueryProvider } from './query-provider';
+
+import { AppProviders } from './index';
 
 const mocks = vi.hoisted(() => ({
   get: vi.fn(),
@@ -23,9 +27,9 @@ const mocks = vi.hoisted(() => ({
   listeners: new Set<() => void>(),
   signal: new AbortController().signal,
 }));
-vi.mock('@/lib/api-client', () => ({
+vi.mock('@/lib/api-client', async (original) => ({
+  ...(await original<typeof ApiModule>()),
   apiClient: { get: mocks.get },
-  ApiError: class extends Error {},
 }));
 vi.mock('@/app/dashboard-data', () => ({ prefetchDashboardData: vi.fn() }));
 vi.mock('@/lib/auth-session', async (original) => ({
@@ -168,5 +172,81 @@ describe('verified sign-in and protected routes', () => {
     expect(mocks.get).not.toHaveBeenCalled();
     expect(window.location.search).toBe('');
     expect(screen.queryByText('provider details must not appear')).not.toBeInTheDocument();
+  });
+
+  it.each(['ECONNABORTED', 'ETIMEDOUT', 'ERR_NETWORK', 'NETWORK_ERROR'])(
+    'explains API connectivity after successful provider sign-in for %s and remains signed out',
+    async (code) => {
+      window.history.replaceState(null, '', '/auth/callback?code=one&state=matching');
+      mocks.complete.mockResolvedValue({ state: { returnTo: '/backtests' } });
+      mocks.get.mockRejectedValue(new ApiError('internal request details', 0, code));
+      render(<TestApp path={paths.authCallback} />);
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent(
+        'Secure sign-in succeeded, but the MQS server could not be reached.',
+      );
+      expect(alert).not.toHaveTextContent('internal request details');
+      expect(mocks.clear).toHaveBeenCalledOnce();
+      expect(window.location.search).toBe('');
+      expect(screen.queryByRole('heading', { name: 'Private backtests' })).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole('link', { name: 'Back to sign in' }));
+      expect(await screen.findByRole('heading', { name: 'Welcome back' })).toBeInTheDocument();
+      expect(screen.getByRole('alert')).toHaveTextContent('MQS server could not be reached');
+    },
+  );
+
+  it.each(['expired authorization code', 'invalid callback state'])(
+    'keeps %s separate from API connectivity failures',
+    async (reason) => {
+      window.history.replaceState(null, '', '/auth/callback?code=one&state=invalid');
+      mocks.complete.mockRejectedValue(new Error(reason));
+      render(<TestApp path={paths.authCallback} />);
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'Sign-in could not be completed. Please start again.',
+      );
+      expect(screen.getByRole('alert')).not.toHaveTextContent('Secure sign-in succeeded');
+      expect(mocks.get).not.toHaveBeenCalled();
+      expect(mocks.clear).toHaveBeenCalledOnce();
+      expect(window.location.search).toBe('');
+    },
+  );
+
+  it('does not label an API identity rejection as a connection error', async () => {
+    window.history.replaceState(null, '', '/auth/callback?code=one&state=matching');
+    mocks.complete.mockResolvedValue({ state: { returnTo: '/backtests' } });
+    mocks.get.mockRejectedValue(new ApiError('invalid access token', 401, 'UNAUTHORIZED'));
+    render(<TestApp path={paths.authCallback} />);
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Sign-in could not be completed. Please start again.',
+    );
+    expect(screen.getByRole('alert')).not.toHaveTextContent('MQS server could not be reached');
+  });
+
+  it('completes sign-in through the real provider stack and browser router across the account-cache remount', async () => {
+    window.history.replaceState(null, '', '/auth/callback?code=one&state=matching');
+    mocks.complete.mockResolvedValue({ state: { returnTo: '/backtests' } });
+    const router = createBrowserRouter([
+      { path: paths.authCallback, element: <AuthCallbackPage /> },
+      { path: paths.login, element: <LoginPage /> },
+      { element: <RootLayout />, children: [{ path: '/backtests', element: <ProtectedPage /> }] },
+    ]);
+    try {
+      render(
+        <StrictMode>
+          <AppProviders>
+            <RouterProvider router={router} />
+          </AppProviders>
+        </StrictMode>,
+      );
+      expect(await screen.findByRole('heading', { name: 'Private backtests' })).toBeInTheDocument();
+      expect(screen.getByText(appUser.id)).toBeInTheDocument();
+      expect(mocks.complete).toHaveBeenCalledOnce();
+      expect(mocks.get).toHaveBeenCalledOnce();
+      expect(router.state.location.pathname).toBe('/backtests');
+      expect(window.location.search).toBe('');
+      expect(mocks.clear).not.toHaveBeenCalled();
+    } finally {
+      router.dispose();
+    }
   });
 });

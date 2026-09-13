@@ -5,7 +5,7 @@ import { paths } from '@/app/paths';
 import { useAuthCtx } from '@/app/providers/auth-provider.context';
 
 export default function AuthCallbackPage() {
-  const { completeSignIn } = useAuthCtx();
+  const { authState, completeSignIn } = useAuthCtx();
   const navigate = useNavigate();
   const [failed, setFailed] = useState(false);
   useEffect(() => {
@@ -28,7 +28,7 @@ export default function AuthCallbackPage() {
         {failed ? (
           <>
             <h1>Sign-in could not be completed</h1>
-            <p role="alert">Please start again from the sign-in page.</p>
+            <p role="alert">{authState.error ?? 'Please start again from the sign-in page.'}</p>
             <Link to={paths.login}>Back to sign in</Link>
           </>
         ) : (
