@@ -1,6 +1,7 @@
 import { createBrowserRouter, redirect } from 'react-router';
 
 import { RootLayout } from '@/app/root-layout';
+import AuthCallbackPage from '@/pages/auth-callback-page';
 import LoginPage from '@/pages/LoginPage';
 
 import { paths } from '../paths';
@@ -23,6 +24,7 @@ export const routePatterns = {
 } as const;
 
 export const router = createBrowserRouter([
+  { path: paths.authCallback, element: <AuthCallbackPage /> },
   {
     path: '/',
     element: <RootLayout />,

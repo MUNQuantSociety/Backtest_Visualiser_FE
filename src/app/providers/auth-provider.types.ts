@@ -4,13 +4,22 @@ export interface AuthProviderProps {
   children: ReactNode;
 }
 
-/** Local UI sign-in state until backend session authentication is connected. */
+export interface AppUser {
+  id: string;
+  email: string | null;
+  displayName: string | null;
+}
+
 export interface AuthState {
+  status: 'loading' | 'signed-out' | 'authenticated' | 'error';
   isAuthenticated: boolean;
+  user: AppUser | null;
+  error: string | null;
 }
 
 export interface AuthCtxInterface {
   authState: AuthState;
-  login: () => void;
-  logout: () => void;
+  login: (returnTo?: string) => Promise<void>;
+  logout: () => Promise<void>;
+  completeSignIn: () => Promise<string>;
 }

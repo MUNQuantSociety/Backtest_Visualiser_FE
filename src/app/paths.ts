@@ -15,5 +15,6 @@ export const paths = {
 
   /* Auth */
   login: '/auth/login',
+  authCallback: '/auth/callback',
   register: '/auth/register',
 } as const;
