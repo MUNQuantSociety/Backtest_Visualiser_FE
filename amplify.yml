@@ -1,0 +1,39 @@
+version: 1
+frontend:
+  phases:
+    preBuild:
+      commands:
+        - nvm install 22
+        - nvm use 22
+        - >-
+          node --input-type=module -e '
+          const url = new URL(process.env.VITE_API_BASE_URL);
+          if (url.protocol !== "https:" || url.username || url.password) {
+            throw new Error("Set VITE_API_BASE_URL to the public HTTPS backend URL, including /api, without credentials.");
+          }
+          if (process.env.VITE_USE_FIXTURES !== "false") {
+            throw new Error("Set VITE_USE_FIXTURES=false for production.");
+          }
+          for (const key of ["VITE_AUTH_AUTHORITY", "VITE_AUTH_DOMAIN"]) {
+            const provider = new URL(process.env[key]);
+            if (provider.protocol !== "https:" || provider.username || provider.password) {
+              throw new Error(key + " must be a public HTTPS provider URL without credentials.");
+            }
+          }
+          if (!process.env.VITE_AUTH_CLIENT_ID?.trim()) {
+            throw new Error("Set VITE_AUTH_CLIENT_ID to the public Cognito SPA client ID.");
+          }
+          console.log("Production API configuration checked.");'
+        - npm ci --cache .npm --prefer-offline
+    build:
+      commands:
+        - npm run lint
+        - npm test -- --pool=forks --maxWorkers=1
+        - npm run build
+  artifacts:
+    baseDirectory: dist
+    files:
+      - '**/*'
+  cache:
+    paths:
+      - .npm/**/*

@@ -12,8 +12,10 @@ import {
 
 import type { EquityPoint } from '@/features/backtests';
 import { formatPercent } from '@/utils/format';
-import { rollingVolatility, toReturns } from '@/utils/metrics';
+import { rollingVolatility } from '@/utils/metrics';
 import { useChartPalette } from '@/utils/use-chart-palette';
+
+import { datedReturns } from './chart-data';
 
 interface RollingVolatilityChartProps {
   data: readonly EquityPoint[];
@@ -21,17 +23,7 @@ interface RollingVolatilityChartProps {
   benchmarkLabel?: string;
 }
 
-/**
- * Annualised rolling volatility, strategy against benchmark.
- *
- * The tearsheet's volatility is an average over the whole run and says nothing
- * about whether the risk was taken evenly. This shows regime: a strategy whose
- * vol triples in a selloff is sized wrong, and a vol-targeted strategy should be
- * a flat line here — the test it either passes or fails.
- *
- * Plotted against the benchmark's own rolling vol, because "volatile" only means
- * something relative to what the market was doing at the time.
- */
+/** Sample volatility of observed daily returns over complete trailing windows. */
 export function RollingVolatilityChart({
   data,
   window = 63,
@@ -40,17 +32,19 @@ export function RollingVolatilityChart({
   const palette = useChartPalette();
 
   const { rows, hasBenchmark } = useMemo(() => {
-    const benchmarkPresent = data.some(
-      (point) => point.benchmark !== null && point.benchmark !== undefined,
+    const dated = datedReturns(data);
+    const strategy = rollingVolatility(
+      dated.map((point) => point.strategy),
+      window,
     );
-    const strategy = rollingVolatility(toReturns(data.map((point) => point.equity)), window);
-    const benchmark = benchmarkPresent
-      ? rollingVolatility(toReturns(data.map((point) => point.benchmark ?? point.equity)), window)
-      : [];
+    const benchmark = rollingVolatility(
+      dated.map((point) => point.benchmark),
+      window,
+    );
     return {
-      hasBenchmark: benchmarkPresent,
+      hasBenchmark: benchmark.some((value) => value !== null),
       rows: strategy.map((value, index) => ({
-        date: data[index + 1]?.date ?? '',
+        date: dated[index]?.date ?? '',
         strategy: value,
         benchmark: benchmark[index] ?? null,
       })),
@@ -71,6 +65,7 @@ export function RollingVolatilityChart({
         <CartesianGrid stroke={palette.grid} strokeDasharray="3 3" vertical={false} />
         <XAxis
           dataKey="date"
+          interval="preserveStartEnd"
           tick={{ fill: palette.mutedText, fontSize: 11 }}
           stroke={palette.grid}
           minTickGap={48}
@@ -98,7 +93,7 @@ export function RollingVolatilityChart({
         />
         <Legend wrapperStyle={{ fontSize: 12, color: palette.mutedText }} />
         <Line
-          type="monotone"
+          type="linear"
           name={`Strategy (${String(window)}d)`}
           dataKey="strategy"
           stroke={palette.series[0]}
@@ -109,7 +104,7 @@ export function RollingVolatilityChart({
         />
         {hasBenchmark ? (
           <Line
-            type="monotone"
+            type="linear"
             name={benchmarkLabel}
             dataKey="benchmark"
             stroke={palette.series[2]}

@@ -17,6 +17,8 @@ import type { EquityPoint } from '@/features/backtests';
 import { formatCompact, formatCurrency } from '@/utils/format';
 import { useChartPalette } from '@/utils/use-chart-palette';
 
+import { dailyPnl } from './chart-data';
+
 interface DailyPnlBarsProps {
   data: readonly EquityPoint[];
   initialCapital?: number | undefined;
@@ -35,20 +37,7 @@ interface DailyPnlBarsProps {
 export function DailyPnlBars({ data, initialCapital }: DailyPnlBarsProps) {
   const palette = useChartPalette();
 
-  const rows = useMemo(() => {
-    let cumulative = 0;
-    const out: { date: string; change: number; cumulative: number }[] = [];
-    for (let i = initialCapital === undefined ? 1 : 0; i < data.length; i += 1) {
-      const previous = data[i - 1];
-      const current = data[i];
-      const previousEquity = previous?.equity ?? initialCapital;
-      if (previousEquity === undefined || !current) continue;
-      const change = current.equity - previousEquity;
-      cumulative += change;
-      out.push({ date: current.date, change, cumulative });
-    }
-    return out;
-  }, [data, initialCapital]);
+  const rows = useMemo(() => dailyPnl(data, initialCapital), [data, initialCapital]);
 
   if (rows.length < 2) {
     return (
@@ -64,6 +53,7 @@ export function DailyPnlBars({ data, initialCapital }: DailyPnlBarsProps) {
         <CartesianGrid stroke={palette.grid} strokeDasharray="3 3" vertical={false} />
         <XAxis
           dataKey="date"
+          interval="preserveStartEnd"
           tick={{ fill: palette.mutedText, fontSize: 11 }}
           stroke={palette.grid}
           minTickGap={48}
@@ -113,7 +103,7 @@ export function DailyPnlBars({ data, initialCapital }: DailyPnlBarsProps) {
         <Line
           yAxisId="cumulative"
           name="Cumulative (right axis)"
-          type="monotone"
+          type="linear"
           dataKey="cumulative"
           stroke={palette.series[0]}
           strokeWidth={2}

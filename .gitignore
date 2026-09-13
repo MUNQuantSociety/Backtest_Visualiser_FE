@@ -65,6 +65,7 @@ pnpm-debug.log*
 # Caches
 .eslintcache
 .cache/
+.npm/
 .temp/
 node_modules/.vite/
 *.tsbuildinfo

@@ -52,6 +52,7 @@ export function DrawdownChart({ data }: DrawdownChartProps) {
         <CartesianGrid stroke={palette.grid} strokeDasharray="3 3" vertical={false} />
         <XAxis
           dataKey="date"
+          interval="preserveStartEnd"
           tick={{ fill: palette.mutedText, fontSize: 11 }}
           stroke={palette.grid}
           minTickGap={40}
@@ -78,7 +79,7 @@ export function DrawdownChart({ data }: DrawdownChartProps) {
           itemStyle={{ color: palette.text }}
         />
         <Area
-          type="monotone"
+          type="linear"
           dataKey="drawdown"
           stroke={palette.loss}
           strokeWidth={1.5}
