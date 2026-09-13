@@ -101,7 +101,7 @@ describe('verified sign-in and protected routes', () => {
   it('ignores the legacy fake sign-in marker', async () => {
     window.sessionStorage.setItem('mqs:local-sign-in:v1', 'signed-in');
     render(<TestApp />);
-    expect(await screen.findByRole('heading', { name: 'Sign in to MQS' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Welcome back' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Private backtests' })).not.toBeInTheDocument();
     expect(mocks.get).not.toHaveBeenCalled();
     expect(window.sessionStorage.getItem('mqs:local-sign-in:v1')).toBeNull();
@@ -145,7 +145,7 @@ describe('verified sign-in and protected routes', () => {
     mocks.token.mockResolvedValue('provider-access-token');
     render(<TestApp />);
     fireEvent.click(await screen.findByRole('button', { name: 'Log out' }));
-    expect(await screen.findByRole('heading', { name: 'Sign in to MQS' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Welcome back' })).toBeInTheDocument();
     expect(screen.queryByText(appUser.id)).not.toBeInTheDocument();
   });
 
