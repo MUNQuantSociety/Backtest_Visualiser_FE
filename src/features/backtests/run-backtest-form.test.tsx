@@ -54,6 +54,11 @@ function strategy(id: string, name: string, status = 'active') {
     bestSharpe: null,
     bestReturn: null,
     lastRunAt: null,
+    validationState: status,
+    validationRunId: null,
+    // What this strategy's INDICATORS block declares; the Signals row
+    // highlights these.
+    indicators: id === 'portfolio_1' ? ['RateOfChange'] : [],
   };
 }
 
@@ -88,6 +93,12 @@ beforeEach(() => {
             strategy('draft_one', 'Unvalidated Draft', 'draft'),
           ],
           total: 4,
+        });
+      }
+      if (url === '/strategies/indicators') {
+        return Promise.resolve({
+          items: ['RateOfChange', 'SimpleMovingAverage'],
+          total: 2,
         });
       }
       if (url === '/market-data/coverage') {

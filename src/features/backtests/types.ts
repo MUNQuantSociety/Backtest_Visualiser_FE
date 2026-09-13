@@ -12,6 +12,23 @@ import { z } from 'zod';
 export const backtestStatusSchema = z.enum(['queued', 'running', 'completed', 'failed']);
 export type BacktestStatus = z.infer<typeof backtestStatusSchema>;
 
+/**
+ * The downloads the backend serves for a finished run, named exactly as it
+ * names them: `GET /backtests/{id}/exports/{filename}` accepts these four and
+ * 404s anything else, so the list is a closed set rather than a free string.
+ *
+ * They are built from the stored report, not from whatever the worker left on
+ * disk, which is why they are worth offering at all: the CSV a student opens in
+ * a spreadsheet holds the same numbers the charts above it drew.
+ */
+export const EXPORT_FILENAMES = [
+  'equity.csv',
+  'trades.csv',
+  'metrics.csv',
+  'report.json',
+] as const;
+export type ExportFilename = (typeof EXPORT_FILENAMES)[number];
+
 export const equityPointSchema = z.object({
   /** ISO-8601 date, e.g. "2024-03-01". */
   date: z.string(),

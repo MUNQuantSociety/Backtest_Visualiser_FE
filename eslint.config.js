@@ -8,7 +8,11 @@ import tseslint from 'typescript-eslint';
 import prettierConfig from 'eslint-config-prettier';
 
 export default tseslint.config(
-  { ignores: ['dist', 'coverage', 'node_modules', 'src/components/ui/**'] },
+  // `.claude` holds agent scratch space, and `.claude/worktrees/*` is a whole
+  // second checkout of this repo. Linting it from here reports another branch's
+  // files as this one's problems — 74 of them, enough to fail `npm run lint`
+  // over code that is not in this working tree at all.
+  { ignores: ['dist', 'coverage', 'node_modules', '.claude', 'src/components/ui/**'] },
 
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommendedTypeChecked],
