@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { z } from 'zod';
 
-import { apiClient } from '@/lib/api-client';
+import { apiClient, ApiError } from '@/lib/api-client';
 import { authIsConfigured, authSession, safeReturnPath } from '@/lib/auth-session';
 
 import { AuthCtx } from './auth-provider.context';
@@ -94,21 +94,33 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const completeSignIn = useCallback((): Promise<string> => {
     callback.current ??= (async () => {
+      let providerCompleted = false;
       try {
         const oidcUser = await authSession.completeSignIn();
+        providerCompleted = true;
         await verifyIdentity(authSession.signal);
         const state: unknown = oidcUser.state;
         return safeReturnPath(
           typeof state === 'object' && state !== null && 'returnTo' in state ? state.returnTo : '/',
         );
-      } catch {
+      } catch (error) {
+        const apiUnreachable =
+          providerCompleted &&
+          error instanceof ApiError &&
+          error.status === 0 &&
+          ['ECONNABORTED', 'ETIMEDOUT', 'ERR_NETWORK', 'NETWORK_ERROR'].includes(error.code);
+        const message = apiUnreachable
+          ? 'Secure sign-in succeeded, but the MQS server could not be reached. Please try again shortly.'
+          : 'Sign-in could not be completed. Please start again.';
         await authSession.clear();
         setAuthState({
           ...signedOut,
           status: 'error',
-          error: 'Sign-in could not be completed. Please start again.',
+          error: message,
         });
-        throw new Error('Sign-in could not be completed. Please start again.');
+        // Provider errors can include credentials; expose only the safe UI message.
+        // eslint-disable-next-line preserve-caught-error
+        throw new Error(message);
       }
     })();
     return callback.current;
