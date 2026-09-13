@@ -7,7 +7,7 @@
 // import { createLogger } from '@/lib/logger';
 
 import { Suspense } from 'react';
-import { Navigate, Outlet } from 'react-router';
+import { Navigate, Outlet, useLocation } from 'react-router';
 
 import { ErrorBoundary } from '@/components/common/error-boundary';
 
@@ -20,6 +20,8 @@ import { AppShell } from './shell';
 /** Chrome that persists across every route, plus per-route error isolation. */
 export function RootLayout() {
   const { authState } = useAuthCtx();
+  const location = useLocation();
+  if (authState.status === 'loading') return <RouteFallback />;
 
   // const location = useLocation();
   //
@@ -33,7 +35,8 @@ export function RootLayout() {
 
   // Go back and login you cheeky boy
   if (!authState.isAuthenticated) {
-    return <Navigate to={paths.login} replace />;
+    const returnTo = location.pathname + location.search + location.hash;
+    return <Navigate to={paths.login + '?returnTo=' + encodeURIComponent(returnTo)} replace />;
   }
 
   return (

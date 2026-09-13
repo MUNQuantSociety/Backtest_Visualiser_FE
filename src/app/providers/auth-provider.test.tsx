@@ -1,112 +1,172 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { paths } from '@/app/paths';
 import { RootLayout } from '@/app/root-layout';
+import type * as AuthModule from '@/lib/auth-session';
+import AuthCallbackPage from '@/pages/auth-callback-page';
 import LoginPage from '@/pages/LoginPage';
 
 import { AuthProvider } from './auth-provider';
 import { useAuthCtx } from './auth-provider.context';
+import { QueryProvider } from './query-provider';
 
+const mocks = vi.hoisted(() => ({
+  get: vi.fn(),
+  token: vi.fn(),
+  signIn: vi.fn(),
+  logout: vi.fn(),
+  complete: vi.fn(),
+  clear: vi.fn(),
+  listeners: new Set<() => void>(),
+  signal: new AbortController().signal,
+}));
+vi.mock('@/lib/api-client', () => ({
+  apiClient: { get: mocks.get },
+  ApiError: class extends Error {},
+}));
+vi.mock('@/app/dashboard-data', () => ({ prefetchDashboardData: vi.fn() }));
+vi.mock('@/lib/auth-session', async (original) => ({
+  ...(await original<typeof AuthModule>()),
+  authIsConfigured: () => true,
+  authSession: {
+    signal: mocks.signal,
+    getAccessToken: mocks.token,
+    signIn: mocks.signIn,
+    logout: mocks.logout,
+    completeSignIn: mocks.complete,
+    clear: mocks.clear,
+    subscribeSignedOut: (fn: () => void) => {
+      mocks.listeners.add(fn);
+      return () => {
+        mocks.listeners.delete(fn);
+      };
+    },
+  },
+}));
 vi.mock('@/app/shell', () => ({ AppShell: ({ children }: { children: ReactNode }) => children }));
-const log = vi.hoisted(() => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }));
-vi.mock('@/lib/logger', () => ({ createLogger: () => log }));
 
-function ProtectedPage({ title }: { title: string }) {
-  const { logout } = useAuthCtx();
+function ProtectedPage() {
+  const { authState, logout } = useAuthCtx();
   return (
     <>
-      <h1>{title}</h1>
+      <h1>Private backtests</h1>
+      <p>{authState.user?.id}</p>
       <button onClick={logout}>Log out</button>
     </>
   );
 }
-
-function TestApp({ path = paths.dashboard }: { path?: string }) {
+function TestApp({ path = '/' }: { path?: string }) {
   return (
     <AuthProvider>
-      <MemoryRouter initialEntries={[path]}>
-        <Routes>
-          <Route path={paths.login} element={<LoginPage />} />
-          <Route element={<RootLayout />}>
-            <Route path={paths.dashboard} element={<ProtectedPage title="Dashboard" />} />
-            <Route path={paths.library} element={<ProtectedPage title="Library" />} />
-          </Route>
-        </Routes>
-      </MemoryRouter>
+      <QueryProvider>
+        <MemoryRouter initialEntries={[path]}>
+          <Routes>
+            <Route path={paths.login} element={<LoginPage />} />
+            <Route path={paths.authCallback} element={<AuthCallbackPage />} />
+            <Route element={<RootLayout />}>
+              <Route path="/" element={<ProtectedPage />} />
+              <Route path="/backtests" element={<ProtectedPage />} />
+            </Route>
+          </Routes>
+        </MemoryRouter>
+      </QueryProvider>
     </AuthProvider>
   );
 }
-
-async function signIn() {
-  await screen.findByRole('heading', { name: 'Welcome back' });
-  fireEvent.change(screen.getByLabelText('Email address'), {
-    target: { value: 'preview@example.com' },
-  });
-  fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'preview-only' } });
-  fireEvent.submit(screen.getByRole('button', { name: 'Sign in' }).closest('form')!);
-  await screen.findByRole('heading', { name: 'Dashboard' });
-}
-
+const appUser = { id: '76125fb2-45a8-4ff5-9195-3bb0dc092c91', email: null, displayName: null };
 beforeEach(() => {
-  window.sessionStorage.clear();
   vi.clearAllMocks();
-});
-afterEach(() => vi.restoreAllMocks());
-
-describe('local sign-in persistence', () => {
-  it('restores sign-in before a protected deep route renders after a reload', async () => {
-    const first = render(<TestApp />);
-    await signIn();
-    first.unmount();
-
-    render(<TestApp path={paths.library} />);
-    expect(screen.getByRole('heading', { name: 'Library' })).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Welcome back' })).not.toBeInTheDocument();
-    expect(window.sessionStorage.getItem('mqs:local-sign-in:v1')).toBe('signed-in');
-    expect(JSON.stringify(window.sessionStorage)).not.toContain('preview@example.com');
-    expect(JSON.stringify(window.sessionStorage)).not.toContain('preview-only');
-    expect(JSON.stringify(window.sessionStorage)).not.toContain('access_token');
+  mocks.listeners.clear();
+  window.sessionStorage.clear();
+  window.history.replaceState(null, '', '/');
+  mocks.token.mockResolvedValue(null);
+  mocks.get.mockResolvedValue(appUser);
+  mocks.clear.mockImplementation(() => {
+    mocks.listeners.forEach((fn) => fn());
+    return Promise.resolve();
   });
+  mocks.logout.mockImplementation(() => {
+    mocks.listeners.forEach((fn) => fn());
+    return Promise.resolve();
+  });
+});
+afterEach(() => {
+  window.history.replaceState(null, '', '/');
+});
 
-  it('clears the session on logout so reloading remains signed out', async () => {
-    const first = render(<TestApp />);
-    await signIn();
-    fireEvent.click(screen.getByRole('button', { name: 'Log out' }));
-    await screen.findByRole('heading', { name: 'Welcome back' });
-    first.unmount();
-
-    render(<TestApp path={paths.library} />);
-    expect(await screen.findByRole('heading', { name: 'Welcome back' })).toBeInTheDocument();
+describe('verified sign-in and protected routes', () => {
+  it('ignores the legacy fake sign-in marker', async () => {
+    window.sessionStorage.setItem('mqs:local-sign-in:v1', 'signed-in');
+    render(<TestApp />);
+    expect(await screen.findByRole('heading', { name: 'Sign in to MQS' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Private backtests' })).not.toBeInTheDocument();
+    expect(mocks.get).not.toHaveBeenCalled();
     expect(window.sessionStorage.getItem('mqs:local-sign-in:v1')).toBeNull();
   });
 
-  it('rejects an unrecognised stored session value', async () => {
-    window.sessionStorage.setItem('mqs:local-sign-in:v1', 'invalid');
-    render(<TestApp />);
-    expect(await screen.findByRole('heading', { name: 'Welcome back' })).toBeInTheDocument();
+  it('waits for backend verification before rendering a private deep link', async () => {
+    mocks.token.mockResolvedValue('provider-access-token');
+    let verify!: (value: typeof appUser) => void;
+    mocks.get.mockReturnValue(
+      new Promise((resolve) => {
+        verify = resolve;
+      }),
+    );
+    render(<TestApp path="/backtests" />);
+    await waitFor(() => expect(mocks.get).toHaveBeenCalledWith('/auth/me', expect.any(Object)));
+    expect(screen.queryByRole('heading', { name: 'Private backtests' })).not.toBeInTheDocument();
+    await act(async () => {
+      verify(appUser);
+      await Promise.resolve();
+    });
+    expect(await screen.findByRole('heading', { name: 'Private backtests' })).toBeInTheDocument();
+    expect(screen.getByText(appUser.id)).toBeInTheDocument();
   });
 
-  it('allows in-memory sign-in and logout when browser storage is blocked', async () => {
-    const storagePrototype = Object.getPrototypeOf(window.sessionStorage) as Storage;
-    vi.spyOn(storagePrototype, 'getItem').mockImplementation(() => {
-      throw new Error('Storage blocked');
-    });
-    vi.spyOn(storagePrototype, 'setItem').mockImplementation(() => {
-      throw new Error('Storage blocked');
-    });
-    vi.spyOn(storagePrototype, 'removeItem').mockImplementation(() => {
-      throw new Error('Storage blocked');
-    });
+  it('rejects a locally stored provider session when the API rejects it', async () => {
+    mocks.token.mockResolvedValue('unverified');
+    mocks.get.mockRejectedValue(new Error('401'));
     render(<TestApp />);
-    await signIn();
-    fireEvent.click(screen.getByRole('button', { name: 'Log out' }));
-    expect(await screen.findByRole('heading', { name: 'Welcome back' })).toBeInTheDocument();
-    expect(log.warn).toHaveBeenCalledWith(
-      'local sign-in is memory-only; browser storage is unavailable',
-      expect.any(Object),
-    );
+    expect(await screen.findByRole('alert')).toHaveTextContent('session could not be verified');
+    expect(screen.queryByRole('heading', { name: 'Private backtests' })).not.toBeInTheDocument();
+  });
+
+  it('sends the intended local route to managed sign-in', async () => {
+    render(<TestApp path="/backtests?strategy=one" />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Continue to secure sign-in' }));
+    expect(mocks.signIn).toHaveBeenCalledWith('/backtests?strategy=one');
+    expect(screen.queryByLabelText('Password')).not.toBeInTheDocument();
+  });
+
+  it('clears private UI immediately on sign-out', async () => {
+    mocks.token.mockResolvedValue('provider-access-token');
+    render(<TestApp />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Log out' }));
+    expect(await screen.findByRole('heading', { name: 'Sign in to MQS' })).toBeInTheDocument();
+    expect(screen.queryByText(appUser.id)).not.toBeInTheDocument();
+  });
+
+  it('verifies the callback identity then returns to the saved private route', async () => {
+    window.history.replaceState(null, '', '/auth/callback?code=one&state=matching');
+    mocks.complete.mockResolvedValue({ state: { returnTo: '/backtests' } });
+    render(<TestApp path={paths.authCallback} />);
+    expect(await screen.findByRole('heading', { name: 'Private backtests' })).toBeInTheDocument();
+    expect(mocks.get).toHaveBeenCalledWith('/auth/me', expect.any(Object));
+    expect(mocks.complete).toHaveBeenCalledOnce();
+  });
+
+  it('shows safe callback failure copy, strips callback parameters, and never opens private UI', async () => {
+    window.history.replaceState(null, '', '/auth/callback?code=one&state=invalid');
+    mocks.complete.mockRejectedValue(new Error('provider details must not appear'));
+    render(<TestApp path={paths.authCallback} />);
+    expect(
+      await screen.findByRole('heading', { name: 'Sign-in could not be completed' }),
+    ).toBeInTheDocument();
+    expect(mocks.get).not.toHaveBeenCalled();
+    expect(window.location.search).toBe('');
+    expect(screen.queryByText('provider details must not appear')).not.toBeInTheDocument();
   });
 });

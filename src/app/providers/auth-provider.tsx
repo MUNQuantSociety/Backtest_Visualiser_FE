@@ -1,56 +1,122 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { z } from 'zod';
 
-import { createLogger } from '@/lib/logger';
+import { apiClient } from '@/lib/api-client';
+import { authIsConfigured, authSession, safeReturnPath } from '@/lib/auth-session';
 
 import { AuthCtx } from './auth-provider.context';
-import type { AuthProviderProps, AuthState, AuthCtxInterface } from './auth-provider.types';
+import type { AuthProviderProps, AuthState } from './auth-provider.types';
 
-const log = createLogger('auth');
-const SESSION_KEY = 'mqs:local-sign-in:v1';
-
-function restoreSession(): AuthState {
-  try {
-    const isAuthenticated = window.sessionStorage.getItem(SESSION_KEY) === 'signed-in';
-    log.info('local sign-in restored', { isAuthenticated });
-    return { isAuthenticated };
-  } catch (error) {
-    log.warn('could not restore local sign-in; starting signed out', { error });
-    return { isAuthenticated: false };
-  }
-}
+const appUserSchema = z.object({
+  id: z.uuid(),
+  email: z.string().nullable(),
+  displayName: z.string().nullable(),
+});
+const signedOut: AuthState = {
+  status: 'signed-out',
+  isAuthenticated: false,
+  user: null,
+  error: null,
+};
+const loading: AuthState = { ...signedOut, status: 'loading' };
 
 export function AuthProvider({ children }: AuthProviderProps) {
-  // Restore synchronously so the route guard never sees a temporary signed-out
-  // state during a reload. This marker is only for the existing local sign-in;
-  // backend authentication must validate its own session when it is connected.
-  const [authState, setAuthState] = useState<AuthState>(restoreSession);
+  const [authState, setAuthState] = useState<AuthState>(loading);
+  const callback = useRef<Promise<string> | null>(null);
 
-  const login = (): void => {
+  const verifyIdentity = useCallback(async (signal: AbortSignal) => {
+    const user = appUserSchema.parse(await apiClient.get<unknown>('/auth/me', { signal }));
+    if (signal.aborted) throw new Error('Sign-in was cancelled.');
+    setAuthState({ status: 'authenticated', isAuthenticated: true, user, error: null });
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const unsubscribe = authSession.subscribeSignedOut(() => setAuthState(signedOut));
+    // An old UI marker has no authentication meaning and is never restored.
     try {
-      // Keep no credentials or access tokens in browser storage.
-      window.sessionStorage.setItem(SESSION_KEY, 'signed-in');
-      log.info('local sign-in saved for this browser tab');
-    } catch (error) {
-      log.warn('local sign-in is memory-only; browser storage is unavailable', { error });
+      window.sessionStorage.removeItem('mqs:local-sign-in:v1');
+    } catch {
+      /* Storage may be blocked. */
     }
-    setAuthState({ isAuthenticated: true });
-  };
+    if (window.location.pathname !== '/auth/callback') {
+      void (async () => {
+        try {
+          if (!authIsConfigured())
+            throw new Error('Sign-in is not configured. Please contact the site administrator.');
+          const token = await authSession.getAccessToken();
+          if (controller.signal.aborted) return;
+          if (token) await verifyIdentity(controller.signal);
+          else setAuthState(signedOut);
+        } catch {
+          if (!controller.signal.aborted)
+            setAuthState({
+              ...signedOut,
+              status: 'error',
+              error: authIsConfigured()
+                ? 'Your session could not be verified. Please sign in again.'
+                : 'Sign-in is not configured. Please contact the site administrator.',
+            });
+        }
+      })();
+    }
+    return () => {
+      controller.abort();
+      unsubscribe();
+    };
+  }, [verifyIdentity]);
 
-  const logout = (): void => {
+  const login = useCallback(async (returnTo = '/') => {
+    setAuthState(loading);
     try {
-      window.sessionStorage.removeItem(SESSION_KEY);
-    } catch (error) {
-      log.warn('could not clear stored local sign-in', { error });
+      await authSession.signIn(safeReturnPath(returnTo));
+    } catch {
+      setAuthState({
+        ...signedOut,
+        status: 'error',
+        error: 'Could not open secure sign-in. Please try again.',
+      });
     }
-    setAuthState({ isAuthenticated: false });
-    log.info('signed out of local session');
-  };
+  }, []);
 
-  const value: AuthCtxInterface = {
-    authState,
-    login,
-    logout,
-  };
+  const logout = useCallback(async () => {
+    setAuthState(signedOut);
+    try {
+      await authSession.logout();
+    } catch {
+      setAuthState({
+        ...signedOut,
+        status: 'error',
+        error: 'You are signed out here. The sign-in service could not be reached.',
+      });
+    }
+  }, []);
 
-  return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>;
+  const completeSignIn = useCallback((): Promise<string> => {
+    callback.current ??= (async () => {
+      try {
+        const oidcUser = await authSession.completeSignIn();
+        await verifyIdentity(authSession.signal);
+        const state: unknown = oidcUser.state;
+        return safeReturnPath(
+          typeof state === 'object' && state !== null && 'returnTo' in state ? state.returnTo : '/',
+        );
+      } catch {
+        await authSession.clear();
+        setAuthState({
+          ...signedOut,
+          status: 'error',
+          error: 'Sign-in could not be completed. Please start again.',
+        });
+        throw new Error('Sign-in could not be completed. Please start again.');
+      }
+    })();
+    return callback.current;
+  }, [verifyIdentity]);
+
+  return (
+    <AuthCtx.Provider value={{ authState, login, logout, completeSignIn }}>
+      {children}
+    </AuthCtx.Provider>
+  );
 }
