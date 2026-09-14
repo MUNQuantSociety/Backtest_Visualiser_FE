@@ -3,8 +3,8 @@ import { Link } from 'react-router';
 
 import { paths } from '@/app/paths';
 import { Badge } from '@/components/ui/badge';
-import { useBacktest } from '@/features/backtests';
 
+import { useStrategyStatus } from '../strategies-api';
 import type { StrategySubmissionResult } from '../types';
 
 /**
@@ -17,11 +17,12 @@ import type { StrategySubmissionResult } from '../types';
  * which is exactly what happened to the first hand-written upload, whose
  * source subclassed `BasePortfolio` without importing it.
  *
- * The run is polled through `useBacktest`, which already stops on its own once
- * the status is terminal.
+ * The strategy registry is polled instead of the backtest detail endpoint.
+ * Validation jobs are transient and failed jobs may never have a saved report,
+ * while the strategy row retains the authoritative lifecycle state.
  */
 export function ValidationOutcome({ result }: { result: StrategySubmissionResult }) {
-  const run = useBacktest(result.validationRunId ?? undefined);
+  const strategy = useStrategyStatus(result.validationRunId ? result.id : undefined);
 
   // Nothing to watch: the save went through but no run was started, and the
   // server's own message is the only account of why.
@@ -35,27 +36,29 @@ export function ValidationOutcome({ result }: { result: StrategySubmissionResult
     );
   }
 
-  if (run.isError) {
+  // An error with data behind it is a stale poll, not an unreadable run:
+  // the ladder below keeps showing the last state that was read.
+  if (strategy.isError && strategy.data === undefined) {
     return (
       <Panel tone="warn" icon={<CircleX className="size-4" aria-hidden />} alert>
         <strong>Saved as a draft.</strong> Its validation run could not be read:{' '}
-        {run.error.message}
+        {strategy.error.message}
       </Panel>
     );
   }
 
-  const status = run.data?.status;
+  const status = strategy.data?.validationState;
 
-  if (!status || status === 'queued' || status === 'running') {
+  if (strategy.data === undefined || status === 'validating') {
     return (
       <Panel tone="muted" icon={<Loader2 className="size-4 animate-spin" aria-hidden />}>
-        <strong>Validating “{result.name}”…</strong> It stays a draft until this run proves it
-        loads and trades. This takes as long as a backtest does.
+        <strong>Validating “{result.name}”…</strong> It stays a draft until this run proves it loads
+        and trades. This takes as long as a backtest does.
       </Panel>
     );
   }
 
-  if (status === 'failed') {
+  if (status === 'failed_validation') {
     return (
       <Panel tone="loss" icon={<CircleX className="size-4" aria-hidden />} alert>
         <span className="flex flex-wrap items-center gap-2">
@@ -69,7 +72,7 @@ export function ValidationOutcome({ result }: { result: StrategySubmissionResult
             subclasses BasePortfolio without importing it — the check cannot
             see that, so this is the first place it is reported. */}
         <code className="mt-1 block overflow-x-auto rounded bg-background px-2 py-1 font-mono text-xs">
-          {run.data?.errorMessage ?? 'No reason was recorded for the failure.'}
+          The validation run did not pass. Open the run for its recorded details.
         </code>
         <Link
           to={paths.backtestDetail(result.validationRunId)}
@@ -81,10 +84,31 @@ export function ValidationOutcome({ result }: { result: StrategySubmissionResult
     );
   }
 
+  if (status === 'active') {
+    return (
+      <Panel tone="profit" icon={<CircleCheck className="size-4" aria-hidden />}>
+        <strong>“{result.name}” passed validation and is active.</strong> It can be selected in the
+        run dialog now.
+      </Panel>
+    );
+  }
+
+  // Anything else — `archived`, a state this client does not know, or no
+  // state at all — is not a pass. Saying so beats guessing either way.
   return (
-    <Panel tone="profit" icon={<CircleCheck className="size-4" aria-hidden />}>
-      <strong>“{result.name}” passed validation and is active.</strong> It can be selected in the
-      run dialog now.
+    <Panel tone="muted" icon={<CircleX className="size-4" aria-hidden />}>
+      <span>
+        <strong>
+          “{result.name}” is in an unexpected state{status ? ` (${status})` : ''}.
+        </strong>{' '}
+        It has not been activated. Open the run for what the engine recorded.
+      </span>
+      <Link
+        to={paths.backtestDetail(result.validationRunId)}
+        className="font-medium text-primary underline-offset-4 hover:underline"
+      >
+        Open the validation run →
+      </Link>
     </Panel>
   );
 }

@@ -1,6 +1,8 @@
 import {
   Activity,
   Briefcase,
+  Eye,
+  EyeOff,
   FlaskConical,
   GitCompareArrows,
   LayoutDashboard,
@@ -20,6 +22,8 @@ import { Button } from '@/components/ui/button';
 import { APP_NAME, PRODUCT_NAMES } from '@/config/constants';
 import { env } from '@/config/env';
 import { ValidationNotifications } from '@/features/strategies';
+import { authIsConfigured } from '@/lib/auth-session';
+import { useHideDemoPanels, useSetHideDemoPanels } from '@/lib/ui-store';
 import { cn } from '@/lib/utils';
 
 interface NavItem {
@@ -164,6 +168,9 @@ function AppHeader({
   navExpanded: boolean;
   onToggleNav: () => void;
 }) {
+  const hideDemoPanels = useHideDemoPanels();
+  const setHideDemoPanels = useSetHideDemoPanels();
+
   return (
     <header className="sticky top-0 z-50 flex h-14 shrink-0 items-center border-b bg-card/95 backdrop-blur">
       {/*
@@ -223,6 +230,29 @@ function AppHeader({
             Fixtures
           </span>
         ) : null}
+
+        {/* Demo panels are hidden per-preference rather than by the fixtures
+            flag: a panel only falls back to demo data when its endpoint is
+            down, so they can appear even while real data flows elsewhere.
+            A development aid, so a production build never shows the control —
+            and demo panels are hidden outright there. */}
+        {env.isDev ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-pressed={hideDemoPanels}
+            title={hideDemoPanels ? 'Show demo data panels' : 'Hide demo data panels'}
+            onClick={() => setHideDemoPanels(!hideDemoPanels)}
+            className="tabular hidden items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[11px] font-medium tracking-[0.06em] text-muted-foreground uppercase hover:bg-accent/60 hover:text-foreground sm:inline-flex"
+          >
+            {hideDemoPanels ? (
+              <EyeOff className="size-3" aria-hidden />
+            ) : (
+              <Eye className="size-3" aria-hidden />
+            )}
+            {hideDemoPanels ? 'Show demo' : 'Hide demo'}
+          </Button>
+        ) : null}
       </div>
       <LogoutBtn />
     </header>
@@ -231,6 +261,10 @@ function AppHeader({
 
 function LogoutBtn() {
   const { logout } = useAuthCtx();
+  // A dev-identity sign-in has no session to end: the identity is an env var
+  // the backend answers for on every load. Logging out would only land on a
+  // sign-in page with nothing enabled, so the control is not offered.
+  if (!authIsConfigured() && env.isDev && env.devUserId) return null;
   return (
     <Button variant="ghost" size="sm" title="logout" onClick={logout}>
       <LogOut className="mr-2 size-4" aria-hidden />

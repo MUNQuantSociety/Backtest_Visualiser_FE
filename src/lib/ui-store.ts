@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 import { STORAGE_KEYS } from '@/config/constants';
+import { env } from '@/config/env';
 
 /**
  * Client-only UI state.
@@ -16,16 +17,27 @@ export type Theme = 'light' | 'dark' | 'system';
 /** How far back the dashboard's book panels look. */
 export type DashboardPeriod = '1y' | '2y' | '5y' | 'max';
 
+/**
+ * Demo panels are a development aid: visible in dev, hidden everywhere else.
+ * The dev-only env var can additionally start them hidden inside dev.
+ */
+export function demoPanelsHiddenByDefault(isDev: boolean, devHideDemoPanels: boolean): boolean {
+  return !isDev || devHideDemoPanels;
+}
+
 interface UiState {
   theme: Theme;
   dashboardPeriod: DashboardPeriod;
   /** IDs currently pinned for side-by-side comparison. */
   comparisonIds: string[];
+  /** When true, cards marked with <DemoBadge /> are hidden. */
+  hideDemoPanels: boolean;
 
   setTheme: (theme: Theme) => void;
   setDashboardPeriod: (period: DashboardPeriod) => void;
   toggleComparison: (id: string) => void;
   clearComparison: () => void;
+  setHideDemoPanels: (hide: boolean) => void;
 }
 
 export const useUiStore = create<UiState>()(
@@ -34,6 +46,10 @@ export const useUiStore = create<UiState>()(
       theme: 'system',
       dashboardPeriod: '2y',
       comparisonIds: [],
+      // Seeds the store on first visit. Demo panels are dev-only: hidden in
+      // production, visible in dev, optionally hidden there by the env var. A
+      // persisted toggle choice wins in dev.
+      hideDemoPanels: demoPanelsHiddenByDefault(env.isDev, env.devHideDemoPanels),
 
       setTheme: (theme) => {
         set({ theme });
@@ -54,14 +70,31 @@ export const useUiStore = create<UiState>()(
       clearComparison: () => {
         set({ comparisonIds: [] });
       },
+
+      setHideDemoPanels: (hide) => {
+        set({ hideDemoPanels: hide });
+      },
     }),
     {
       name: STORAGE_KEYS.theme,
       // Comparison selections are per-session; only persist real preferences.
-      partialize: (state) => ({
-        theme: state.theme,
-        dashboardPeriod: state.dashboardPeriod,
-      }),
+      partialize: (state) =>
+        env.isProd
+          ? { theme: state.theme, dashboardPeriod: state.dashboardPeriod }
+          : {
+              theme: state.theme,
+              dashboardPeriod: state.dashboardPeriod,
+              hideDemoPanels: state.hideDemoPanels,
+            },
+      // A production build never shows demo panels, even if a dev session left
+      // a `show` choice in the same origin's storage.
+      merge: (persistedState, currentState) => {
+        const merged = {
+          ...currentState,
+          ...(persistedState as Partial<UiState>),
+        };
+        return env.isProd ? { ...merged, hideDemoPanels: true } : merged;
+      },
     },
   ),
 );
@@ -72,3 +105,5 @@ export const useTheme = () => useUiStore((state) => state.theme);
 export const useSetTheme = () => useUiStore((state) => state.setTheme);
 export const useDashboardPeriod = () => useUiStore((state) => state.dashboardPeriod);
 export const useSetDashboardPeriod = () => useUiStore((state) => state.setDashboardPeriod);
+export const useHideDemoPanels = () => useUiStore((state) => state.hideDemoPanels);
+export const useSetHideDemoPanels = () => useUiStore((state) => state.setHideDemoPanels);

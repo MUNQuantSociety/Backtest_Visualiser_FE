@@ -1,8 +1,6 @@
 import { useQueries } from '@tanstack/react-query';
 import { useCallback, useEffect, useState } from 'react';
 
-import { fetchBacktest } from '@/features/backtests/data';
-
 import { fetchStrategy } from './strategies-api';
 import {
   acknowledgeSubmission,
@@ -15,7 +13,6 @@ import {
   type SubmissionRecord,
 } from './submissions';
 import type { Strategy } from './types';
-
 
 /**
  * The uploads this browser is waiting on, kept in step with their runs.
@@ -60,10 +57,10 @@ export function useSubmissions() {
 
   useQueries({
     queries: watching.map((record) => ({
-      queryKey: ['backtests', 'detail', record.validationRunId],
-      queryFn: () => fetchBacktest(record.validationRunId as string),
-      // Stops on its own: once the run is terminal this entry leaves
-      // `watching`, so the query is no longer mounted at all.
+      queryKey: ['strategies', 'detail', record.strategyKey],
+      queryFn: () => fetchStrategy(record.strategyKey),
+      // Stops on its own: once the strategy's state is terminal this entry
+      // leaves `watching`, so the query is no longer mounted at all.
       refetchInterval: POLL_MS,
       refetchIntervalInBackground: true,
       staleTime: 0,
@@ -71,18 +68,15 @@ export function useSubmissions() {
     combine: (results) => {
       results.forEach((result, index) => {
         const record = watching[index];
-        const status = result.data?.status;
+        const status = result.data?.validationState;
         if (!record || !status) return;
-        if (status === 'completed') {
+        if (status === 'active') {
           setRecords(resolveSubmission(record.strategyKey, 'passed'));
-        } else if (status === 'failed') {
-          setRecords(
-            resolveSubmission(
-              record.strategyKey,
-              'failed',
-              result.data?.errorMessage ?? null,
-            ),
-          );
+        } else if (status !== 'validating') {
+          // `failed_validation` is the expected failure; `archived`, or a state
+          // this client does not know, also means the upload will never
+          // activate, and must not be polled for the rest of the session.
+          setRecords(resolveSubmission(record.strategyKey, 'failed'));
         }
       });
       return null;

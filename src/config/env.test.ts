@@ -34,3 +34,35 @@ describe('temporary development owner configuration', () => {
     expect(env.devUserId).toBeUndefined();
   });
 });
+
+describe('development demo-panels default', () => {
+  it('starts with demo panels hidden when enabled in development', async () => {
+    vi.stubEnv('DEV', true);
+    vi.stubEnv('VITE_DEV_HIDE_DEMO_PANELS', 'true');
+    const { env } = await import('./env');
+    expect(env.devHideDemoPanels).toBe(true);
+  });
+
+  it.each(['false', '', undefined])(
+    'leaves demo panels visible by default when empty or absent (%s)',
+    async (value) => {
+      vi.stubEnv('DEV', true);
+      vi.stubEnv('VITE_DEV_HIDE_DEMO_PANELS', value);
+      const { env } = await import('./env');
+      expect(env.devHideDemoPanels).toBe(false);
+    },
+  );
+
+  it('rejects a malformed value at startup', async () => {
+    vi.stubEnv('DEV', true);
+    vi.stubEnv('VITE_DEV_HIDE_DEMO_PANELS', 'sometimes');
+    await expect(import('./env')).rejects.toThrow('VITE_DEV_HIDE_DEMO_PANELS');
+  });
+
+  it('ignores the default in a production build', async () => {
+    vi.stubEnv('DEV', false);
+    vi.stubEnv('VITE_DEV_HIDE_DEMO_PANELS', 'true');
+    const { env } = await import('./env');
+    expect(env.devHideDemoPanels).toBe(false);
+  });
+});

@@ -98,5 +98,43 @@ describe('backend dashboard periods', () => {
     });
     await waitFor(() => expect(result.current.error?.message).toBe('Backend unavailable'));
     expect(result.current.data).toEqual([]);
+    expect(result.current.failed).toEqual([{ id: 'run-1', error: expect.any(Error) }]);
+  });
+
+  it('keeps the runs that loaded and names the one that failed', async () => {
+    vi.mocked(apiClient.get).mockImplementation((url) =>
+      url === '/backtests/run-2/equity'
+        ? Promise.reject(new Error('Report gone'))
+        : Promise.resolve(response('2y')),
+    );
+    const { result } = renderHook(
+      () => useBacktestEquities(['run-1', 'run-2', 'run-3'], { period: '2y', endDate }),
+      { wrapper: Wrapper },
+    );
+    await waitFor(() => expect(result.current.isPending).toBe(false));
+    expect(result.current.data).toHaveLength(2);
+    expect(result.current.failed).toEqual([{ id: 'run-2', error: expect.any(Error) }]);
+    expect(result.current.error?.message).toBe('Report gone');
+  });
+
+  it('withholds every run until the whole set has settled', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    vi.mocked(apiClient.get).mockImplementation((url) =>
+      url === '/backtests/run-2/equity'
+        ? gate.then(() => Promise.reject(new Error('Report gone')))
+        : Promise.resolve(response('2y')),
+    );
+    const { result } = renderHook(
+      () => useBacktestEquities(['run-1', 'run-2'], { period: '2y', endDate }),
+      { wrapper: Wrapper },
+    );
+    await waitFor(() => expect(apiClient.get).toHaveBeenCalledTimes(2));
+    expect(result.current.isPending).toBe(true);
+    expect(result.current.data).toEqual([]);
+
+    release();
+    await waitFor(() => expect(result.current.isPending).toBe(false));
+    expect(result.current.data).toHaveLength(1);
   });
 });
