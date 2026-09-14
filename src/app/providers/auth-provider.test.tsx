@@ -27,6 +27,27 @@ const mocks = vi.hoisted(() => ({
   listeners: new Set<() => void>(),
   signal: new AbortController().signal,
 }));
+const authConfig = vi.hoisted(() => ({ configured: true }));
+const envState = vi.hoisted(() => ({ devUserId: undefined as string | undefined }));
+vi.mock('@/config/env', () => ({
+  env: {
+    apiBaseUrl: '/api',
+    apiTimeout: 30_000,
+    useFixtures: false,
+    isDev: true,
+    isProd: false,
+    get devUserId() {
+      return envState.devUserId;
+    },
+    auth: {
+      authority: '',
+      clientId: '',
+      domain: '',
+      redirectUri: '',
+      logoutRedirectUri: '',
+    },
+  },
+}));
 vi.mock('@/lib/api-client', async (original) => ({
   ...(await original<typeof ApiModule>()),
   apiClient: { get: mocks.get },
@@ -34,7 +55,7 @@ vi.mock('@/lib/api-client', async (original) => ({
 vi.mock('@/app/dashboard-data', () => ({ prefetchDashboardData: vi.fn() }));
 vi.mock('@/lib/auth-session', async (original) => ({
   ...(await original<typeof AuthModule>()),
-  authIsConfigured: () => true,
+  authIsConfigured: () => authConfig.configured,
   authSession: {
     signal: mocks.signal,
     getAccessToken: mocks.token,
@@ -86,6 +107,8 @@ beforeEach(() => {
   mocks.listeners.clear();
   window.sessionStorage.clear();
   window.history.replaceState(null, '', '/');
+  authConfig.configured = true;
+  envState.devUserId = undefined;
   mocks.token.mockResolvedValue(null);
   mocks.get.mockResolvedValue(appUser);
   mocks.clear.mockImplementation(() => {
@@ -248,5 +271,35 @@ describe('verified sign-in and protected routes', () => {
     } finally {
       router.dispose();
     }
+  });
+});
+
+describe('local dev identity without a hosted provider', () => {
+  it('signs in through the backend identity check when no provider is configured', async () => {
+    authConfig.configured = false;
+    envState.devUserId = appUser.id;
+    render(<TestApp path="/backtests" />);
+    expect(await screen.findByRole('heading', { name: 'Private backtests' })).toBeInTheDocument();
+    expect(mocks.get).toHaveBeenCalledWith('/auth/me', expect.any(Object));
+    expect(mocks.token).not.toHaveBeenCalled();
+    expect(screen.getByText(appUser.id)).toBeInTheDocument();
+  });
+
+  it('stays signed out with the not-configured message when no dev user is set', async () => {
+    authConfig.configured = false;
+    envState.devUserId = undefined;
+    render(<TestApp />);
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Sign-in is not configured. Please contact the site administrator.',
+    );
+    expect(screen.queryByRole('heading', { name: 'Private backtests' })).not.toBeInTheDocument();
+  });
+
+  it('explains a failed identity check rather than claiming sign-in is unconfigured', async () => {
+    authConfig.configured = false;
+    envState.devUserId = appUser.id;
+    mocks.get.mockRejectedValue(new Error('401'));
+    render(<TestApp />);
+    expect(await screen.findByRole('alert')).toHaveTextContent('session could not be verified');
   });
 });

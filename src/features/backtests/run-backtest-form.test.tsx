@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ApiError, apiClient } from '@/lib/api-client';
 import type * as ApiClientModule from '@/lib/api-client';
+import { installFakeStorage } from '@/test/fake-storage';
 import {
   act,
   fireEvent,
@@ -15,6 +16,7 @@ import {
 
 import { RunBacktestDialog } from './run-backtest-dialog';
 import { RunBacktestForm } from './run-backtest-form';
+import { listRunPresets, saveRunPreset } from './run-presets';
 
 /**
  * The dates are the part of this form worth testing.
@@ -81,6 +83,7 @@ const COVERAGE = {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  installFakeStorage();
   vi.spyOn(globalThis, 'scrollTo').mockImplementation(() => undefined);
   get.mockImplementation(
     (url: string, config?: { params?: { strategyKey?: string; tickers?: string } }) => {
@@ -501,6 +504,120 @@ describe('RunBacktestForm', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/start date has to come before/i);
     expect(post).not.toHaveBeenCalled();
+  });
+
+  it('saves the current configuration as a named preset', async () => {
+    renderWithProviders(<RunBacktestForm />);
+    await pickStrategy('portfolio_1');
+    await waitFor(() => {
+      expect(screen.getByLabelText('End')).toHaveValue('2026-07-15');
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save as preset' }));
+    await userEvent.clear(screen.getByLabelText('Preset name'));
+    await userEvent.type(screen.getByLabelText('Preset name'), 'Momentum snapshot');
+    await userEvent.click(screen.getByRole('button', { name: 'Save preset' }));
+
+    expect(await screen.findByText(/Saved "Momentum snapshot"/)).toBeInTheDocument();
+    expect(listRunPresets()).toHaveLength(1);
+    expect(listRunPresets()[0]).toMatchObject({
+      name: 'Momentum snapshot',
+      config: {
+        strategyKey: 'portfolio_1',
+        universe: ['AAPL'],
+        startDate: '2025-07-15',
+        endDate: '2026-07-15',
+        capital: '100000',
+        slippageBps: '5',
+        commission: '0.005',
+      },
+    });
+  });
+
+  it('loads a saved preset back into the form', async () => {
+    saveRunPreset('Mean Reversion window', {
+      strategyKey: 'portfolio_2',
+      runName: 'Loaded run',
+      universe: ['AAPL', 'MSFT'],
+      startDate: '2024-01-03',
+      endDate: '2025-11-07',
+      capital: '50000',
+      slippageBps: '8',
+      commission: '0.01',
+      paramValues: {},
+      gateEnabled: false,
+      gateThreshold: -0.25,
+    });
+
+    renderWithProviders(<RunBacktestForm />);
+    await userEvent.click(screen.getByRole('button', { name: /^Presets/ }));
+    const loadButton = await screen.findByRole('button', { name: 'Load' });
+    await waitFor(() => {
+      expect(loadButton).toBeEnabled();
+    });
+    await userEvent.click(loadButton);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('End')).toHaveValue('2025-11-07');
+    });
+    expect(screen.getByLabelText('Start')).toHaveValue('2024-01-03');
+    expect(screen.getByLabelText('Run name')).toHaveValue('Loaded run');
+    expect(screen.getByLabelText('Initial capital')).toHaveValue(50000);
+    expect(screen.getByLabelText('Slippage')).toHaveValue(8);
+    expect(screen.getByLabelText('Commission')).toHaveValue(0.01);
+    expect(screen.getByRole('radio', { name: /Mean Reversion/ })).toBeChecked();
+    expect(screen.getByRole('button', { name: 'Remove AAPL' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Remove MSFT' })).toBeInTheDocument();
+    expect(screen.queryByText('Saved presets')).not.toBeInTheDocument();
+  });
+
+  it('deletes a saved preset without touching the others', async () => {
+    saveRunPreset('Keep me', {
+      strategyKey: 'portfolio_1',
+      runName: '',
+      universe: ['AAPL'],
+      startDate: '2025-07-15',
+      endDate: '2026-07-15',
+      capital: '100000',
+      slippageBps: '5',
+      commission: '0.005',
+      paramValues: {},
+      gateEnabled: false,
+      gateThreshold: -0.25,
+    });
+    saveRunPreset('Drop me', {
+      strategyKey: 'portfolio_1',
+      runName: '',
+      universe: ['AAPL'],
+      startDate: '2025-01-02',
+      endDate: '2026-07-15',
+      capital: '100000',
+      slippageBps: '5',
+      commission: '0.005',
+      paramValues: {},
+      gateEnabled: false,
+      gateThreshold: -0.25,
+    });
+
+    renderWithProviders(<RunBacktestForm />);
+    await userEvent.click(screen.getByRole('button', { name: /^Presets/ }));
+    expect(await screen.findByText('Drop me')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete Drop me' }));
+
+    expect(screen.queryByText('Drop me')).not.toBeInTheDocument();
+    expect(screen.getByText('Keep me')).toBeInTheDocument();
+    expect(listRunPresets().map((preset) => preset.name)).toEqual(['Keep me']);
+  });
+
+  it('disables Save as preset until a strategy and a window exist', async () => {
+    renderWithProviders(<RunBacktestForm />);
+    expect(screen.getByRole('button', { name: 'Save as preset' })).toBeDisabled();
+
+    await pickStrategy('portfolio_1');
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Save as preset' })).toBeEnabled();
+    });
   });
 
   it('keeps the modal pending, then closes it and opens the exact accepted run', async () => {
