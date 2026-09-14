@@ -12,6 +12,7 @@ import {
   backtestSummarySchema,
   coverageResponseSchema,
   isInFlight,
+  tickerValidationSchema,
   type BacktestDetail,
   type BacktestFilters,
   type BacktestRunRequest,
@@ -208,6 +209,37 @@ export async function fetchCoverage(
     });
     throw error;
   }
+}
+
+export async function validateTickers(tickers: readonly string[], signal?: AbortSignal) {
+  const requested = new Set(tickers.map((ticker) => ticker.trim().toUpperCase()));
+  const data = await apiClient.get<unknown>('/market-data/validate-tickers', {
+    params: { tickers: [...requested].join(',') },
+    ...(signal ? { signal } : {}),
+  });
+  const result = tickerValidationSchema.parse(data);
+  const received = new Set(result.tickers.map((item) => item.ticker));
+  const unknown = result.tickers.filter((item) => item.status === 'unknown');
+  if (
+    result.tickers.length !== requested.size ||
+    received.size !== requested.size ||
+    [...requested].some((ticker) => !received.has(ticker)) ||
+    unknown.length !== result.unknown.length ||
+    unknown.some((item) => !result.unknown.includes(item.ticker))
+  ) {
+    throw new Error('Ticker verification returned an incomplete response. Please retry.');
+  }
+  return result;
+}
+
+export function useTickerValidation(tickers: readonly string[], enabled: boolean) {
+  return useQuery({
+    queryKey: ['market-data', 'validate-tickers', tickers],
+    queryFn: ({ signal }) => validateTickers(tickers, signal),
+    enabled: enabled && tickers.length > 0,
+    staleTime: 60_000,
+    retry: false,
+  });
 }
 
 /**

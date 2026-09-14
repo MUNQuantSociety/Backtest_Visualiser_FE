@@ -9,6 +9,11 @@ import { z } from 'zod';
 const envSchema = z.object({
   VITE_API_BASE_URL: z.string().min(1).default('/api'),
   VITE_API_TIMEOUT: z.coerce.number().int().positive().default(30_000),
+  VITE_AUTH_AUTHORITY: z.string().optional(),
+  VITE_AUTH_CLIENT_ID: z.string().optional(),
+  VITE_AUTH_DOMAIN: z.string().optional(),
+  VITE_AUTH_REDIRECT_URI: z.string().optional(),
+  VITE_AUTH_LOGOUT_REDIRECT_URI: z.string().optional(),
   VITE_DEV_USER_ID: z.preprocess(
     (value) => (value === '' ? undefined : value),
     z.uuid().optional(),
@@ -49,6 +54,13 @@ export const env = {
   useFixtures: parsed.data.VITE_USE_FIXTURES,
   isDev: import.meta.env.DEV,
   isProd: import.meta.env.PROD,
+  auth: {
+    authority: parsed.data.VITE_AUTH_AUTHORITY || '',
+    clientId: parsed.data.VITE_AUTH_CLIENT_ID || '',
+    domain: parsed.data.VITE_AUTH_DOMAIN || '',
+    redirectUri: parsed.data.VITE_AUTH_REDIRECT_URI || '',
+    logoutRedirectUri: parsed.data.VITE_AUTH_LOGOUT_REDIRECT_URI || '',
+  },
 } as const;
 
 export type Env = typeof env;

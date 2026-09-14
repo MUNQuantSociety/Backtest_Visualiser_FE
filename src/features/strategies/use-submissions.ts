@@ -10,6 +10,7 @@ import {
   readSubmissions,
   rememberSubmission,
   resolveSubmission,
+  SUBMISSIONS_CHANGED_EVENT,
   SUBMISSIONS_STORAGE_KEY,
   type SubmissionRecord,
 } from './submissions';
@@ -34,14 +35,22 @@ export function useSubmissions() {
   const [records, setRecords] = useState<SubmissionRecord[]>(() => readSubmissions());
 
   // Another tab saving a strategy is the same author; its entry belongs in
-  // this window's list too.
+  // this window's list too. `storage` only fires across documents, so the tab
+  // that wrote announces its own change on `SUBMISSIONS_CHANGED_EVENT`; both
+  // are re-reads of the same store, and re-reading is cheap because each
+  // mutation replaces the whole list.
   useEffect(() => {
-    function sync(event: StorageEvent) {
-      if (event.key === SUBMISSIONS_STORAGE_KEY) setRecords(readSubmissions());
+    function sync() {
+      setRecords(readSubmissions());
     }
-    window.addEventListener('storage', sync);
+    function onStorage(event: StorageEvent) {
+      if (event.key === SUBMISSIONS_STORAGE_KEY) sync();
+    }
+    window.addEventListener('storage', onStorage);
+    window.addEventListener(SUBMISSIONS_CHANGED_EVENT, sync);
     return () => {
-      window.removeEventListener('storage', sync);
+      window.removeEventListener('storage', onStorage);
+      window.removeEventListener(SUBMISSIONS_CHANGED_EVENT, sync);
     };
   }, []);
 

@@ -1,11 +1,13 @@
 import axios, {
   AxiosError,
+  CanceledError,
   type AxiosInstance,
   type AxiosRequestConfig,
   type InternalAxiosRequestConfig,
 } from 'axios';
 
 import { env } from '@/config/env';
+import { authIsConfigured, authSession, SessionExpiredError } from '@/lib/auth-session';
 import { sanitiseLogUrl } from '@/lib/log-data';
 import { createLogger } from '@/lib/logger';
 
@@ -47,6 +49,8 @@ function readString(body: Record<string, unknown>, key: string): string | undefi
 
 function toApiError(error: unknown): ApiError {
   if (error instanceof ApiError) return error;
+  if (error instanceof SessionExpiredError)
+    return new ApiError(error.message, 401, 'SESSION_EXPIRED');
 
   if (error instanceof AxiosError) {
     // No response => network failure, DNS, CORS, or timeout.
@@ -89,6 +93,17 @@ interface TimedConfig extends InternalAxiosRequestConfig {
   startedAt?: number;
   requestId?: string;
   waitingTimer?: ReturnType<typeof setInterval>;
+  authToken?: string;
+  authRetried?: boolean;
+}
+
+function isApiDestination(url: URL): boolean {
+  const backend = new URL(env.apiBaseUrl, window.location.href);
+  const prefix = backend.pathname.replace(/\/$/, '');
+  return (
+    url.origin === backend.origin &&
+    (url.pathname === prefix || url.pathname.startsWith(prefix + '/'))
+  );
 }
 
 function describe(config: { method?: string | undefined; url?: string | undefined }): string {
@@ -127,13 +142,26 @@ function createApiClient(): AxiosInstance {
     withCredentials: true,
   });
 
-  instance.interceptors.request.use((config) => {
+  instance.interceptors.request.use(async (config) => {
     const timed = config as TimedConfig;
     timed.startedAt = performance.now();
     timed.requestId = crypto.randomUUID();
     // Correlate the same-origin dev proxy without adding cross-origin CORS requirements.
     const url = new URL(instance.getUri(config), window.location.href);
-    if (env.isDev && env.devUserId) {
+    if (authIsConfigured() && isApiDestination(url)) {
+      const signal = authSession.signal;
+      const token = await authSession.getAccessToken();
+      if (signal.aborted) throw new CanceledError('Session changed', config);
+      config.signal = config.signal
+        ? AbortSignal.any([config.signal as AbortSignal, signal])
+        : signal;
+      config.headers.delete('X-User-Id');
+      if (token) {
+        config.headers.set('Authorization', 'Bearer ' + token);
+        timed.authToken = token;
+      }
+    }
+    if (!authIsConfigured() && env.isDev && env.devUserId) {
       const backend = new URL(env.apiBaseUrl, window.location.href);
       const backtestsPath = `${backend.pathname.replace(/\/$/, '')}/backtests`;
       const strategiesPath = `${backend.pathname.replace(/\/$/, '')}/strategies`;
@@ -178,7 +206,24 @@ function createApiClient(): AxiosInstance {
       });
       return response;
     },
-    (error: unknown) => {
+    async (error: unknown) => {
+      if (error instanceof AxiosError && error.response?.status === 401 && error.config) {
+        const config = error.config as TimedConfig;
+        stopWaiting(config);
+        if (config.authToken && !config.signal?.aborted) {
+          if (!config.authRetried) {
+            config.authRetried = true;
+            try {
+              const token = await authSession.getAccessToken(config.authToken);
+              if (!token) throw new SessionExpiredError();
+              return await instance.request(config);
+            } catch (refreshError) {
+              return Promise.reject(toApiError(refreshError));
+            }
+          }
+          await authSession.clear();
+        }
+      }
       const apiError = toApiError(error);
       const config =
         error instanceof AxiosError ? (error.config as TimedConfig | undefined) : undefined;

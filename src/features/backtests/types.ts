@@ -146,7 +146,7 @@ export const backtestRunRequestSchema = z.object({
   startDate: z.string().min(1, 'Pick a start date.'),
   endDate: z.string().min(1, 'Pick an end date.'),
   initialCapital: z.number().positive('Starting capital must be above zero.'),
-  mode: z.enum(['event', 'fast']).optional(),
+  mode: z.literal('event').optional(),
   params: z.record(z.string(), z.unknown()).optional(),
 });
 export type BacktestRunRequest = z.infer<typeof backtestRunRequestSchema>;
@@ -174,6 +174,12 @@ export const coverageResponseSchema = z.object({
   missing: z.array(z.string()).default([]),
 });
 export type CoverageResponse = z.infer<typeof coverageResponseSchema>;
+
+/** Symbol recognition is separate from the dates of available price history. */
+export const tickerValidationSchema = z.object({
+  tickers: z.array(z.object({ ticker: z.string(), status: z.enum(['valid', 'unknown']) })),
+  unknown: z.array(z.string()),
+});
 
 /** Query parameters accepted by the list endpoint. */
 export interface BacktestFilters {

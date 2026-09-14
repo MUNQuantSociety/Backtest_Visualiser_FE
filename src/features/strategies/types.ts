@@ -185,8 +185,21 @@ export type IndicatorCatalogue = z.infer<typeof indicatorCatalogueSchema>;
 export const strategyDraftSchema = z.object({
   body: z.string(),
   indicators: z.array(indicatorSpecSchema).max(32).default([]),
-  /** Attributes carried between bars; rendered as the class's `STATE`. */
-  state: z.record(z.string(), z.unknown()).default({}),
+  /**
+   * Attributes carried between bars; rendered as the class's `STATE`.
+   *
+   * Each key becomes an attribute named by it (`self.<name>`), so the names are
+   * constrained to identifiers just like indicator attributes are — otherwise a
+   * name the body cannot bind to sails past the check and dies on the first bar
+   * as an `AttributeError` no static scan could have predicted.
+   */
+  state: z
+    .record(z.string(), z.unknown())
+    .refine(
+      (state) => Object.keys(state).every((name) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(name)),
+      'State names are used in the body: use a plain name, like self.last_price.',
+    )
+    .default({}),
   filename: z.string().nullable().default(null),
 });
 export type StrategyDraft = z.infer<typeof strategyDraftSchema>;

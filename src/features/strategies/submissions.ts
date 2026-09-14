@@ -18,6 +18,9 @@ import { z } from 'zod';
 
 const STORAGE_KEY = 'mqs.strategy-submissions';
 
+/** Fired on `window` after every write, so same-tab subscribers hear about it. */
+export const SUBMISSIONS_CHANGED_EVENT = 'mqs.strategy-submissions-changed';
+
 /** Anything older than this is not worth re-checking on a cold start. */
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -73,14 +76,25 @@ function write(entries: SubmissionRecord[]): void {
   } catch {
     // Same as reading: not worth breaking a save over.
   }
+  // `storage` fires only in other documents, so the tab that wrote never hears
+  // about its own change. Deferring keeps the dispatch out of render, where
+  // `resolveSubmission` is called from `useQueries.combine`.
+  queueMicrotask(() => {
+    window.dispatchEvent(new CustomEvent(SUBMISSIONS_CHANGED_EVENT));
+  });
 }
 
 /** Records a new upload, replacing any earlier entry for the same key. */
 export function rememberSubmission(
   entry: Omit<SubmissionRecord, 'outcome' | 'errorMessage' | 'acknowledged'>,
 ): SubmissionRecord[] {
+  // A save that started no run has nothing to poll, so it cannot stay
+  // pending: `useSubmissions` only watches entries with a run to resolve, and
+  // one left pending here would be stuck open forever. Mark it failed instead,
+  // which still keeps it in the drafts list and the notices.
+  const outcome = entry.validationRunId === null ? ('failed' as const) : ('pending' as const);
   const next = [
-    { ...entry, outcome: 'pending' as const, errorMessage: null, acknowledged: false },
+    { ...entry, outcome, errorMessage: null, acknowledged: false },
     ...readSubmissions().filter((existing) => existing.strategyKey !== entry.strategyKey),
   ];
   write(next);

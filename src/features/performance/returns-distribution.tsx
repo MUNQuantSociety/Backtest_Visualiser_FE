@@ -14,8 +14,9 @@ import {
 
 import type { EquityPoint } from '@/features/backtests';
 import { formatNumber, formatPercent } from '@/utils/format';
-import { mean, normalPdf, quantile, stdDev, toReturns } from '@/utils/metrics';
 import { useChartPalette } from '@/utils/use-chart-palette';
+
+import { returnDistribution } from './chart-data';
 
 interface ReturnsDistributionProps {
   data: readonly EquityPoint[];
@@ -26,10 +27,8 @@ interface ReturnsDistributionProps {
 /**
  * Daily-return distribution with a normal curve over it and the 95% VaR marked.
  *
- * The overlay is the point of the chart, not decoration: Sharpe, volatility and
- * VaR all assume returns are roughly normal, and this is where a reader sees
- * that they are not. Fat tails and a left skew mean the Sharpe is flattering the
- * strategy.
+ * The normal curve is a visual comparison. The marked 5th percentile is
+ * empirical; its calculation makes no normal-distribution assumption.
  *
  * Unlike `histogram()` in utils/metrics, bins here are symmetric about zero
  * rather than edge-forced at it. This is a *shape* chart, and forcing an edge
@@ -38,43 +37,7 @@ interface ReturnsDistributionProps {
 export function ReturnsDistribution({ data, bins = 41 }: ReturnsDistributionProps) {
   const palette = useChartPalette();
 
-  const model = useMemo(() => {
-    const returns = toReturns(data.map((point) => point.equity)).filter(Number.isFinite);
-    if (returns.length < 8) return null;
-
-    const mu = mean(returns);
-    const sigma = stdDev(returns);
-    const span = Math.max(Math.abs(Math.min(...returns)), Math.abs(Math.max(...returns))) * 1.05;
-    const step = (span * 2) / bins;
-
-    const buckets = Array.from({ length: bins }, (_, index) => ({
-      from: -span + index * step,
-      to: -span + (index + 1) * step,
-      midpoint: -span + (index + 0.5) * step,
-      count: 0,
-      fit: 0,
-    }));
-
-    for (const value of returns) {
-      const index = Math.min(bins - 1, Math.max(0, Math.floor((value + span) / step)));
-      const bucket = buckets[index];
-      if (bucket) bucket.count += 1;
-    }
-
-    // Scaled to the histogram's own area, so the two are directly comparable
-    // rather than two unrelated y-scales sharing one frame.
-    for (const bucket of buckets) {
-      bucket.fit = normalPdf(bucket.midpoint, mu, sigma) * returns.length * step;
-    }
-
-    const var95 = quantile(returns, 0.05);
-    return {
-      buckets,
-      mu,
-      var95,
-      cvar95: mean(returns.filter((value) => value <= var95)),
-    };
-  }, [data, bins]);
+  const model = useMemo(() => returnDistribution(data, bins), [data, bins]);
 
   if (!model) {
     return (
@@ -134,7 +97,7 @@ export function ReturnsDistribution({ data, bins = 41 }: ReturnsDistributionProp
           stroke={palette.loss}
           strokeDasharray="4 3"
           label={{
-            value: `95% VaR ${formatPercent(model.var95)}`,
+            value: `5th percentile ${formatPercent(model.var95)}`,
             position: 'insideTopLeft',
             fill: palette.mutedText,
             fontSize: 11,
@@ -144,19 +107,27 @@ export function ReturnsDistribution({ data, bins = 41 }: ReturnsDistributionProp
           {model.buckets.map((bucket) => (
             <Cell
               key={String(bucket.from)}
-              fill={bucket.from >= 0 ? palette.profit : palette.loss}
+              fill={
+                bucket.from < 0 && bucket.to > 0
+                  ? palette.neutral
+                  : bucket.from >= 0
+                    ? palette.profit
+                    : palette.loss
+              }
             />
           ))}
         </Bar>
-        <Line
-          name="Normal fit"
-          type="monotone"
-          dataKey="fit"
-          stroke={palette.series[2]}
-          strokeWidth={1.75}
-          dot={false}
-          isAnimationActive={false}
-        />
+        {model.hasNormalFit ? (
+          <Line
+            name="Normal fit"
+            type="monotone"
+            dataKey="fit"
+            stroke={palette.series[2]}
+            strokeWidth={1.75}
+            dot={false}
+            isAnimationActive={false}
+          />
+        ) : null}
       </ComposedChart>
     </ResponsiveContainer>
   );

@@ -1,18 +1,24 @@
 import { Loader2, Play, X } from 'lucide-react';
-import { useId, useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 
 import { paths } from '@/app/paths';
 import { Button } from '@/components/ui/button';
 import { Segmented } from '@/components/ui/segmented';
 import { useStrategies } from '@/features/strategies';
+import { ApiError } from '@/lib/api-client';
 import { useEngineIndicators } from '@/features/strategies';
 import { createLogger } from '@/lib/logger';
 import { cn } from '@/lib/utils';
 import { formatNumber } from '@/utils/format';
 
 
-import { useCoverage, useSubmitBacktest } from './backtests-api';
+import {
+  useCoverage,
+  useSubmitBacktest,
+  useTickerValidation,
+  validateTickers,
+} from './backtests-api';
 import {
   coverageSegments,
   coverageYearTicks,
@@ -42,9 +48,9 @@ const log = createLogger('backtest-form');
  * defaults both come from `GET /market-data/coverage` for the chosen strategy's
  * own universe.
  *
- * Universe, costs, signals and the sentiment gate travel inside `params`: the
+ * Universe, costs and the sentiment gate travel inside `params`: the
  * backend separates these reserved execution controls from strategy specs.
- * Signal overrides and sentiment gating are not implemented and stay disabled.
+ * Indicators belong to strategy code; sentiment gating stays disabled.
  */
 
 const DEFAULT_CAPITAL = 100_000;
@@ -65,13 +71,6 @@ const DEFAULT_WINDOW_DAYS = 365;
  * is unreachable.
  */
 const FALLBACK_SIGNALS = ['SimpleMovingAverage', 'RelativeStrengthIndex'] as const;
-
-const MODES = [
-  { value: 'event', label: 'Event' },
-  { value: 'fast', label: 'Fast' },
-] as const;
-
-type Mode = (typeof MODES)[number]['value'];
 
 /** `end` minus a year, floored at the earliest date the universe covers. */
 function defaultStart(start: string, end: string): string {
@@ -105,12 +104,16 @@ export function RunBacktestForm({
   const [capital, setCapital] = useState(String(DEFAULT_CAPITAL));
   const [slippageBps, setSlippageBps] = useState(String(DEFAULT_SLIPPAGE_BPS));
   const [commission, setCommission] = useState(String(DEFAULT_COMMISSION));
-  const [mode, setMode] = useState<Mode>('event');
   const [gateEnabled, setGateEnabled] = useState(false);
   const [gateThreshold, setGateThreshold] = useState(DEFAULT_SENTIMENT_THRESHOLD);
   const [paramValues, setParamValues] = useState<Record<string, string | boolean>>({});
   const [tickerDraft, setTickerDraft] = useState('');
+  const [tickerError, setTickerError] = useState<string | null>(null);
+  const [checkingTicker, setCheckingTicker] = useState(false);
+  const tickerRequest = useRef<AbortController | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => () => tickerRequest.current?.abort(), []);
 
   /*
    * The dates and the universe are derived from the strategy and its coverage
@@ -127,7 +130,8 @@ export function RunBacktestForm({
   // The engine's indicator classes, so this list offers what could actually be
   // applied rather than names invented in the client.
   const engineIndicators = useEngineIndicators();
-  const signalNames: readonly string[] = engineIndicators.data ?? FALLBACK_SIGNALS;
+  const signalNames: readonly string[] =
+    engineIndicators.data?.map((indicator) => indicator.name) ?? FALLBACK_SIGNALS;
 
   const nameId = useId();
   const startId = useId();
@@ -159,6 +163,13 @@ export function RunBacktestForm({
     (covered?.start && covered.end ? defaultStart(covered.start, covered.end) : '');
   const window = startDate && endDate ? { startDate, endDate } : null;
   const universe = universeOverride ?? chosen?.universe ?? [];
+  const verification = useTickerValidation(universe, Boolean(chosen));
+  const universeVerified =
+    universe.length > 0 &&
+    verification.isSuccess &&
+    !verification.isFetching &&
+    verification.data.unknown.length === 0;
+  const hasTickerDraft = tickerDraft.trim().length > 0;
 
   const activePreset =
     window && covered?.start && covered.end
@@ -176,6 +187,8 @@ export function RunBacktestForm({
     setStartOverride(null);
     setEndOverride(null);
     setUniverseOverride(null);
+    cancelTickerCheck();
+    setTickerDraft('');
     setParamValues({});
     setError(null);
   }
@@ -188,21 +201,61 @@ export function RunBacktestForm({
     setEndOverride(next.endDate);
   }
 
-  function addTicker() {
+  function cancelTickerCheck() {
+    tickerRequest.current?.abort();
+    tickerRequest.current = null;
+    setCheckingTicker(false);
+    setTickerError(null);
+  }
+
+  async function addTicker() {
     const ticker = tickerDraft.trim().toUpperCase();
-    if (!ticker) return;
-    if (!universe.includes(ticker)) {
-      log.info('ticker added; checking updated universe', {
-        strategyKey,
-        ticker,
-        tickers: [...universe, ticker],
-      });
-      setUniverseOverride([...universe, ticker]);
+    if (!ticker || !strategyKey || tickerRequest.current) return;
+    if (universe.includes(ticker)) {
+      setTickerDraft('');
+      setTickerError(null);
+      return;
     }
-    setTickerDraft('');
+    if (!/^[A-Z0-9^][A-Z0-9.^=-]{0,19}$/.test(ticker)) {
+      setTickerError('Enter one valid ticker symbol, or clear the field to continue.');
+      return;
+    }
+    if (universe.length >= 50) {
+      setTickerError('Use at most 50 tickers. Remove one before adding another.');
+      return;
+    }
+    const controller = new AbortController();
+    tickerRequest.current = controller;
+    setCheckingTicker(true);
+    setTickerError(null);
+    try {
+      const result = await validateTickers([ticker], controller.signal);
+      if (controller.signal.aborted) return;
+      if (result.unknown.includes(ticker)) {
+        setTickerError(
+          `${ticker} was not found by FMP. Check the symbol or clear the field to continue.`,
+        );
+        return;
+      }
+      setUniverseOverride((current) => [...(current ?? universe), ticker]);
+      setTickerDraft('');
+    } catch (cause) {
+      if (controller.signal.aborted) return;
+      setTickerError(
+        cause instanceof ApiError && cause.status === 422
+          ? 'Enter one valid ticker symbol, or clear the field to continue.'
+          : `Could not verify ${ticker} right now. Press Enter to retry, or clear the field to continue.`,
+      );
+    } finally {
+      if (tickerRequest.current === controller) {
+        tickerRequest.current = null;
+        setCheckingTicker(false);
+      }
+    }
   }
 
   function removeTicker(ticker: string) {
+    cancelTickerCheck();
     log.info('ticker removed; checking updated universe', {
       strategyKey,
       ticker,
@@ -237,7 +290,6 @@ export function RunBacktestForm({
       // indicators from the strategy class, and one injected per run would be
       // registered and never read by its OnData. The Signals row shows which
       // the strategy declares rather than pretending they are selectable.
-      signals: [] as readonly string[],
       sentimentGate: { enabled: gateEnabled, threshold: gateThreshold },
       ...strategyParams,
     };
@@ -246,12 +298,20 @@ export function RunBacktestForm({
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
     if (submit.isPending) return;
+    if (checkingTicker || hasTickerDraft) {
+      setError('Finish checking the ticker or clear the Add ticker field before running.');
+      return;
+    }
+    if (!universeVerified || !hasWindow) {
+      setError('Verify every ticker and its available dates before running.');
+      return;
+    }
     log.info('run requested; validating form', {
       strategyKey,
       tickers: universe,
       startDate,
       endDate,
-      mode,
+      mode: 'event',
       coverageStatus: coverage.status,
     });
     setError(null);
@@ -263,7 +323,7 @@ export function RunBacktestForm({
       startDate,
       endDate,
       initialCapital: Number(capital),
-      mode,
+      mode: 'event',
       params: buildParams(),
     });
 
@@ -400,7 +460,11 @@ export function RunBacktestForm({
                 key={ticker}
                 className="tabular inline-flex items-center gap-1.5 rounded bg-muted px-1.5 py-0.5 text-xs"
               >
-                <CoverageDotMark state={tickerCoverageState(ticker, covered, window)} />
+                <CoverageDotMark
+                  state={
+                    universeVerified ? tickerCoverageState(ticker, covered, window) : 'unknown'
+                  }
+                />
                 {ticker}
                 <button
                   type="button"
@@ -418,20 +482,64 @@ export function RunBacktestForm({
               id={tickerId}
               aria-label="Add ticker"
               value={tickerDraft}
+              aria-invalid={Boolean(tickerError)}
+              aria-describedby={`${tickerId}-status`}
               onChange={(event) => {
+                cancelTickerCheck();
                 setTickerDraft(event.target.value);
+                setError(null);
               }}
               onKeyDown={(event) => {
                 if (event.key === 'Enter') {
                   event.preventDefault();
-                  addTicker();
+                  void addTicker();
                 }
               }}
-              onBlur={addTicker}
+              onBlur={() => {
+                void addTicker();
+              }}
               placeholder="Add ticker…"
               disabled={!strategyKey}
               className="tabular min-w-24 flex-1 bg-transparent px-1 text-xs outline-none placeholder:text-muted-foreground"
             />
+          </div>
+          <div id={`${tickerId}-status`} className="mt-1.5 text-[11px]" aria-live="polite">
+            {checkingTicker ? (
+              <p className="text-muted-foreground">
+                Checking {tickerDraft.trim().toUpperCase()} with FMP…
+              </p>
+            ) : tickerError ? (
+              <p role="alert" className="text-destructive">
+                {tickerError}
+              </p>
+            ) : hasTickerDraft ? (
+              <p className="text-muted-foreground">
+                Press Enter to verify and add the ticker, or clear the field to continue.
+              </p>
+            ) : null}
+            {chosen && universe.length === 0 ? (
+              <p className="text-destructive">Add at least one ticker.</p>
+            ) : chosen && verification.isFetching ? (
+              <p className="text-muted-foreground">Verifying universe symbols with FMP…</p>
+            ) : verification.isError ? (
+              <p role="alert" className="text-destructive">
+                Ticker verification is unavailable.{' '}
+                <button
+                  type="button"
+                  className="underline"
+                  onClick={() => {
+                    void verification.refetch();
+                  }}
+                >
+                  Retry verification
+                </button>
+              </p>
+            ) : verification.data?.unknown.length ? (
+              <p role="alert" className="text-destructive">
+                FMP did not recognize: {verification.data.unknown.join(', ')}. Remove these symbols
+                or check their spelling.
+              </p>
+            ) : null}
           </div>
           {clampedTo && covered?.start ? (
             <p className="mt-1.5 text-[11px] text-[var(--warning)]">
@@ -503,7 +611,7 @@ export function RunBacktestForm({
         </Row>
 
         <Row label="Capital & costs">
-          <div className="grid gap-3 sm:grid-cols-[1.4fr_1fr_1fr_1fr]">
+          <div className="grid gap-3 sm:grid-cols-[1.4fr_1fr_1fr]">
             <UnitField id={capitalId} label="Initial capital" unit="USD">
               <input
                 id={capitalId}
@@ -543,10 +651,6 @@ export function RunBacktestForm({
                 className={cn(fieldClass, 'pr-12')}
               />
             </UnitField>
-            <div className="space-y-1.5">
-              <span className="block text-[13px] font-medium">Mode</span>
-              <Segmented value={mode} options={MODES} onChange={setMode} ariaLabel="Run mode" />
-            </div>
           </div>
         </Row>
 
@@ -757,7 +861,18 @@ export function RunBacktestForm({
           <Button type="button" variant="outline" size="sm" disabled title="Not wired up yet">
             Save as preset
           </Button>
-          <Button type="submit" size="sm" disabled={submit.isPending || !strategyKey || !hasWindow}>
+          <Button
+            type="submit"
+            size="sm"
+            disabled={
+              submit.isPending ||
+              !strategyKey ||
+              !hasWindow ||
+              !universeVerified ||
+              checkingTicker ||
+              hasTickerDraft
+            }
+          >
             {submit.isPending ? (
               <Loader2 className="mr-2 size-4 animate-spin" aria-hidden />
             ) : (

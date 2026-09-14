@@ -34,6 +34,7 @@ import {
 import { useSubmissions } from '../use-submissions';
 
 import { IndicatorRows } from './indicator-rows';
+import { StateRows, type StateEntry } from './state-rows';
 import { ValidationOutcome } from './validation-outcome';
 
 /** A saved strategy opened for editing: its identity, and its stored code. */
@@ -140,6 +141,34 @@ function splitPrelude(source: string): { prelude: string; visible: string; lines
 const ACCEPTED_EXTENSIONS = ['.py'];
 
 /**
+ * `STATE` as rows, and back.
+ *
+ * The editor holds the draft's state as rows so a member can add and remove
+ * entries; the backend expects the record that renders as the class's `STATE`.
+ * Duplicate or blank names collapse on the way back, matching what a Python
+ * dict does with them.
+ */
+function stateToRows(state: Record<string, unknown>): StateEntry[] {
+  return Object.entries(state).map(([attribute, value]) => ({ attribute, value }));
+}
+
+function rowsToState(rows: readonly StateEntry[]): Record<string, unknown> {
+  return Object.fromEntries(rows.map((entry) => [entry.attribute, entry.value]));
+}
+
+/**
+ * A deterministic shorthand for the draft a verdict was computed from.
+ *
+ * The draft is small — a body, up to 32 indicator rows, a small state dict, or
+ * a source file — and the exact stringified text is the fingerprint: cheap to
+ * compute and immune to the hash collision that could show a green tick for
+ * code it was never computed from.
+ */
+function fingerprintDraft(draft: unknown): string {
+  return JSON.stringify(draft);
+}
+
+/**
  * `fragment` is the OnData-only path: the member writes a method body and
  * declares indicators, and the backend generates the file around it. `write`
  * and `upload` stay on the full-file path — this adds a way to author, it does
@@ -158,7 +187,9 @@ type Mode = 'fragment' | 'write' | 'upload';
 export function StrategyEditor({ editing }: { editing?: EditingStrategy | undefined } = {}) {
   // Fragment mode is the default for a new strategy: it is the one where a
   // reported line number is a line the member actually wrote.
-  const [mode, setMode] = useState<Mode>(editing ? 'write' : 'fragment');
+  const [mode, setMode] = useState<Mode>(
+    editing?.body != null ? 'fragment' : editing ? 'write' : 'fragment',
+  );
   const [name, setName] = useState(editing ? `${editing.name} (edited)` : '');
   const [description, setDescription] = useState(editing?.description ?? '');
   const [filename, setFilename] = useState<string | null>(null);
@@ -186,12 +217,13 @@ export function StrategyEditor({ editing }: { editing?: EditingStrategy | undefi
    */
   const [bodyOverride, setBodyOverride] = useState<string | null>(null);
   const [indicators, setIndicators] = useState<IndicatorSpec[] | null>(null);
+  const [stateRows, setStateRows] = useState<StateEntry[] | null>(null);
   const body = bodyOverride ?? editing?.body ?? template.data?.body ?? '';
   const indicatorRows = indicators ?? editing?.indicators ?? template.data?.indicators ?? [];
-  // `state` is not editable yet: the starter declares what its body uses, and
-  // a member adding their own is the next thing this form grows. Carried
-  // through so the seeded fragment keeps working.
-  const state = editing?.state ?? template.data?.state ?? {};
+  // `state` is held as rows and rebuilt below; carried through so the defined
+  // entries — the starter's, the saved fragment's, or the member's own — feed
+  // the generated class's `STATE` and every draft that gets checked or saved.
+  const state = rowsToState(stateRows ?? stateToRows(editing?.state ?? template.data?.state ?? {}));
   const draftCheck = useCheckDraft();
   const submitDraftMutation = useSubmitDraft();
   // When editing, the saved source is the starting point and the template is
@@ -207,18 +239,27 @@ export function StrategyEditor({ editing }: { editing?: EditingStrategy | undefi
   const split = splitPrelude(source);
 
   /*
-   * The verdict belongs to the exact text it was computed from. Holding the
-   * source alongside it means a single edit retires the answer, instead of a
-   * green tick sitting above code that has changed since it was checked, which
-   * is the one way this feature could actively mislead someone.
+   * The verdict belongs to the exact draft it was computed from, and the whole
+   * draft — body, indicators and state on the fragment path, source and
+   * filename on the full-file path. A fingerprint of it is held alongside the
+   * answer so a single edit retires it, instead of a green tick sitting above
+   * code that has changed since it was checked, which is the one way this
+   * feature could actively mislead someone. The generated-file preview answers
+   * to the same fingerprint: `assembledSource` describes a draft, and showing
+   * it under a different one would be the same lie.
    */
-  const [checkedSource, setCheckedSource] = useState<string | null>(null);
+  const [checkedFingerprint, setCheckedFingerprint] = useState<string | null>(null);
   const active = mode === 'fragment' ? draftCheck : check;
   // One pair of states drives the button and the panels, whichever path the
   // member is on.
   const activeSubmit = mode === 'fragment' ? submitDraftMutation : submit;
-  const verdict: StrategyCheckResult | null =
-    active.data && checkedSource === (mode === 'fragment' ? body : source) ? active.data : null;
+  // Everything the check request carried, whatever the mode, so no edit — to
+  // the body, to an indicator, to the whole file, or to a re-upload's filename
+  // — can outlive the text it was computed from.
+  const currentDraft =
+    mode === 'fragment' ? { body, indicators: indicatorRows, state } : { source, filename };
+  const verdictCurrent = checkedFingerprint === fingerprintDraft(currentDraft);
+  const verdict: StrategyCheckResult | null = active.data && verdictCurrent ? active.data : null;
 
   /*
    * Shown when asked for — or forced on screen when the check reports a problem
@@ -281,7 +322,7 @@ export function StrategyEditor({ editing }: { editing?: EditingStrategy | undefi
         setError(draft.error.issues[0]?.message ?? 'Check the indicator rows and try again.');
         return;
       }
-      setCheckedSource(body);
+      setCheckedFingerprint(fingerprintDraft({ body, indicators: indicatorRows, state }));
       draftCheck.mutate(draft.data);
       return;
     }
@@ -292,7 +333,7 @@ export function StrategyEditor({ editing }: { editing?: EditingStrategy | undefi
       return;
     }
 
-    setCheckedSource(source);
+    setCheckedFingerprint(fingerprintDraft({ source, filename }));
     check.mutate(parsed.data);
   }
 
@@ -431,8 +472,16 @@ export function StrategyEditor({ editing }: { editing?: EditingStrategy | undefi
             // than an empty one, and the API validates the choice regardless.
             available={
               engineIndicators.data ??
-              (template.data?.indicators ?? []).map((spec) => spec.indicator)
+              (template.data?.indicators ?? []).map((spec) => ({
+                name: spec.indicator,
+                parameters: [],
+              }))
             }
+          />
+
+          <StateRows
+            value={stateRows ?? stateToRows(editing?.state ?? template.data?.state ?? {})}
+            onChange={setStateRows}
           />
 
           <div className="space-y-1.5">
@@ -460,13 +509,13 @@ export function StrategyEditor({ editing }: { editing?: EditingStrategy | undefi
               thing being edited. Rendered from the API's own assembledSource,
               never rebuilt here — a second assembler is exactly the drift the
               duplicated template already cost this repo once. */}
-          {draftCheck.data?.assembledSource ? (
+          {verdict?.assembledSource ? (
             <details className="rounded-md border">
               <summary className="cursor-pointer px-3 py-2 text-xs text-muted-foreground">
                 Show generated file
               </summary>
               <pre className="overflow-x-auto border-t p-3 font-mono text-[11px] leading-relaxed">
-                {draftCheck.data.assembledSource}
+                {verdict.assembledSource}
               </pre>
             </details>
           ) : null}
@@ -542,9 +591,9 @@ export function StrategyEditor({ editing }: { editing?: EditingStrategy | undefi
 
       {verdict ? <CompatibilityPanel result={verdict} ownLines={mode === 'fragment'} /> : null}
 
-      {check.isError ? (
+      {active.isError ? (
         <p role="alert" className="text-sm text-[var(--loss)]">
-          The check could not run: {check.error.message}
+          The check could not run: {active.error.message}
         </p>
       ) : null}
 
@@ -569,8 +618,8 @@ export function StrategyEditor({ editing }: { editing?: EditingStrategy | undefi
           would only make the slow path mandatory. This is the fast answer for
           anyone who wants it first.
         */}
-        <Button type="button" variant="outline" onClick={handleCheck} disabled={check.isPending}>
-          {check.isPending ? <Loader2 className="mr-2 size-4 animate-spin" aria-hidden /> : null}
+        <Button type="button" variant="outline" onClick={handleCheck} disabled={active.isPending}>
+          {active.isPending ? <Loader2 className="mr-2 size-4 animate-spin" aria-hidden /> : null}
           Check compatibility
         </Button>
         <Button

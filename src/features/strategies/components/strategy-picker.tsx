@@ -71,34 +71,6 @@ export function StrategyPicker({
             const selected = strategy.id === selectedId;
             const colorIndex = strategyColorIndex(strategy, all);
             const running = runningCount(strategy.id);
-
-            if (strategy.status === 'archived') {
-              return (
-                <button
-                  key={strategy.id}
-                  data-slot="card"
-                  type="button"
-                  role="option"
-                  aria-selected={selected}
-                  onClick={() => {
-                    onSelect(strategy.id);
-                  }}
-                  className={cn(
-                    'flex w-full max-w-full min-w-0 flex-wrap items-center justify-between overflow-hidden rounded-md border px-3.5 py-2 text-left text-[13px] [overflow-wrap:anywhere] text-muted-foreground transition-colors',
-                    selected
-                      ? 'border-primary shadow-[inset_3px_0_0_var(--primary)]'
-                      : 'hover:bg-muted/60',
-                  )}
-                >
-                  <span className="truncate">{strategy.name}</span>
-                  <span className="tabular shrink-0 text-[11px]">
-                    archived · {String(strategy.runCount)} runs
-                  </span>
-                </button>
-              );
-            }
-
-            const draft = strategy.status === 'draft';
             const actions =
               onEdit && onRun ? (
                 // A sibling of the card, never a child: the card is itself a
@@ -108,6 +80,36 @@ export function StrategyPicker({
                   <StrategyActions strategy={strategy} onEdit={onEdit} onRun={onRun} />
                 </div>
               ) : null;
+
+            if (strategy.status === 'archived') {
+              return (
+                <div key={strategy.id} className="relative">
+                  <button
+                    data-slot="card"
+                    type="button"
+                    role="option"
+                    aria-selected={selected}
+                    onClick={() => {
+                      onSelect(strategy.id);
+                    }}
+                    className={cn(
+                      'flex w-full max-w-full min-w-0 flex-wrap items-center justify-between overflow-hidden rounded-md border px-3.5 pr-9 py-2 text-left text-[13px] [overflow-wrap:anywhere] text-muted-foreground transition-colors',
+                      selected
+                        ? 'border-primary shadow-[inset_3px_0_0_var(--primary)]'
+                        : 'hover:bg-muted/60',
+                    )}
+                  >
+                    <span className="truncate">{strategy.name}</span>
+                    <span className="tabular shrink-0 text-[11px]">
+                      archived · {String(strategy.runCount)} runs
+                    </span>
+                  </button>
+                  {actions}
+                </div>
+              );
+            }
+
+            const draft = strategy.status === 'draft';
             return (
               <div key={strategy.id} className="relative">
                 <button

@@ -15,65 +15,25 @@ import {
 import { TRADING_DAYS_PER_YEAR } from '@/config/constants';
 import type { EquityPoint } from '@/features/backtests';
 import { formatNumber, formatPercent } from '@/utils/format';
-import { ols, toReturns } from '@/utils/metrics';
 import { useChartPalette } from '@/utils/use-chart-palette';
+
+import { benchmarkRegression } from './chart-data';
 
 interface BetaScatterProps {
   data: readonly EquityPoint[];
   benchmarkLabel?: string;
 }
 
-/**
- * Daily strategy return against daily benchmark return, with the OLS fit drawn
- * through it and alpha, beta and R² read out above the plot.
- *
- * This answers the only question a benchmark comparison really asks: is the
- * strategy earning a return the index was not already handing out? Beta near 1
- * with a high R² means the equity curve is the market wearing a different name,
- * however good the Sharpe looks. Beta near 0 with positive alpha is the thing
- * worth allocating to.
- *
- * Alpha is annualised for display — a daily intercept is a number nobody can
- * hold in their head. Beta and R² are unitless and left alone.
- */
+/** Raw daily-return OLS with an arithmetic annualised intercept (not CAPM alpha). */
 export function BetaScatter({ data, benchmarkLabel = 'Buy & hold' }: BetaScatterProps) {
   const palette = useChartPalette();
 
-  const model = useMemo(() => {
-    const usable = data.filter(
-      (point) => point.benchmark !== null && point.benchmark !== undefined,
-    );
-    if (usable.length < 8) return null;
-
-    const strategy = toReturns(usable.map((point) => point.equity));
-    const benchmark = toReturns(usable.map((point) => point.benchmark ?? point.equity));
-    const fit = ols(benchmark, strategy);
-
-    const points = strategy.map((value, index) => ({
-      strategy: value,
-      benchmark: benchmark[index] ?? 0,
-      date: usable[index + 1]?.date ?? '',
-    }));
-
-    const xs = points.map((point) => point.benchmark);
-    const min = Math.min(...xs);
-    const max = Math.max(...xs);
-
-    return {
-      fit,
-      points,
-      // Two points are enough to place the regression line.
-      fitLine: [
-        { benchmark: min, strategy: fit.alpha + fit.beta * min },
-        { benchmark: max, strategy: fit.alpha + fit.beta * max },
-      ],
-    };
-  }, [data]);
+  const model = useMemo(() => benchmarkRegression(data), [data]);
 
   if (!model) {
     return (
       <p className="flex h-full items-center justify-center text-sm text-muted-foreground">
-        No benchmark series to regress against.
+        Regression needs at least 8 paired daily returns and a benchmark that changes.
       </p>
     );
   }

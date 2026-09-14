@@ -63,8 +63,7 @@ export function ValidationOutcome({ result }: { result: StrategySubmissionResult
           <Badge variant="destructive">failed validation</Badge>
         </span>
         <span className="block">
-          It will not appear in the strategy list and cannot be run until it passes. Fix the source
-          and save again.
+          It cannot be selected for a run until it passes. Fix the source and save again.
         </span>
         {/* The engine's own words. A NameError here usually means the class
             subclasses BasePortfolio without importing it — the check cannot

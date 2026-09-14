@@ -50,7 +50,9 @@ beforeEach(() => {
 
 const ENTRY = { strategyKey: 'user-test-b0a184b1', name: 'test', validationRunId: 'run-1' };
 
-function remember(overrides: Partial<typeof ENTRY> = {}) {
+function remember(
+  overrides: Partial<Omit<typeof ENTRY, 'validationRunId'>> & { validationRunId?: string | null } = {},
+) {
   return rememberSubmission({
     ...ENTRY,
     ...overrides,
@@ -70,6 +72,17 @@ describe('strategy submission store', () => {
       validationRunId: 'run-1',
       outcome: 'pending',
       acknowledged: false,
+    });
+  });
+
+  it('records a save with no validation run as failed, not pending', () => {
+    remember({ validationRunId: null });
+
+    const [entry] = readSubmissions();
+    expect(entry).toMatchObject({
+      strategyKey: 'user-test-b0a184b1',
+      validationRunId: null,
+      outcome: 'failed',
     });
   });
 

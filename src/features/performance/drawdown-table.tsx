@@ -57,10 +57,10 @@ export function DrawdownTable({ data, limit = 5, isLoading = false }: DrawdownTa
               Recovered
             </th>
             <th scope="col" className="py-2 pr-4 text-right font-medium">
-              Length
+              Length (bars)
             </th>
             <th scope="col" className="py-2 text-right font-medium">
-              Recovery
+              Recovery (bars)
             </th>
           </tr>
         </thead>
@@ -90,10 +90,10 @@ export function DrawdownTable({ data, limit = 5, isLoading = false }: DrawdownTa
                 )}
               </td>
               <td className="tabular py-2 pr-4 text-right font-mono">
-                {formatNumber(episode.lengthBars, 0)}d
+                {formatNumber(episode.lengthBars, 0)}
               </td>
               <td className="tabular py-2 text-right font-mono text-muted-foreground">
-                {episode.recoveryBars === null ? '—' : `${formatNumber(episode.recoveryBars, 0)}d`}
+                {episode.recoveryBars === null ? '—' : formatNumber(episode.recoveryBars, 0)}
               </td>
             </tr>
           ))}
