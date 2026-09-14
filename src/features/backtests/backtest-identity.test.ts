@@ -96,13 +96,23 @@ describe('temporary development backtest ownership', () => {
     );
   });
 
-  it.each(['/strategies', '/strategies/upload'])(
+  it.each(['/strategies', '/strategies/upload', '/strategies/draft'])(
     'includes the owner when uploading to %s for validation',
     async (url) => {
       await apiClient.post(url, {});
       expect(requests[0]!.headers.get('X-User-Id')).toBe(config.devUserId);
     },
   );
+
+  it('includes the owner when deleting a strategy', async () => {
+    await apiClient.delete('/strategies/user-momentum-abc12345');
+    expect(requests[0]!.headers.get('X-User-Id')).toBe(config.devUserId);
+  });
+
+  it('includes the owner when reading a strategy back into the editor', async () => {
+    await apiClient.get('/strategies/user-momentum-abc12345/source');
+    expect(requests[0]!.headers.get('X-User-Id')).toBe(config.devUserId);
+  });
 
   it('includes the owner on the identity check that signs the dev session in', async () => {
     await apiClient.get('/auth/me');
@@ -126,6 +136,8 @@ describe('temporary development backtest ownership', () => {
 
   it.each([
     '/strategies',
+    '/strategies/user-momentum-abc12345',
+    '/strategies/template',
     '/market-data/coverage',
     '/backtests-other',
     'https://third-party.example/api/backtests',
