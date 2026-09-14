@@ -1,7 +1,9 @@
-import { useQueries } from '@tanstack/react-query';
+import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useState } from 'react';
 
-import { fetchStrategy } from './strategies-api';
+import { backtestKeys } from '@/features/backtests/data';
+
+import { fetchStrategy, strategyKeys } from './strategies-api';
 import {
   acknowledgeSubmission,
   forgetSubmission,
@@ -28,8 +30,23 @@ import type { Strategy } from './types';
  */
 const POLL_MS = 4_000;
 
+/**
+ * What a finished validation changes elsewhere on the page.
+ *
+ * The run becomes a saved report in the runs list, and a pass puts the
+ * strategy in the catalogue. Both lists were fetched before either existed
+ * and refetch on their own only while they still hold an in-flight run — a
+ * list read before the validation was submitted holds none, so without this
+ * it would show the old state until the next navigation.
+ */
+function settled(queryClient: ReturnType<typeof useQueryClient>) {
+  void queryClient.invalidateQueries({ queryKey: backtestKeys.lists() });
+  void queryClient.invalidateQueries({ queryKey: strategyKeys.lists() });
+}
+
 export function useSubmissions() {
   const [records, setRecords] = useState<SubmissionRecord[]>(() => readSubmissions());
+  const queryClient = useQueryClient();
 
   // Another tab saving a strategy is the same author; its entry belongs in
   // this window's list too. `storage` only fires across documents, so the tab
@@ -72,11 +89,13 @@ export function useSubmissions() {
         if (!record || !status) return;
         if (status === 'active') {
           setRecords(resolveSubmission(record.strategyKey, 'passed'));
+          settled(queryClient);
         } else if (status !== 'validating') {
           // `failed_validation` is the expected failure; `archived`, or a state
           // this client does not know, also means the upload will never
           // activate, and must not be polled for the rest of the session.
           setRecords(resolveSubmission(record.strategyKey, 'failed'));
+          settled(queryClient);
         }
       });
       return null;

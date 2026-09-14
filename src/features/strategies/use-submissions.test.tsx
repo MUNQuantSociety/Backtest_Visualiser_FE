@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { useBacktests } from '@/features/backtests';
 import { apiClient } from '@/lib/api-client';
 import type * as ApiClientModule from '@/lib/api-client';
 import { installFakeStorage } from '@/test/fake-storage';
 import { renderWithProviders, screen, userEvent, waitFor } from '@/test/test-utils';
 
+import { useStrategies } from './strategies-api';
 import { SUBMISSIONS_CHANGED_EVENT, SUBMISSIONS_STORAGE_KEY } from './submissions';
 import { useSubmissions } from './use-submissions';
 
@@ -148,6 +150,48 @@ describe('useSubmissions outcome resolution', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('outcomes-a')).toHaveTextContent('strategy-a:passed');
+    });
+  });
+
+  it('refreshes the runs list and the catalogue once the upload passes', async () => {
+    // The validation run becomes a saved report and the strategy joins the
+    // catalogue at the same moment; both lists were fetched before either
+    // existed and would otherwise stay stale until their next natural refetch.
+    const runsList = { items: [], total: 0, page: 1, pageSize: 25 };
+    vi.mocked(apiClient.get).mockImplementation((url) => {
+      if (url === '/backtests') return Promise.resolve(runsList);
+      if (url === '/strategies') return Promise.resolve({ items: [], total: 0 });
+      return Promise.resolve(registryRow('active'));
+    });
+    function Lists() {
+      useBacktests();
+      useStrategies();
+      return null;
+    }
+    renderWithProviders(
+      <>
+        <Lists />
+        <Probe label="a" />
+      </>,
+    );
+    await waitFor(() => {
+      expect(
+        vi.mocked(apiClient.get).mock.calls.filter(([url]) => url === '/backtests'),
+      ).toHaveLength(1);
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: /remember a/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('outcomes-a')).toHaveTextContent('strategy-a:passed');
+    });
+    await waitFor(() => {
+      expect(
+        vi.mocked(apiClient.get).mock.calls.filter(([url]) => url === '/backtests'),
+      ).toHaveLength(2);
+      expect(
+        vi.mocked(apiClient.get).mock.calls.filter(([url]) => url === '/strategies'),
+      ).toHaveLength(2);
     });
   });
 });
