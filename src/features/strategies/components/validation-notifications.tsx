@@ -1,4 +1,5 @@
 import { CircleCheck, CircleX, Loader2, X } from 'lucide-react';
+import { useEffect } from 'react';
 import { Link } from 'react-router';
 
 import { paths } from '@/app/paths';
@@ -19,8 +20,13 @@ import { useSubmissions } from '../use-submissions';
  *
  * A failure stays until it is dismissed. That is deliberate — it is the only
  * account of why the strategy is not selectable, and the error text is the
- * engine's, not a paraphrase.
+ * engine's, not a paraphrase. A pass is the opposite: good news that asks
+ * nothing of the author, so its notice leaves on its own after
+ * `PASSED_NOTICE_MS`, and a "Validating…" notice that turns into one goes
+ * the same way rather than lingering as a second thing to close.
  */
+export const PASSED_NOTICE_MS = 8_000;
+
 export function ValidationNotifications() {
   const { unacknowledged, acknowledge } = useSubmissions();
 
@@ -44,6 +50,19 @@ function Notice({
 }) {
   const failed = record.outcome === 'failed';
   const pending = record.outcome === 'pending';
+  const passed = record.outcome === 'passed';
+
+  // The clock starts when the outcome becomes `passed`, not when the notice
+  // mounted: the same record was on screen as "Validating…" before that.
+  useEffect(() => {
+    if (!passed) return;
+    const timer = setTimeout(() => {
+      onDismiss(record.strategyKey);
+    }, PASSED_NOTICE_MS);
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [passed, record.strategyKey, onDismiss]);
 
   return (
     <div
