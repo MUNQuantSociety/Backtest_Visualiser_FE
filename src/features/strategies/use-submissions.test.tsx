@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { installFakeStorage } from '@/test/fake-storage';
 import { renderWithProviders, screen, userEvent, waitFor } from '@/test/test-utils';
 
 import { SUBMISSIONS_CHANGED_EVENT, SUBMISSIONS_STORAGE_KEY } from './submissions';
@@ -11,31 +12,10 @@ import { useSubmissions } from './use-submissions';
  * path, and that both listeners are dropped on unmount.
  */
 
-function installStorage(): void {
-  const entries = new Map<string, string>();
-  const storage: Storage = {
-    getItem: (key: string) => entries.get(key) ?? null,
-    setItem: (key: string, value: string) => {
-      entries.set(key, value);
-    },
-    removeItem: (key: string) => {
-      entries.delete(key);
-    },
-    clear: () => {
-      entries.clear();
-    },
-    key: (index: number) => [...entries.keys()][index] ?? null,
-    get length() {
-      return entries.size;
-    },
-  };
-  vi.stubGlobal('localStorage', storage);
-}
-
 beforeEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
-  installStorage();
+  installFakeStorage();
 });
 
 afterEach(() => {

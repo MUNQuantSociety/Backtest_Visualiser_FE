@@ -104,6 +104,16 @@ describe('temporary development backtest ownership', () => {
     },
   );
 
+  it('includes the owner on the identity check that signs the dev session in', async () => {
+    await apiClient.get('/auth/me');
+    expect(requests[0]!.headers.get('X-User-Id')).toBe(config.devUserId);
+  });
+
+  it('includes the owner on the ticker check the run dialog depends on', async () => {
+    await apiClient.get('/market-data/validate-tickers', { params: { tickers: 'AAPL' } });
+    expect(requests[0]!.headers.get('X-User-Id')).toBe(config.devUserId);
+  });
+
   it.each([
     '/strategies/check',
     '/strategies/upload/check',

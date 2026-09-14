@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { z } from 'zod';
 
+import { env } from '@/config/env';
 import { apiClient, ApiError } from '@/lib/api-client';
 import { authIsConfigured, authSession, safeReturnPath } from '@/lib/auth-session';
 
@@ -42,20 +43,29 @@ export function AuthProvider({ children }: AuthProviderProps) {
     if (window.location.pathname !== '/auth/callback') {
       void (async () => {
         try {
-          if (!authIsConfigured())
-            throw new Error('Sign-in is not configured. Please contact the site administrator.');
-          const token = await authSession.getAccessToken();
-          if (controller.signal.aborted) return;
-          if (token) await verifyIdentity(controller.signal);
-          else setAuthState(signedOut);
+          if (!authIsConfigured()) {
+            // Local-only dev identity: VITE_DEV_USER_ID becomes a full sign-in
+            // so the app renders without a hosted provider. The backend still
+            // owns the identity, answered through /auth/me, so a stale or
+            // unknown id fails here rather than inventing a session.
+            if (env.isDev && env.devUserId) await verifyIdentity(controller.signal);
+            else
+              throw new Error('Sign-in is not configured. Please contact the site administrator.');
+          } else {
+            const token = await authSession.getAccessToken();
+            if (controller.signal.aborted) return;
+            if (token) await verifyIdentity(controller.signal);
+            else setAuthState(signedOut);
+          }
         } catch {
           if (!controller.signal.aborted)
             setAuthState({
               ...signedOut,
               status: 'error',
-              error: authIsConfigured()
-                ? 'Your session could not be verified. Please sign in again.'
-                : 'Sign-in is not configured. Please contact the site administrator.',
+              error:
+                authIsConfigured() || (env.isDev && env.devUserId)
+                  ? 'Your session could not be verified. Please sign in again.'
+                  : 'Sign-in is not configured. Please contact the site administrator.',
             });
         }
       })();
@@ -81,6 +91,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const logout = useCallback(async () => {
     setAuthState(signedOut);
+    if (!authIsConfigured()) return;
     try {
       await authSession.logout();
     } catch {

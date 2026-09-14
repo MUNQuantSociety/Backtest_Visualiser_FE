@@ -1,4 +1,4 @@
-import { Loader2, Play, X } from 'lucide-react';
+import { Bookmark, BookMarked, Loader2, Play, Trash2, X } from 'lucide-react';
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 
@@ -7,13 +7,17 @@ import { Button } from '@/components/ui/button';
 import { Segmented } from '@/components/ui/segmented';
 import { useStrategies } from '@/features/strategies';
 import { ApiError } from '@/lib/api-client';
-import { useEngineIndicators } from '@/features/strategies';
 import { createLogger } from '@/lib/logger';
 import { cn } from '@/lib/utils';
 import { formatNumber } from '@/utils/format';
 
-
-import { useCoverage, useSubmitBacktest } from './backtests-api';
+import {
+  useCoverage,
+  useSubmitBacktest,
+  useTickerValidation,
+  validateTickers,
+} from './backtests-api';
+import { deleteRunPreset, listRunPresets, saveRunPreset, type RunPreset } from './run-presets';
 import {
   coverageSegments,
   coverageYearTicks,
@@ -56,24 +60,6 @@ const DEFAULT_SENTIMENT_THRESHOLD = -0.25;
 /** How much history to preselect, when coverage allows that much. */
 const DEFAULT_WINDOW_DAYS = 365;
 
-/**
- * Fallback signal list, used only when the engine's own cannot be fetched.
- *
- * This used to be the whole list, hardcoded — and it was wrong: it offered
- * MACD and Bollinger, which the engine does not ship, so a member could pick a
- * signal that could never have been applied. `GET /strategies/indicators` is
- * the real source; these are the two names most likely to be recognised if it
- * is unreachable.
- */
-const FALLBACK_SIGNALS = ['SimpleMovingAverage', 'RelativeStrengthIndex'] as const;
-
-const MODES = [
-  { value: 'event', label: 'Event' },
-  { value: 'fast', label: 'Fast' },
-] as const;
-
-type Mode = (typeof MODES)[number]['value'];
-
 /** `end` minus a year, floored at the earliest date the universe covers. */
 function defaultStart(start: string, end: string): string {
   const earliest = new Date(`${start}T00:00:00Z`);
@@ -106,7 +92,6 @@ export function RunBacktestForm({
   const [capital, setCapital] = useState(String(DEFAULT_CAPITAL));
   const [slippageBps, setSlippageBps] = useState(String(DEFAULT_SLIPPAGE_BPS));
   const [commission, setCommission] = useState(String(DEFAULT_COMMISSION));
-  const [mode, setMode] = useState<Mode>('event');
   const [gateEnabled, setGateEnabled] = useState(false);
   const [gateThreshold, setGateThreshold] = useState(DEFAULT_SENTIMENT_THRESHOLD);
   const [paramValues, setParamValues] = useState<Record<string, string | boolean>>({});
@@ -115,6 +100,15 @@ export function RunBacktestForm({
   const [checkingTicker, setCheckingTicker] = useState(false);
   const tickerRequest = useRef<AbortController | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Saved-run presets: named snapshots of this form, recovered from the
+  // browser. The footer toggles a small panel between saving and listing.
+  const [presetsOpen, setPresetsOpen] = useState<'save' | 'list' | null>(null);
+  const [savedPresets, setSavedPresets] = useState<RunPreset[]>(() => listRunPresets());
+  const [presetName, setPresetName] = useState('');
+  const [presetNotice, setPresetNotice] = useState<{ kind: 'error' | 'info'; text: string } | null>(
+    null,
+  );
 
   useEffect(() => () => tickerRequest.current?.abort(), []);
 
@@ -130,10 +124,6 @@ export function RunBacktestForm({
   const [universeOverride, setUniverseOverride] = useState<readonly string[] | null>(null);
 
   const coverage = useCoverage(strategyKey || undefined, universeOverride ?? undefined);
-  // The engine's indicator classes, so this list offers what could actually be
-  // applied rather than names invented in the client.
-  const engineIndicators = useEngineIndicators();
-  const signalNames: readonly string[] = engineIndicators.data ?? FALLBACK_SIGNALS;
 
   const nameId = useId();
   const startId = useId();
@@ -151,10 +141,6 @@ export function RunBacktestForm({
     [strategies.data],
   );
   const chosen = runnable.find((strategy) => strategy.id === strategyKey);
-  // What the chosen strategy declares, for the highlight. Empty until one is
-  // picked, and empty for an uploaded file whose source the list does not read.
-  const strategyIndicators: readonly string[] = chosen?.indicators ?? [];
-
 
   const covered = coverage.data;
   const hasWindow = Boolean(covered?.start && covered.end);
@@ -195,12 +181,86 @@ export function RunBacktestForm({
     setError(null);
   }
 
-  function applyPreset(preset: WindowPreset) {
+  function applyPreset(windowPreset: WindowPreset) {
     if (!covered?.start || !covered.end) return;
-    const next = presetWindow(preset, { start: covered.start, end: covered.end });
-    log.info('date preset selected', { strategyKey, preset, ...next });
+    const next = presetWindow(windowPreset, { start: covered.start, end: covered.end });
+    log.info('date preset selected', { strategyKey, windowPreset, ...next });
     setStartOverride(next.startDate);
     setEndOverride(next.endDate);
+  }
+
+  /** The name a preset would suggest itself; mirrors the run-name placeholder. */
+  const suggestedPresetName = chosen && window ? `${chosen.name} ${startDate} to ${endDate}` : '';
+
+  function openPresetSave() {
+    setPresetName(suggestedPresetName);
+    setPresetNotice(null);
+    setPresetsOpen('save');
+  }
+
+  function openPresetList() {
+    setSavedPresets(listRunPresets());
+    setPresetNotice(null);
+    setPresetsOpen('list');
+  }
+
+  function handleSavePreset() {
+    if (!chosen || !window) return;
+    const preset = saveRunPreset(presetName.trim() || suggestedPresetName, {
+      strategyKey,
+      runName: name.trim(),
+      universe: [...universe],
+      startDate,
+      endDate,
+      capital,
+      slippageBps,
+      commission,
+      paramValues: { ...paramValues },
+      gateEnabled,
+      gateThreshold,
+    });
+    if (!preset) {
+      setPresetNotice({
+        kind: 'error',
+        text: 'Could not save the preset — the browser storage is full or blocked.',
+      });
+      return;
+    }
+    setSavedPresets(listRunPresets());
+    setPresetName(preset.name);
+    setPresetNotice({
+      kind: 'info',
+      text: `Saved "${preset.name}". Re-apply it anytime with the Presets button.`,
+    });
+  }
+
+  function applySavedRun(preset: RunPreset) {
+    if (!runnable.some((strategy) => strategy.id === preset.config.strategyKey)) return;
+    cancelTickerCheck();
+    log.info('saved run preset applied', {
+      presetId: preset.id,
+      strategyKey: preset.config.strategyKey,
+      tickers: preset.config.universe,
+    });
+    setStrategyKey(preset.config.strategyKey);
+    setName(preset.config.runName);
+    setStartOverride(preset.config.startDate);
+    setEndOverride(preset.config.endDate);
+    setUniverseOverride([...preset.config.universe]);
+    setCapital(preset.config.capital);
+    setSlippageBps(preset.config.slippageBps);
+    setCommission(preset.config.commission);
+    setParamValues({ ...preset.config.paramValues });
+    setGateEnabled(preset.config.gateEnabled);
+    setGateThreshold(preset.config.gateThreshold);
+    setTickerDraft('');
+    setError(null);
+    setPresetsOpen(null);
+  }
+
+  function handleDeletePreset(id: string) {
+    deleteRunPreset(id);
+    setSavedPresets(listRunPresets());
   }
 
   function cancelTickerCheck() {
@@ -287,12 +347,6 @@ export function RunBacktestForm({
       universe,
       slippageBps: Number(slippageBps),
       commissionPerShare: Number(commission),
-      // Always empty, and sent anyway so the key is present and explicit.
-      // `run_controls.py` refuses a non-empty list: the engine builds
-      // indicators from the strategy class, and one injected per run would be
-      // registered and never read by its OnData. The Signals row shows which
-      // the strategy declares rather than pretending they are selectable.
-      signals: [] as readonly string[],
       sentimentGate: { enabled: gateEnabled, threshold: gateThreshold },
       ...strategyParams,
     };
@@ -657,35 +711,10 @@ export function RunBacktestForm({
           </div>
         </Row>
 
-        <Row label="Signals">
-          <p className="mb-1.5 text-xs text-muted-foreground">
-            Read-only. A strategy registers its own indicators in its{' '}
-            <code className="tabular">INDICATORS</code> block, so a run cannot add or remove
-            them. Highlighted ones are what this strategy uses.
+        <Row label="Indicators">
+          <p className="text-[13px] text-muted-foreground">
+            Indicators are defined by the selected strategy.
           </p>
-          <div className="flex flex-wrap gap-1.5">
-            {signalNames.map((signal) => {
-              // "Active" means the chosen strategy declares it, not that
-              // anyone selected it. Nothing here is selectable: the engine
-              // builds indicators from the class, and a run-time override
-              // would be registered and never read. Showing which are live is
-              // the honest thing this list can do.
-              const used = strategyIndicators.includes(signal);
-              return (
-                <span
-                  key={signal}
-                  className={cn(
-                    'tabular rounded border px-2 py-1 text-xs',
-                    used
-                      ? 'border-primary bg-selected text-selected-foreground'
-                      : 'border-border text-muted-foreground/60',
-                  )}
-                >
-                  {signal}
-                </span>
-              );
-            })}
-          </div>
           <div className="mt-2 flex flex-wrap items-center gap-3 rounded-md bg-background px-3 py-2 text-[13px]">
             <label htmlFor={gateId} className="flex cursor-pointer items-center gap-2">
               <input
@@ -845,6 +874,149 @@ export function RunBacktestForm({
         ) : null}
       </div>
 
+      {presetsOpen ? (
+        <div className="mb-4 rounded-md border border-border bg-background px-4 py-3">
+          {presetsOpen === 'save' ? (
+            <div className="flex flex-wrap items-end gap-x-4 gap-y-3">
+              <div className="min-w-52 flex-1">
+                <label htmlFor="preset-name" className="block text-[13px] font-medium">
+                  Save the current run as a preset
+                </label>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">
+                  Reproduce this exact configuration later; it lives in this browser. Re-saving the
+                  same name replaces it.
+                </p>
+                <input
+                  id="preset-name"
+                  aria-label="Preset name"
+                  value={presetName}
+                  onChange={(event) => {
+                    setPresetName(event.target.value);
+                    setPresetNotice(null);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      handleSavePreset();
+                    }
+                  }}
+                  className={cn(fieldClass, 'mt-2 font-sans')}
+                />
+                {presetNotice ? (
+                  <p
+                    role={presetNotice.kind === 'error' ? 'alert' : 'status'}
+                    className={cn(
+                      'mt-1.5 text-[11px]',
+                      presetNotice.kind === 'error'
+                        ? 'text-[var(--loss)]'
+                        : 'text-muted-foreground',
+                    )}
+                  >
+                    {presetNotice.text}
+                  </p>
+                ) : null}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button type="button" size="sm" onClick={handleSavePreset}>
+                  Save preset
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setPresetsOpen(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[13px] font-medium">Saved presets</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setPresetsOpen(null);
+                  }}
+                >
+                  Close
+                </Button>
+              </div>
+              {savedPresets.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  Nothing saved yet. Use Save as preset to capture the current run.
+                </p>
+              ) : (
+                <ul className="space-y-1.5">
+                  {savedPresets.map((preset) => {
+                    const strategyName = runnable.find(
+                      (strategy) => strategy.id === preset.config.strategyKey,
+                    )?.name;
+                    const missing = strategyName === undefined;
+                    const tickerCount = preset.config.universe.length;
+                    return (
+                      <li
+                        key={preset.id}
+                        className="flex flex-wrap items-center gap-3 rounded-md border border-border px-3 py-2"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-[13px] font-medium">{preset.name}</p>
+                          <p
+                            className={cn(
+                              'tabular truncate text-[11px] text-muted-foreground',
+                              missing && 'text-[var(--loss)]',
+                            )}
+                          >
+                            {strategyName ?? 'deleted strategy'} · {preset.config.startDate} →{' '}
+                            {preset.config.endDate} · {tickerCount} ticker
+                            {tickerCount === 1 ? '' : 's'}
+                            {missing ? ' · no longer runnable' : ''}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={missing}
+                            title={
+                              missing
+                                ? `${preset.name} references a strategy that no longer exists`
+                                : undefined
+                            }
+                            onClick={() => {
+                              applySavedRun(preset);
+                            }}
+                          >
+                            Load
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            aria-label={`Delete ${preset.name}`}
+                            onClick={() => {
+                              handleDeletePreset(preset.id);
+                            }}
+                          >
+                            <Trash2 className="mr-2 size-4" aria-hidden />
+                          </Button>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
+      ) : null}
+
       <div
         className={cn(
           'flex flex-wrap items-center justify-between gap-3',
@@ -859,10 +1031,35 @@ export function RunBacktestForm({
             : 'Pick a strategy and a window.'}
         </span>
         <div className="flex items-center gap-2">
-          {/* No preset endpoint exists yet; a disabled control says so rather
-              than a working-looking one that silently drops the click. */}
-          <Button type="button" variant="outline" size="sm" disabled title="Not wired up yet">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={!chosen || !hasWindow}
+            title={
+              chosen && hasWindow
+                ? 'Save this run configuration to reuse it from this dialog'
+                : 'Pick a strategy and a window first'
+            }
+            onClick={openPresetSave}
+          >
+            <Bookmark className="mr-2 size-4" aria-hidden />
             Save as preset
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={openPresetList}
+            title="Saved run configurations in this browser"
+          >
+            <BookMarked className="mr-2 size-4" aria-hidden />
+            Presets
+            {savedPresets.length > 0 ? (
+              <span className="tabular ml-1 rounded bg-muted px-1.5 text-[11px]">
+                {savedPresets.length}
+              </span>
+            ) : null}
           </Button>
           <Button
             type="submit"
