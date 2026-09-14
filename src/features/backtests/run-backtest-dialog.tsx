@@ -66,6 +66,10 @@ export function RunBacktestDialog({
   // opens, not read live from props: the form mounts once per open and
   // must not change under the person filling it in.
   const [startingStrategyKey, setStartingStrategyKey] = useState<string | undefined>();
+  // The request ids already acted on. The effect below keys on the object,
+  // so a parent that rebuilt an equal request — a remount, a state reset —
+  // would otherwise reopen a dialog the person had just closed.
+  const handledRequestId = useRef(0);
 
   /*
    * The element is the source of truth for openness, not the state flag.
@@ -91,6 +95,8 @@ export function RunBacktestDialog({
 
   useEffect(() => {
     if (openRequest === undefined || openRequest.id === 0) return;
+    if (openRequest.id === handledRequestId.current) return;
+    handledRequestId.current = openRequest.id;
     openDialog(openRequest.strategyKey ?? initialStrategyKey);
     // openDialog is stable enough for this: it closes over refs, setState and
     // the props read at call time.

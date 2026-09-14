@@ -169,4 +169,27 @@ describe('Backtests hub', () => {
     expect(within(group).getByRole('radio', { name: /Other strategy/ })).toBeChecked();
     expect(within(group).getByRole('radio', { name: /Current strategy/ })).not.toBeChecked();
   });
+
+  it('does not reopen a closed run dialog on a re-render that recreates the same request', async () => {
+    renderWithProviders(<LibraryPage />, { routes: ['/backtests?strategy=current'] });
+    await screen.findByRole('link', { name: 'Current strategy run' });
+    for (const dialog of document.querySelectorAll('dialog')) {
+      dialog.showModal = () => {
+        dialog.open = true;
+      };
+      dialog.close = () => {
+        dialog.open = false;
+        dialog.dispatchEvent(new Event('close'));
+      };
+    }
+    await userEvent.click(screen.getByRole('button', { name: 'Actions for Other strategy' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Run backtest' }));
+    await screen.findByRole('radiogroup', { name: 'Strategy' });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }));
+    // Any unrelated re-render of the page: the search box.
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Search strategies and runs' }), 'x');
+
+    expect(screen.queryByRole('radiogroup', { name: 'Strategy' })).not.toBeInTheDocument();
+  });
 });
