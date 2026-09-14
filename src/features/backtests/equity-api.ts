@@ -96,15 +96,25 @@ export function useBacktestEquities(ids: readonly string[], window: EquityReques
       queryFn: ({ signal }: { signal: AbortSignal }) => fetchBacktestEquity(id, window, signal),
       staleTime: Infinity,
     })),
-    combine: (results) => ({
-      // Never display a partly loaded book as if it represented all strategies.
-      data: results.every((result) => result.isSuccess)
-        ? results.flatMap((result) => (result.data ? [result.data] : []))
-        : [],
-      isPending: results.some((result) => result.isPending),
-      isFetching: results.some((result) => result.isFetching),
-      error: results.find((result) => result.error)?.error ?? null,
-      refetch: () => Promise.all(results.map((result) => result.refetch())),
-    }),
+    combine: (results) => {
+      // Never display a partly *loaded* book as if it represented every run:
+      // nothing is handed out until the whole set has settled. A run whose
+      // history then failed is left out and named in `failed`, rather than
+      // blanking the others — the dashboard asks for every saved run, so one
+      // report that has gone missing must not take the book down with it.
+      const settled = results.every((result) => !result.isPending);
+      const failed = results.flatMap((result, index) => {
+        const id = ids[index];
+        return result.error && id !== undefined ? [{ id, error: result.error }] : [];
+      });
+      return {
+        data: settled ? results.flatMap((result) => (result.data ? [result.data] : [])) : [],
+        failed,
+        isPending: !settled,
+        isFetching: results.some((result) => result.isFetching),
+        error: failed[0]?.error ?? null,
+        refetch: () => Promise.all(results.map((result) => result.refetch())),
+      };
+    },
   });
 }

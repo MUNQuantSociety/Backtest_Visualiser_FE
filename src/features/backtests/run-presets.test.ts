@@ -54,6 +54,16 @@ describe('saveRunPreset', () => {
     expect(all[0]?.config).toMatchObject({ slippageBps: '8' });
   });
 
+  it('treats names that differ only by case as different presets', () => {
+    saveRunPreset('Momentum Test', snapshot({ slippageBps: '5' }));
+    saveRunPreset('momentum test', snapshot({ slippageBps: '8' }));
+
+    expect(listRunPresets().map((preset) => preset.name)).toEqual([
+      'Momentum Test',
+      'momentum test',
+    ]);
+  });
+
   it('keeps distinct names as separate presets', () => {
     saveRunPreset('Window A', snapshot({ endDate: '2025-01-01' }));
     saveRunPreset('Window B', snapshot({ endDate: '2026-01-01' }));
@@ -92,14 +102,31 @@ describe('listRunPresets', () => {
     );
     expect(listRunPresets()).toEqual([expect.objectContaining({ name: 'Fine' })]);
   });
+
+  it('drops an entry whose config fields have the wrong shape', () => {
+    const fine = saveRunPreset('Fine', snapshot());
+    localStorage.setItem(
+      'mqs:run-presets:v1',
+      JSON.stringify([
+        {
+          ...fine,
+          id: 'half-written',
+          name: 'Half written',
+          config: { ...snapshot(), universe: 'AAPL', paramValues: null },
+        },
+        fine,
+      ]),
+    );
+    expect(listRunPresets()).toEqual([expect.objectContaining({ name: 'Fine' })]);
+  });
 });
 
 describe('deleteRunPreset', () => {
   it('removes only the named preset', () => {
     saveRunPreset('Keep', snapshot());
-    saveRunPreset('Drop', snapshot({ endDate: '2025-01-01' }));
+    const drop = saveRunPreset('Drop', snapshot({ endDate: '2025-01-01' }));
 
-    deleteRunPreset('drop');
+    deleteRunPreset(drop!.id);
 
     expect(listRunPresets().map((preset) => preset.name)).toEqual(['Keep']);
   });

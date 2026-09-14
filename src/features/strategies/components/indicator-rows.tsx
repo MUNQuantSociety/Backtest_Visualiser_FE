@@ -138,31 +138,37 @@ export function IndicatorRows({
                 </select>
               </Field>
 
-              {tunable(spec.indicator).map((parameter) => (
-                <Field
-                  key={parameter.key}
-                  label={labelFor(parameter.key)}
-                  index={index}
-                  suffix={parameter.key}
-                >
-                  <select
-                    aria-label={`Indicator ${String(index + 1)} ${parameter.key}`}
-                    value={String(spec.params[parameter.key] ?? parameter.default ?? '')}
-                    onChange={(event) => {
-                      update(index, {
-                        params: { ...spec.params, [parameter.key]: Number(event.target.value) },
-                      });
-                    }}
-                    className="tabular h-8 w-24 cursor-pointer rounded-md border border-input bg-background px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              {tunable(spec.indicator).map((parameter) => {
+                // `params` is untyped JSON; only a number belongs in a period
+                // select, so anything else falls back to the engine default.
+                const stored = spec.params[parameter.key];
+                const selected = typeof stored === 'number' ? stored : parameter.default;
+                return (
+                  <Field
+                    key={parameter.key}
+                    label={labelFor(parameter.key)}
+                    index={index}
+                    suffix={parameter.key}
                   >
-                    {choicesFor(spec.params[parameter.key] ?? parameter.default).map((choice) => (
-                      <option key={choice} value={choice}>
-                        {choice}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-              ))}
+                    <select
+                      aria-label={`Indicator ${String(index + 1)} ${parameter.key}`}
+                      value={String(selected)}
+                      onChange={(event) => {
+                        update(index, {
+                          params: { ...spec.params, [parameter.key]: Number(event.target.value) },
+                        });
+                      }}
+                      className="tabular h-8 w-24 cursor-pointer rounded-md border border-input bg-background px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      {choicesFor(selected).map((choice) => (
+                        <option key={choice} value={choice}>
+                          {choice}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                );
+              })}
 
               <Button
                 variant="ghost"
@@ -183,7 +189,9 @@ export function IndicatorRows({
         variant="outline"
         size="sm"
         disabled={available.length === 0}
-        title={available.length === 0 ? 'The engine’s indicator list could not be loaded.' : undefined}
+        title={
+          available.length === 0 ? 'The engine’s indicator list could not be loaded.' : undefined
+        }
         onClick={() => {
           const first = available[0]?.name ?? '';
           onChange([...value, { attribute: '', indicator: first, params: defaultsFor(first) }]);

@@ -39,6 +39,7 @@ import {
   ytdReturn,
   type LivePeriod,
 } from '@/features/portfolios';
+import { useHideDemoPanels } from '@/lib/ui-store';
 import {
   formatCompact,
   formatCurrency,
@@ -63,6 +64,7 @@ const FILLS_SHOWN = 12;
  */
 export default function LiveOverviewPage() {
   const [period, setPeriod] = useState<LivePeriod>('1M');
+  const hideDemoPanels = useHideDemoPanels();
 
   const { data: portfolios, isPending: listPending } = usePortfolios();
   const sleeves = portfolios?.items ?? [];
@@ -222,43 +224,45 @@ export default function LiveOverviewPage() {
         </Card>
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-[15px]">
-              Sector exposure and MTD attribution <DemoBadge />
-            </CardTitle>
-            <CardDescription>
-              Left: long and short as % of NAV. Right: what each sector added or cost this month, in
-              bps of NAV.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <SectorExposureTable
-              sectors={attribution?.sectors ?? []}
-              isLoading={attributionPending}
-            />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex-row items-start justify-between space-y-0 pb-3">
-            <div>
+      {!hideDemoPanels && (
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
+          <Card>
+            <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-[15px]">
-                Sentiment on held names <DemoBadge />
+                Sector exposure and MTD attribution <DemoBadge />
               </CardTitle>
               <CardDescription>
-                7-day article score per position, weighted by |weight|. Red on a long is what to
-                look at first.
+                Left: long and short as % of NAV. Right: what each sector added or cost this month,
+                in bps of NAV.
               </CardDescription>
-            </div>
-            <SentimentGauge label="Book" score={bookSentiment(held)} />
-          </CardHeader>
-          <CardContent>
-            <HeldSentiment rows={held} isLoading={indicatorsPending || details.isPending} />
-          </CardContent>
-        </Card>
-      </div>
+            </CardHeader>
+            <CardContent>
+              <SectorExposureTable
+                sectors={attribution?.sectors ?? []}
+                isLoading={attributionPending}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex-row items-start justify-between space-y-0 pb-3">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-[15px]">
+                  Sentiment on held names <DemoBadge />
+                </CardTitle>
+                <CardDescription>
+                  7-day article score per position, weighted by |weight|. Red on a long is what to
+                  look at first.
+                </CardDescription>
+              </div>
+              <SentimentGauge label="Book" score={bookSentiment(held)} />
+            </CardHeader>
+            <CardContent>
+              <HeldSentiment rows={held} isLoading={indicatorsPending || details.isPending} />
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
         <Card>

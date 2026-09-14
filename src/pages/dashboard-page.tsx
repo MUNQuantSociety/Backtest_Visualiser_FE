@@ -35,7 +35,12 @@ import {
 import { ComparisonChart, RiskReturnScatter, type ComparisonSeries } from '@/features/performance';
 import { useStrategies } from '@/features/strategies';
 import { seriesColor } from '@/lib/chart-theme';
-import { useDashboardPeriod, useSetDashboardPeriod, type DashboardPeriod } from '@/lib/ui-store';
+import {
+  useDashboardPeriod,
+  useHideDemoPanels,
+  useSetDashboardPeriod,
+  type DashboardPeriod,
+} from '@/lib/ui-store';
 import { cn } from '@/lib/utils';
 import { formatNumber, formatPercent, formatSigned } from '@/utils/format';
 import { toneFromValue } from '@/utils/tone';
@@ -67,6 +72,7 @@ const toneClass = {
 export default function DashboardPage() {
   const period = useDashboardPeriod();
   const setPeriod = useSetDashboardPeriod();
+  const hideDemoPanels = useHideDemoPanels();
   const palette = useChartPalette();
 
   const strategiesQuery = useStrategies();
@@ -161,7 +167,11 @@ export default function DashboardPage() {
 
   const strategiesUnavailable = strategiesQuery.isError && strategiesQuery.data === undefined;
   const runsUnavailable = runsQuery.isError && runsQuery.data === undefined;
-  const bookUnavailable = runsUnavailable || Boolean(detailsQuery.error);
+  // A run whose history failed is dropped from the book and named below; the
+  // book is only "unavailable" when nothing loaded at all.
+  const bookUnavailable =
+    runsUnavailable ||
+    (!detailsQuery.isPending && detailsQuery.failed.length > 0 && detailsQuery.data.length === 0);
   const loadingBook =
     !bookUnavailable && (runsQuery.isPending || (runIds.length > 0 && detailsQuery.isPending));
   const { summary } = model;
@@ -218,10 +228,16 @@ export default function DashboardPage() {
         ) : null,
       )}
 
-      {detailsQuery.error ? (
+      {detailsQuery.error && !detailsQuery.isPending ? (
         <div role="alert" className="flex items-center gap-3 text-sm text-destructive">
           <span>
-            Could not load {periodLabel} history: {detailsQuery.error.message}
+            {bookUnavailable
+              ? `Could not load ${periodLabel} history: ${detailsQuery.error.message}`
+              : `${String(detailsQuery.failed.length)} of ${String(runIds.length)} runs ${
+                  detailsQuery.failed.length === 1 ? 'is' : 'are'
+                } missing from the book: ${
+                  detailsQuery.failed.length === 1 ? 'its' : 'their'
+                } ${periodLabel} history could not be loaded (${detailsQuery.error.message}).`}
           </span>
           <Button
             variant="outline"
@@ -499,68 +515,70 @@ export default function DashboardPage() {
         </ChartContainer>
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
-        <Card>
-          <CardHeader className="flex-row items-start justify-between gap-4 space-y-0 pb-3">
-            <div className="space-y-1">
-              <CardTitle className="flex items-center gap-2 text-[15px]">
-                Indicators &amp; sentiment — universe <DemoBadge />
-              </CardTitle>
-              <CardDescription>
-                Close of last session. RSI marks overbought/oversold; sentiment is the
-                article-weighted score over 7 days, −1 to +1.
-              </CardDescription>
-            </div>
-            {indicators.data?.length ? (
-              <SentimentGauge label="Book sentiment" score={bookSentiment} />
-            ) : null}
-          </CardHeader>
-          <CardContent className="overflow-x-auto">
-            {strategiesUnavailable || indicators.error ? (
-              <p className="py-6 text-center text-sm text-muted-foreground">
-                Universe indicators unavailable.
-              </p>
-            ) : (
-              <IndicatorsTable
-                rows={indicators.data ?? []}
-                isLoading={strategiesQuery.isPending || indicators.isLoading}
-              />
-            )}
-          </CardContent>
-        </Card>
+      {!hideDemoPanels && (
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+          <Card>
+            <CardHeader className="flex-row items-start justify-between gap-4 space-y-0 pb-3">
+              <div className="space-y-1">
+                <CardTitle className="flex items-center gap-2 text-[15px]">
+                  Indicators &amp; sentiment — universe <DemoBadge />
+                </CardTitle>
+                <CardDescription>
+                  Close of last session. RSI marks overbought/oversold; sentiment is the
+                  article-weighted score over 7 days, −1 to +1.
+                </CardDescription>
+              </div>
+              {indicators.data?.length ? (
+                <SentimentGauge label="Book sentiment" score={bookSentiment} />
+              ) : null}
+            </CardHeader>
+            <CardContent className="overflow-x-auto">
+              {strategiesUnavailable || indicators.error ? (
+                <p className="py-6 text-center text-sm text-muted-foreground">
+                  Universe indicators unavailable.
+                </p>
+              ) : (
+                <IndicatorsTable
+                  rows={indicators.data ?? []}
+                  isLoading={strategiesQuery.isPending || indicators.isLoading}
+                />
+              )}
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader className="flex-row items-start justify-between gap-4 space-y-0 pb-3">
-            <div className="space-y-1">
-              <CardTitle className="flex items-center gap-2 text-[15px]">
-                News — scored <DemoBadge />
-              </CardTitle>
-              <CardDescription>
-                Only articles tagged to a ticker in the universe. The bar is the model’s sentiment
-                for that article.
-              </CardDescription>
-            </div>
-            <Segmented
-              value={newsScope}
-              options={NEWS_SCOPES}
-              onChange={setNewsScope}
-              ariaLabel="News scope"
-            />
-          </CardHeader>
-          <CardContent>
-            {(newsScope === 'universe' && strategiesUnavailable) || news.error ? (
-              <p className="py-6 text-center text-sm text-muted-foreground">News unavailable.</p>
-            ) : (
-              <NewsList
-                articles={news.data ?? []}
-                isLoading={
-                  (newsScope === 'universe' && strategiesQuery.isPending) || news.isLoading
-                }
+          <Card>
+            <CardHeader className="flex-row items-start justify-between gap-4 space-y-0 pb-3">
+              <div className="space-y-1">
+                <CardTitle className="flex items-center gap-2 text-[15px]">
+                  News — scored <DemoBadge />
+                </CardTitle>
+                <CardDescription>
+                  Only articles tagged to a ticker in the universe. The bar is the model’s sentiment
+                  for that article.
+                </CardDescription>
+              </div>
+              <Segmented
+                value={newsScope}
+                options={NEWS_SCOPES}
+                onChange={setNewsScope}
+                ariaLabel="News scope"
               />
-            )}
-          </CardContent>
-        </Card>
-      </div>
+            </CardHeader>
+            <CardContent>
+              {(newsScope === 'universe' && strategiesUnavailable) || news.error ? (
+                <p className="py-6 text-center text-sm text-muted-foreground">News unavailable.</p>
+              ) : (
+                <NewsList
+                  articles={news.data ?? []}
+                  isLoading={
+                    (newsScope === 'universe' && strategiesQuery.isPending) || news.isLoading
+                  }
+                />
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       <Card>
         <CardHeader className="flex-row items-start justify-between gap-4 space-y-0 pb-3">

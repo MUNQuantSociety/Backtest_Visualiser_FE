@@ -36,39 +36,23 @@ const SAVED: StrategySubmissionResult = {
   validationRunId: RUN_ID,
 };
 
-function run(status: string, errorMessage: string | null = null) {
+function strategy(validationState: string) {
   return {
-    id: RUN_ID,
-    name: 'validation',
-    strategyId: 'user-test-b0a184b1',
-    strategyName: 'test',
-    symbol: 'MULTI',
-    timeframe: '1d',
-    status,
-    startDate: '2026-09-01',
-    endDate: '2026-09-10',
-    createdAt: '2026-09-11T23:26:24Z',
-    initialCapital: 100_000,
-    finalEquity: 100_000,
-    totalReturn: 0,
-    sharpe: 0,
-    maxDrawdown: 0,
-    metrics: {
-      totalReturn: 0,
-      cagr: 0,
-      sharpe: 0,
-      sortino: 0,
-      maxDrawdown: 0,
-      volatility: 0,
-      winRate: 0,
-      profitFactor: 0,
-      totalTrades: 0,
-    },
-    equityCurve: [],
-    trades: [],
-    parameters: {},
-    progressPct: null,
-    errorMessage,
+    id: 'user-test-b0a184b1',
+    name: 'test',
+    className: 'UserStrategy',
+    description: '',
+    status: 'draft',
+    tags: ['user'],
+    parameters: [],
+    universe: ['AAPL'],
+    runCount: 0,
+    bestSharpe: null,
+    bestReturn: null,
+    lastRunAt: null,
+    indicators: [],
+    validationState,
+    validationRunId: RUN_ID,
   };
 }
 
@@ -78,12 +62,7 @@ beforeEach(() => {
 
 describe('ValidationOutcome', () => {
   it('reports a failed validation as an alert, tagged, with the engine error', async () => {
-    get.mockResolvedValue(
-      run(
-        'failed',
-        "UserStrategyError: strategy.py failed while being imported (NameError: name 'BasePortfolio' is not defined)",
-      ),
-    );
+    get.mockResolvedValue(strategy('failed_validation'));
 
     renderWithProviders(<ValidationOutcome result={SAVED} />);
 
@@ -91,9 +70,7 @@ describe('ValidationOutcome', () => {
     expect(alert).toHaveTextContent(/Validation failed/);
     expect(alert).toHaveTextContent(/saved as a draft/i);
     expect(alert).toHaveTextContent(/failed validation/);
-    // The engine's own words, verbatim: this is the only place the author is
-    // told why, and paraphrasing a NameError helps nobody.
-    expect(alert).toHaveTextContent(/NameError: name 'BasePortfolio' is not defined/);
+    expect(alert).toHaveTextContent(/validation run did not pass/i);
     expect(screen.getByRole('link', { name: /Open the validation run/ })).toHaveAttribute(
       'href',
       `/backtests/${RUN_ID}`,
@@ -101,7 +78,7 @@ describe('ValidationOutcome', () => {
   });
 
   it('says a passing run made the strategy active', async () => {
-    get.mockResolvedValue(run('completed'));
+    get.mockResolvedValue(strategy('active'));
 
     renderWithProviders(<ValidationOutcome result={SAVED} />);
 
@@ -113,7 +90,7 @@ describe('ValidationOutcome', () => {
   });
 
   it('shows progress while the run is still going, without alerting', async () => {
-    get.mockResolvedValue(run('running'));
+    get.mockResolvedValue(strategy('validating'));
 
     renderWithProviders(<ValidationOutcome result={SAVED} />);
 
@@ -135,10 +112,36 @@ describe('ValidationOutcome', () => {
   });
 
   it('falls back to plain language when a failure recorded no reason', async () => {
-    get.mockResolvedValue(run('failed', null));
+    get.mockResolvedValue(strategy('failed_validation'));
 
     renderWithProviders(<ValidationOutcome result={SAVED} />);
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(/No reason was recorded/);
+    expect(await screen.findByRole('alert')).toHaveTextContent(/validation run did not pass/i);
+  });
+
+  it('does not report an archived strategy as having passed', async () => {
+    get.mockResolvedValue(strategy('archived'));
+
+    renderWithProviders(<ValidationOutcome result={SAVED} />);
+
+    // Text, not role: the pending panel is `role="status"` too (see above).
+    expect(await screen.findByText(/unexpected state \(archived\)/)).toBeInTheDocument();
+    expect(screen.getByRole('status')).toBeInTheDocument();
+    expect(screen.queryByText(/passed validation/)).not.toBeInTheDocument();
+  });
+
+  it('keeps polling after a failed first read and reports the outcome once it can be read', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      get.mockRejectedValueOnce(new Error('registry lag')).mockResolvedValue(strategy('active'));
+
+      renderWithProviders(<ValidationOutcome result={SAVED} />);
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(/could not be read/);
+      await vi.advanceTimersByTimeAsync(4_500);
+      expect(await screen.findByText(/passed validation and is active/)).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
