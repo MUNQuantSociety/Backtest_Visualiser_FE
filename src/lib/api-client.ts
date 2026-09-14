@@ -167,20 +167,32 @@ function createApiClient(): AxiosInstance {
       const strategiesPath = `${backend.pathname.replace(/\/$/, '')}/strategies`;
       const validateTickersPath = `${backend.pathname.replace(/\/$/, '')}/market-data/validate-tickers`;
       const authMePath = `${backend.pathname.replace(/\/$/, '')}/auth/me`;
+      const method = config.method?.toLowerCase();
       const isStrategyUpload =
-        config.method?.toLowerCase() === 'post' &&
-        (url.pathname === strategiesPath || url.pathname === `${strategiesPath}/upload`);
-      // The explicit local account owns backtests, strategy validation uploads,
-      // the ticker-symbol check those runs depend on, and the identity check
-      // that signs dev sessions in. Absolute third-party URLs and unrelated
-      // endpoints must not receive it.
+        method === 'post' &&
+        (url.pathname === strategiesPath ||
+          url.pathname === `${strategiesPath}/upload` ||
+          url.pathname === `${strategiesPath}/draft`);
+      // One strategy's own row: DELETE /strategies/{key} and its stored
+      // source. The catalogue (GET /strategies, /strategies/{key}), the
+      // template and the check endpoints stay anonymous.
+      const strategyKeyPath = new RegExp(`^${strategiesPath}/[^/]+(/source)?$`);
+      const isStrategyOwnerAction =
+        strategyKeyPath.test(url.pathname) &&
+        ((method === 'delete' && !url.pathname.endsWith('/source')) ||
+          (method === 'get' && url.pathname.endsWith('/source')));
+      // The explicit local account owns backtests, strategy submissions and
+      // their source, the ticker-symbol check those runs depend on, and the
+      // identity check that signs dev sessions in. Absolute third-party URLs
+      // and unrelated endpoints must not receive it.
       if (
         url.origin === backend.origin &&
         (url.pathname === backtestsPath ||
           url.pathname.startsWith(`${backtestsPath}/`) ||
           url.pathname === validateTickersPath ||
           url.pathname === authMePath ||
-          isStrategyUpload)
+          isStrategyUpload ||
+          isStrategyOwnerAction)
       ) {
         config.headers.set('X-User-Id', env.devUserId);
       }

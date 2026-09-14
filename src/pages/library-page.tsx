@@ -22,6 +22,7 @@ import {
   useBacktests,
   useDeleteBacktest,
   viewRuns,
+  type OpenRunRequest,
   type PageSize,
   type RunSort,
   type StatusFilter,
@@ -95,9 +96,9 @@ export default function LibraryPage() {
   /* The strategy whose source is open in the editor, and the one the menu
      asked to run. Both are dialogs driven from the actions menu. */
   const [editing, setEditing] = useState<Strategy | null>(null);
-  // Incremented by the actions menu to open the header's run dialog, which
-  // owns its own trigger.
-  const [runSignal, setRunSignal] = useState(0);
+  // Set by the actions menu to open the header's run dialog, which owns its
+  // own trigger, on the strategy the menu belongs to.
+  const [runRequest, setRunRequest] = useState<OpenRunRequest>({ id: 0 });
   const runsQuery = useBacktests();
   const allRuns = useMemo(() => runsQuery.data?.items ?? [], [runsQuery.data]);
   // Catalogue totals can include other accounts. This hub describes only the
@@ -260,7 +261,7 @@ export default function LibraryPage() {
             <NewStrategyDialog />
             <RunBacktestDialog
               initialStrategyKey={selectedId ?? undefined}
-              openSignal={runSignal}
+              openRequest={runRequest}
             />
           </>
         }
@@ -297,10 +298,11 @@ export default function LibraryPage() {
             runningCount={running}
             onEdit={setEditing}
             onRun={(strategy) => {
-              // Selecting first means the run dialog below opens on this
-              // strategy, which is what its initialStrategyKey already reads.
+              // Select it too, so the page behind the dialog shows the same
+              // strategy — but the request carries the key itself: the URL
+              // update lands after the dialog has already opened.
               setParam('strategy', strategy.id);
-              setRunSignal((count) => count + 1);
+              setRunRequest((previous) => ({ id: previous.id + 1, strategyKey: strategy.id }));
             }}
           />
         </div>

@@ -59,10 +59,25 @@ const strategy = {
   lastRunAt: '2026-01-01T00:00:00Z',
 };
 
+const otherStrategy = {
+  ...strategy,
+  id: 'other',
+  name: 'Other strategy',
+  className: 'OtherStrategy',
+  description: 'Another current strategy.',
+  runCount: 0,
+  bestSharpe: null,
+  bestReturn: null,
+  lastRunAt: null,
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(apiClient.get).mockImplementation((url) => {
-    if (url === '/strategies') return Promise.resolve({ items: [strategy], total: 1 });
+    if (url === '/strategies')
+      return Promise.resolve({ items: [strategy, otherStrategy], total: 2 });
+    if (url === '/market-data/coverage')
+      return Promise.resolve({ tickers: [], start: '2025-01-01', end: '2025-12-31', missing: [] });
     if (url === '/backtests')
       return Promise.resolve({ items: [run, retiredRun], total: 2, page: 1, pageSize: 25 });
     if (url === '/backtests/current-run')
@@ -131,5 +146,27 @@ describe('Backtests hub', () => {
     await userEvent.click(screen.getByRole('button', { name: 'All runs (2)' }));
     expect(await screen.findByRole('link', { name: 'Retired strategy run' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Strategy preview' })).not.toBeInTheDocument();
+  });
+
+  it('opens the run dialog on the strategy whose menu asked for it, not the one selected before', async () => {
+    renderWithProviders(<LibraryPage />, { routes: ['/backtests?strategy=current'] });
+    await screen.findByRole('link', { name: 'Current strategy run' });
+    // jsdom has the element but not the browser's showModal/close methods.
+    for (const dialog of document.querySelectorAll('dialog')) {
+      dialog.showModal = () => {
+        dialog.open = true;
+      };
+      dialog.close = () => {
+        dialog.open = false;
+        dialog.dispatchEvent(new Event('close'));
+      };
+    }
+
+    await userEvent.click(screen.getByRole('button', { name: 'Actions for Other strategy' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Run backtest' }));
+
+    const group = await screen.findByRole('radiogroup', { name: 'Strategy' });
+    expect(within(group).getByRole('radio', { name: /Other strategy/ })).toBeChecked();
+    expect(within(group).getByRole('radio', { name: /Current strategy/ })).not.toBeChecked();
   });
 });
