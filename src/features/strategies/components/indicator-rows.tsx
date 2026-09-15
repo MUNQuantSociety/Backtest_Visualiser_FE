@@ -38,6 +38,10 @@ function choicesFor(current: unknown): number[] {
   return [...values].sort((left, right) => left - right);
 }
 
+function selectValue(value: unknown): string {
+  return typeof value === 'number' || typeof value === 'string' ? String(value) : '';
+}
+
 /** A label a person reads, from a key the engine uses. */
 function labelFor(key: string): string {
   const spaced = key.replace(/_/g, ' ');
@@ -147,7 +151,7 @@ export function IndicatorRows({
                 >
                   <select
                     aria-label={`Indicator ${String(index + 1)} ${parameter.key}`}
-                    value={String(spec.params[parameter.key] ?? parameter.default ?? '')}
+                    value={selectValue(spec.params[parameter.key] ?? parameter.default)}
                     onChange={(event) => {
                       update(index, {
                         params: { ...spec.params, [parameter.key]: Number(event.target.value) },
@@ -183,7 +187,9 @@ export function IndicatorRows({
         variant="outline"
         size="sm"
         disabled={available.length === 0}
-        title={available.length === 0 ? 'The engine’s indicator list could not be loaded.' : undefined}
+        title={
+          available.length === 0 ? 'The engine’s indicator list could not be loaded.' : undefined
+        }
         onClick={() => {
           const first = available[0]?.name ?? '';
           onChange([...value, { attribute: '', indicator: first, params: defaultsFor(first) }]);
