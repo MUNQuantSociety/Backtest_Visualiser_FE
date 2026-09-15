@@ -1,3 +1,5 @@
+import '@/test/storage-global';
+
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -6,6 +8,7 @@ import { backtestKeys, type BacktestSummary } from '@/features/backtests';
 import type { ComparisonSeries } from '@/features/performance';
 import { ApiError, apiClient } from '@/lib/api-client';
 import type * as ApiClientModule from '@/lib/api-client';
+import { useUiStore } from '@/lib/ui-store';
 import {
   act,
   render,
@@ -19,7 +22,15 @@ import {
 import DashboardPage from './dashboard-page';
 
 vi.mock('@/config/env', () => ({
-  env: { apiBaseUrl: '/api', apiTimeout: 30_000, useFixtures: false, isDev: false, isProd: true },
+  env: {
+    apiBaseUrl: '/api',
+    apiTimeout: 30_000,
+    devUserId: undefined,
+    devHideDemoPanels: false,
+    useFixtures: false,
+    isDev: true,
+    isProd: false,
+  },
 }));
 vi.mock('@/lib/api-client', async (importOriginal) => {
   const actual = await importOriginal<typeof ApiClientModule>();
@@ -182,9 +193,26 @@ describe('Dashboard request isolation', () => {
     expect(vi.mocked(apiClient.get).mock.calls.map(([url]) => url)).not.toContain('/indicators');
   });
 
-  it('marks book metrics unavailable when one equity query fails while another is still pending', async () => {
+  it('keeps the book loading until every run settles, then charts the runs that loaded and names the one that did not', async () => {
     const pending = deferred();
     const initial = vi.mocked(apiClient.get).getMockImplementation()!;
+    const equity = (id: string) => ({
+      id,
+      strategyId: strategy.id,
+      symbol: 'SPY',
+      equityCurve: [
+        { date: '2025-12-29', equity: 100, benchmark: 100 },
+        { date: '2025-12-30', equity: 101, benchmark: 102 },
+        { date: '2025-12-31', equity: 103, benchmark: 103 },
+      ],
+      window: {
+        period: '1y',
+        requestedStart: '2024-12-31',
+        requestedEnd: '2025-12-31',
+        availableStart: '2025-12-29',
+        availableEnd: '2025-12-31',
+      },
+    });
     vi.mocked(apiClient.get).mockImplementation((url, config) => {
       if (url === '/strategies')
         return Promise.resolve({ items: [strategy, { ...strategy, id: 'second' }], total: 2 });
@@ -194,14 +222,31 @@ describe('Dashboard request isolation', () => {
           items: [run, { ...run, id: 'second-run', strategyId: 'second' }],
           total: 2,
         });
+      if (url === `/backtests/${run.id}/equity`) return Promise.reject(new Error('Report gone'));
       if (url === '/backtests/second-run/equity') return pending.promise;
       return initial(url, config);
     });
     renderWithProviders(<DashboardPage />);
+    expect(await screen.findAllByRole('link', { name: /Saved user run/ })).toHaveLength(2);
+    // One run has already failed, but the other is still in flight: no book yet.
+    expect(screen.queryByText('Book history unavailable.')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('comparison-chart')).not.toBeInTheDocument();
+
+    act(() => {
+      pending.resolve(equity('second-run'));
+    });
+    const chart = await screen.findByTestId('comparison-chart');
+    expect(chart.querySelectorAll('[data-series-id]')).toHaveLength(1);
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      /1 of 2 runs is missing from the book: its 2Y history could not be loaded \(Report gone\)\./,
+    );
+  });
+
+  it('marks the book unavailable only when no run history loaded at all', async () => {
+    renderWithProviders(<DashboardPage />);
     expect(await screen.findByText('Book history unavailable.')).toBeInTheDocument();
     expect(tile('Book Sharpe').getByText('—')).toBeInTheDocument();
     expect(screen.queryByTestId('comparison-chart')).not.toBeInTheDocument();
-    expect(screen.getAllByRole('link', { name: /Saved user run/ })).toHaveLength(2);
   });
 
   it('preserves cached run history with a refresh warning when refreshing it fails', async () => {
@@ -303,5 +348,24 @@ describe('Dashboard saved run comparison', () => {
     ).toHaveLength(2);
     expect(screen.queryByText(/with observations in this window/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Available observations:/)).not.toBeInTheDocument();
+  });
+});
+
+describe('Dashboard demo data panels', () => {
+  beforeEach(() => {
+    useUiStore.setState({ hideDemoPanels: false });
+  });
+
+  it('hides the demo-marked market cards when the preference is on', async () => {
+    renderWithProviders(<DashboardPage />);
+    expect(await screen.findByText('Indicators & sentiment — universe')).toBeInTheDocument();
+    expect(screen.getByText('News — scored')).toBeInTheDocument();
+
+    act(() => {
+      useUiStore.setState({ hideDemoPanels: true });
+    });
+
+    expect(screen.queryByText('Indicators & sentiment — universe')).not.toBeInTheDocument();
+    expect(screen.queryByText('News — scored')).not.toBeInTheDocument();
   });
 });

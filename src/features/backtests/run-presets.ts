@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 /**
  * Named snapshots of the run configuration, kept in localStorage.
  *
@@ -9,26 +11,31 @@
  * behind these same functions.
  */
 
-export interface RunPresetConfig {
-  strategyKey: string;
-  runName: string;
-  universe: string[];
-  startDate: string;
-  endDate: string;
-  capital: string;
-  slippageBps: string;
-  commission: string;
-  paramValues: Record<string, string | boolean>;
-  gateEnabled: boolean;
-  gateThreshold: number;
-}
+// Every field the form re-applies is checked, not just the identifying ones:
+// the store is plain localStorage, so a hand-edited or half-written row is a
+// real input, and one that passes here is later read without guards.
+const runPresetConfigSchema = z.object({
+  strategyKey: z.string(),
+  runName: z.string(),
+  universe: z.array(z.string()),
+  startDate: z.string(),
+  endDate: z.string(),
+  capital: z.string(),
+  slippageBps: z.string(),
+  commission: z.string(),
+  paramValues: z.record(z.string(), z.union([z.string(), z.boolean()])),
+  gateEnabled: z.boolean(),
+  gateThreshold: z.number(),
+});
+export type RunPresetConfig = z.infer<typeof runPresetConfigSchema>;
 
-export interface RunPreset {
-  id: string;
-  name: string;
-  savedAt: string;
-  config: RunPresetConfig;
-}
+const runPresetSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  savedAt: z.string(),
+  config: runPresetConfigSchema,
+});
+export type RunPreset = z.infer<typeof runPresetSchema>;
 
 const STORAGE_KEY = 'mqs:run-presets:v1';
 
@@ -39,30 +46,23 @@ export function listRunPresets(): RunPreset[] {
     if (!raw) return [];
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter(isRunPreset);
+    // One bad row must not hide the good ones, so each is parsed on its own.
+    return parsed.flatMap((entry: unknown) => {
+      const result = runPresetSchema.safeParse(entry);
+      return result.success ? [result.data] : [];
+    });
   } catch {
     return [];
   }
 }
 
-function isRunPreset(value: unknown): value is RunPreset {
-  if (typeof value !== 'object' || value === null) return false;
-  const record = value as Record<string, unknown>;
-  if (typeof record.id !== 'string' || typeof record.name !== 'string') return false;
-  if (typeof record.savedAt !== 'string') return false;
-  const config = record.config as Record<string, unknown> | null;
-  return (
-    typeof config === 'object' &&
-    config !== null &&
-    typeof config.strategyKey === 'string' &&
-    typeof config.startDate === 'string' &&
-    typeof config.endDate === 'string'
-  );
-}
-
-/** A preset id derived from its name, so re-saving a name replaces it. */
+/**
+ * A preset id derived from its name, so re-saving a name replaces it. Case is
+ * kept: the panel promises that only the *same* name replaces, and folding
+ * "Momentum Test" into "momentum test" would silently delete the first.
+ */
 function presetId(name: string): string {
-  return name.trim().toLowerCase().replace(/\s+/g, '-');
+  return name.trim().replace(/\s+/g, '-');
 }
 
 /**

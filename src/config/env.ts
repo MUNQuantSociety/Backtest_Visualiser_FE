@@ -20,6 +20,23 @@ const envSchema = z.object({
   ),
 
   /**
+   * Start with demo-data panels hidden in local development.
+   *
+   * Demo panels are a dev aid: visible in dev by default, always hidden in
+   * production builds. This flag only additionally seeds the first dev visit
+   * with them hidden — the header toggle can still un-hide them. Ignored by
+   * production builds. Defer to `VITE_USE_FIXTURES`'s strict bool contract for
+   * the same reason: `z.coerce.boolean()` would treat any non-empty string as
+   * true.
+   */
+  VITE_DEV_HIDE_DEMO_PANELS: z
+    .preprocess(
+      (value) => (value === '' ? undefined : value),
+      z.enum(['true', 'false']).default('false'),
+    )
+    .transform((value) => value === 'true'),
+
+  /**
    * Serve fixture data instead of calling the API.
    *
    * A stopgap so the MQS Master views are demoable before the backend exists.
@@ -38,6 +55,10 @@ const parsed = envSchema.safeParse({
   ...import.meta.env,
   // Temporary local ownership is never enabled by a production build.
   VITE_DEV_USER_ID: import.meta.env.DEV ? import.meta.env.VITE_DEV_USER_ID : undefined,
+  // Same gate for the demo-panels default: a prod build must not inherit it.
+  VITE_DEV_HIDE_DEMO_PANELS: import.meta.env.DEV
+    ? (import.meta.env.VITE_DEV_HIDE_DEMO_PANELS as string | undefined)
+    : undefined,
 });
 
 if (!parsed.success) {
@@ -51,6 +72,7 @@ export const env = {
   apiBaseUrl: parsed.data.VITE_API_BASE_URL,
   apiTimeout: parsed.data.VITE_API_TIMEOUT,
   devUserId: parsed.data.VITE_DEV_USER_ID,
+  devHideDemoPanels: parsed.data.VITE_DEV_HIDE_DEMO_PANELS,
   useFixtures: parsed.data.VITE_USE_FIXTURES,
   isDev: import.meta.env.DEV,
   isProd: import.meta.env.PROD,

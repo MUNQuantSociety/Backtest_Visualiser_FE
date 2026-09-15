@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router';
 import { paths } from '@/app/paths';
 import { Button } from '@/components/ui/button';
 import { Segmented } from '@/components/ui/segmented';
-import { useStrategies } from '@/features/strategies';
+import { useEngineIndicators, useStrategies } from '@/features/strategies';
 import { ApiError } from '@/lib/api-client';
 import { createLogger } from '@/lib/logger';
 import { cn } from '@/lib/utils';
@@ -59,6 +59,17 @@ const DEFAULT_SENTIMENT_THRESHOLD = -0.25;
 
 /** How much history to preselect, when coverage allows that much. */
 const DEFAULT_WINDOW_DAYS = 365;
+
+/**
+ * Fallback signal list, used only when the engine's own cannot be fetched.
+ *
+ * This used to be the whole list, hardcoded — and it was wrong: it offered
+ * MACD and Bollinger, which the engine does not ship, so a member could pick a
+ * signal that could never have been applied. `GET /strategies/indicators` is
+ * the real source; these are the two names most likely to be recognised if it
+ * is unreachable.
+ */
+const FALLBACK_SIGNALS = ['SimpleMovingAverage', 'RelativeStrengthIndex'] as const;
 
 /** `end` minus a year, floored at the earliest date the universe covers. */
 function defaultStart(start: string, end: string): string {
@@ -124,6 +135,11 @@ export function RunBacktestForm({
   const [universeOverride, setUniverseOverride] = useState<readonly string[] | null>(null);
 
   const coverage = useCoverage(strategyKey || undefined, universeOverride ?? undefined);
+  // The engine's indicator classes, so this list offers what could actually be
+  // applied rather than names invented in the client.
+  const engineIndicators = useEngineIndicators();
+  const signalNames: readonly string[] =
+    engineIndicators.data?.map((definition) => definition.name) ?? FALLBACK_SIGNALS;
 
   const nameId = useId();
   const startId = useId();
@@ -141,6 +157,11 @@ export function RunBacktestForm({
     [strategies.data],
   );
   const chosen = runnable.find((strategy) => strategy.id === strategyKey);
+
+  // A strategy may register a class by hand that the engine catalogue does not
+  // list; it still runs, so the row renders it alongside the engine's own and
+  // marks everything the strategy declares as selected.
+  const indicatorNames = [...new Set([...signalNames, ...(chosen?.indicators ?? [])])];
 
   const covered = coverage.data;
   const hasWindow = Boolean(covered?.start && covered.end);
@@ -713,8 +734,27 @@ export function RunBacktestForm({
 
         <Row label="Indicators">
           <p className="text-[13px] text-muted-foreground">
-            Indicators are defined by the selected strategy.
+            Indicators are defined by the selected strategy — a run cannot add or remove them.
           </p>
+          <ul className="mt-2 flex flex-wrap gap-1.5" aria-label="Strategy indicators">
+            {indicatorNames.map((name) => {
+              const active = (chosen?.indicators ?? []).includes(name);
+              return (
+                <li key={name}>
+                  <span
+                    className={cn(
+                      'tabular inline-flex items-center rounded border px-2 py-0.5 text-[11px]',
+                      active
+                        ? 'border-primary bg-selected text-selected-foreground'
+                        : 'border-border bg-background text-muted-foreground',
+                    )}
+                  >
+                    {name}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
           <div className="mt-2 flex flex-wrap items-center gap-3 rounded-md bg-background px-3 py-2 text-[13px]">
             <label htmlFor={gateId} className="flex cursor-pointer items-center gap-2">
               <input

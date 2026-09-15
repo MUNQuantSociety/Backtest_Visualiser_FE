@@ -31,25 +31,45 @@ interface RunBacktestDialogProps {
   label?: string | undefined;
   variant?: 'default' | 'outline' | undefined;
   /**
-   * Opens the dialog from outside, once per increment.
+   * Opens the dialog from outside, once per distinct request.
    *
-   * A counter rather than a boolean, deliberately: the trap the comment below
-   * describes is a flag that already holds the value it is being set to, so
-   * the effect never re-runs. A number that changes on every request cannot
-   * get stuck that way. Used by the strategy actions menu, which has to open
-   * this dialog without owning its trigger.
+   * An object with a counter rather than a boolean, deliberately: the trap the
+   * comment below describes is a flag that already holds the value it is
+   * being set to, so the effect never re-runs. A value that changes on every
+   * request cannot get stuck that way. Used by the strategy actions menu,
+   * which has to open this dialog without owning its trigger.
+   *
+   * The request names its own strategy. The menu also selects that strategy
+   * in the URL, but that lands a render or more after the signal does, and
+   * the form reads `initialStrategyKey` only once, on mount — so an open
+   * that leaned on the page's selection came up on the previous one.
    */
-  openSignal?: number | undefined;
+  openRequest?: OpenRunRequest | undefined;
+}
+
+export interface OpenRunRequest {
+  /** Changes on every request; equal objects are not re-opened. */
+  id: number;
+  /** Overrides `initialStrategyKey` for this open only. */
+  strategyKey?: string | undefined;
 }
 
 export function RunBacktestDialog({
   initialStrategyKey,
   label = 'Run backtest',
   variant = 'default',
-  openSignal,
+  openRequest,
 }: RunBacktestDialogProps = {}) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [open, setOpen] = useState(false);
+  // The strategy this particular open started on. Fixed when the dialog
+  // opens, not read live from props: the form mounts once per open and
+  // must not change under the person filling it in.
+  const [startingStrategyKey, setStartingStrategyKey] = useState<string | undefined>();
+  // The request ids already acted on. The effect below keys on the object,
+  // so a parent that rebuilt an equal request — a remount, a state reset —
+  // would otherwise reopen a dialog the person had just closed.
+  const handledRequestId = useRef(0);
 
   /*
    * The element is the source of truth for openness, not the state flag.
@@ -63,22 +83,25 @@ export function RunBacktestDialog({
    * `open` is kept only to decide whether the form is mounted, and `onClose`
    * puts it back in step however the dialog was dismissed.
    */
-  function openDialog() {
+  function openDialog(strategyKey: string | undefined = initialStrategyKey) {
     const dialog = dialogRef.current;
     if (!dialog) return;
+    setStartingStrategyKey(strategyKey);
     setOpen(true);
     // `showModal()` throws InvalidStateError if the dialog is already open.
     if (!dialog.open) dialog.showModal();
-    log.info('run dialog opened', { initialStrategyKey: initialStrategyKey ?? null });
+    log.info('run dialog opened', { initialStrategyKey: strategyKey ?? null });
   }
 
   useEffect(() => {
-    if (openSignal === undefined || openSignal === 0) return;
-    openDialog();
-    // openDialog is stable enough for this: it closes over refs and setState
-    // only, both of which React guarantees.
+    if (openRequest === undefined || openRequest.id === 0) return;
+    if (openRequest.id === handledRequestId.current) return;
+    handledRequestId.current = openRequest.id;
+    openDialog(openRequest.strategyKey ?? initialStrategyKey);
+    // openDialog is stable enough for this: it closes over refs, setState and
+    // the props read at call time.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openSignal]);
+  }, [openRequest]);
 
   function closeDialog() {
     log.info('run dialog closed');
@@ -94,7 +117,9 @@ export function RunBacktestDialog({
   return (
     <>
       <Button
-        onClick={openDialog}
+        onClick={() => {
+          openDialog();
+        }}
         variant={variant}
         size={variant === 'outline' ? 'sm' : 'default'}
       >
@@ -156,7 +181,7 @@ export function RunBacktestDialog({
         {open ? (
           <RunBacktestForm
             layout="dialog"
-            initialStrategyKey={initialStrategyKey}
+            initialStrategyKey={startingStrategyKey}
             onSubmitted={closeDialog}
           />
         ) : null}

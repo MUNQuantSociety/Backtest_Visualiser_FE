@@ -58,7 +58,7 @@ function strategy(id: string, name: string, status = 'active') {
     lastRunAt: null,
     validationState: status,
     validationRunId: null,
-    // What this strategy's INDICATORS block declares; the Signals row
+    // What this strategy's INDICATORS block declares; the Indicators row
     // highlights these.
     indicators: id === 'portfolio_1' ? ['RateOfChange'] : [],
   };
@@ -100,7 +100,10 @@ beforeEach(() => {
       }
       if (url === '/strategies/indicators') {
         return Promise.resolve({
-          items: ['RateOfChange', 'SimpleMovingAverage'],
+          items: [
+            { name: 'RateOfChange', parameters: [] },
+            { name: 'SimpleMovingAverage', parameters: [] },
+          ],
           total: 2,
         });
       }
@@ -335,14 +338,19 @@ describe('RunBacktestForm', () => {
     expect(post).not.toHaveBeenCalled();
   });
 
-  it('uses the strategy indicators without offering placeholder controls', () => {
+  it('lists the engine’s indicators read-only, highlighting the strategy’s own', async () => {
     renderWithProviders(<RunBacktestForm />);
-    expect(
-      screen.getByText('Indicators are defined by the selected strategy.'),
-    ).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'RSI 14' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'VWAP' })).not.toBeInTheDocument();
-    expect(screen.getByRole('switch', { name: 'Sentiment gate' })).toBeDisabled();
+
+    const name = await screen.findByText('SimpleMovingAverage');
+    expect(name.tagName).toBe('SPAN');
+    expect(screen.queryByRole('button', { name: 'SimpleMovingAverage' })).not.toBeInTheDocument();
+    expect(screen.getByText(/a run cannot add or remove them/i)).toBeInTheDocument();
+
+    await pickStrategy('portfolio_1');
+    await waitFor(() => {
+      expect(screen.getByText('RateOfChange').className).toContain('border-primary');
+    });
+    expect(screen.getByText('SimpleMovingAverage').className).not.toContain('border-primary');
   });
 
   it('checks a draft before adding it, deduplicates Enter/blur, and blocks submission while pending', async () => {

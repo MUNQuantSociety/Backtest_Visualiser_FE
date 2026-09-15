@@ -35,6 +35,7 @@ async function withFixtureDelay<T>(value: T): Promise<T> {
 export const strategyKeys = {
   all: ['strategies'] as const,
   lists: () => [...strategyKeys.all, 'list'] as const,
+  detail: (key: string) => [...strategyKeys.all, 'detail', key] as const,
   template: () => [...strategyKeys.all, 'template'] as const,
 } as const;
 
@@ -106,6 +107,25 @@ export function useStrategies() {
 export async function fetchStrategy(key: string): Promise<Strategy> {
   const data = await apiClient.get<unknown>(`/strategies/${encodeURIComponent(key)}`);
   return strategySchema.parse(data);
+}
+
+/** Poll the registry lifecycle of a user strategy while its validation runs. */
+export function useStrategyStatus(key: string | undefined) {
+  return useQuery({
+    queryKey: strategyKeys.detail(key ?? ''),
+    queryFn: () => fetchStrategy(key as string),
+    enabled: Boolean(key),
+    // Keep polling until the row has been read *and* is no longer validating.
+    // A first read that fails (registry write lag, a transient 5xx) must not
+    // freeze the panel on "could not be read" while validation goes on to
+    // pass seconds later. Retries follow the client's default policy.
+    refetchInterval: (query) => {
+      const state = query.state.data?.validationState;
+      return state === undefined || state === 'validating' ? 4_000 : false;
+    },
+    refetchIntervalInBackground: true,
+    staleTime: 0,
+  });
 }
 
 /**
