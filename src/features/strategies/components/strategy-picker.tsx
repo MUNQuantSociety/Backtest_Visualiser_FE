@@ -66,7 +66,12 @@ export function StrategyPicker({
           ))}
         </div>
       ) : (
-        <div role="listbox" aria-label="Strategies" className="space-y-1.5">
+        <div
+          role="listbox"
+          aria-label="Strategies"
+          className="library-scroll-region strategy-picker-scroll space-y-1.5"
+          tabIndex={0}
+        >
           {shown.map((strategy) => {
             const selected = strategy.id === selectedId;
             const colorIndex = strategyColorIndex(strategy, all);

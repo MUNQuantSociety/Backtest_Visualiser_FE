@@ -1,4 +1,4 @@
-import { Search, X } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 
@@ -371,7 +371,7 @@ export default function LibraryPage() {
                   Open a run to view its results. Select two or more runs to compare them.
                 </p>
                 <div
-                  className="report-table-scroll"
+                  className="library-scroll-region report-table-scroll"
                   role="region"
                   aria-label="Run history rows"
                   tabIndex={0}
@@ -576,7 +576,6 @@ export default function LibraryPage() {
             {selectedRuns.map((run) => run.name).join(' · ')}
           </span>
           <Button variant="ghost" size="sm" onClick={clearComparison}>
-            <X className="mr-1.5 size-3.5" aria-hidden />
             Clear
           </Button>
           <Button

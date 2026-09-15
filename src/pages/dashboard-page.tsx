@@ -148,6 +148,20 @@ export default function DashboardPage() {
     };
   }, [detailsQuery.data, strategies, runSeries, runs]);
 
+  const [hiddenRunIds, setHiddenRunIds] = useState<ReadonlySet<string>>(() => new Set());
+  const visibleLines = useMemo(
+    () => model.lines.filter((line) => !hiddenRunIds.has(line.id)),
+    [hiddenRunIds, model.lines],
+  );
+  const toggleRunSeries = (runId: string) => {
+    setHiddenRunIds((current) => {
+      const next = new Set(current);
+      if (next.has(runId)) next.delete(runId);
+      else next.add(runId);
+      return next;
+    });
+  };
+
   const universeTickers = useMemo(() => model.universe.map((row) => row.ticker), [model.universe]);
   const indicators = useIndicators(universeTickers);
   const [newsScope, setNewsScope] = useState<NewsScope>('universe');
@@ -321,7 +335,7 @@ export default function DashboardPage() {
             </p>
           ) : (
             <ComparisonChart
-              series={model.lines}
+              series={visibleLines}
               benchmark={model.benchmark}
               showSeriesLabels={false}
             />
@@ -331,10 +345,6 @@ export default function DashboardPage() {
         <Card className="flex h-[380px] min-w-0 flex-col">
           <CardHeader className="pb-3">
             <CardTitle className="text-[15px]">Run alpha table</CardTitle>
-            <CardDescription>
-              Against {model.benchmark.title}. Sparkline is rolling 63d Sharpe over the last year;
-              the tick is zero.
-            </CardDescription>
           </CardHeader>
           <CardContent
             className="min-h-0 flex-1 [scrollbar-gutter:stable] overflow-auto"
@@ -366,53 +376,57 @@ export default function DashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {model.rows.map((row) => (
-                  <tr
-                    key={row.strategy.id}
-                    className="border-b last:border-b-0 [&>td]:px-2 [&>td]:py-2 [&>td]:whitespace-nowrap [&>td:first-child]:pl-0 [&>td:last-child]:pr-0"
-                  >
-                    <td>
-                      <div className="flex min-w-36 items-center gap-2">
-                        <span
-                          className="size-2 shrink-0 rounded-[2px]"
-                          style={{ background: seriesColor(palette, row.strategy.colorIndex) }}
-                          aria-hidden
-                        />
-                        <div className="max-w-64 whitespace-normal">
-                          <Link
-                            to={paths.backtestDetail(row.run.id)}
-                            className="font-medium hover:underline"
-                          >
-                            {row.strategy.name}
-                          </Link>
-                          <p className="tabular text-[10px] text-muted-foreground">
-                            {runIndex.get(row.run.id)?.strategyName} · {row.run.symbol}
-                          </p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className={cn('tabular text-right', toneClass[toneFromValue(row.alpha)])}>
-                      {formatSigned(row.alpha, (n) => formatPercent(n, 1))}
-                    </td>
-                    <td className="tabular text-right">{formatNumber(row.beta)}</td>
-                    <td
-                      className="tabular text-right"
-                      title={Number.isFinite(row.sharpe) ? String(row.sharpe) : undefined}
+                {model.rows.map((row) => {
+                  const isVisible = !hiddenRunIds.has(row.run.id);
+                  const color = seriesColor(palette, row.strategy.colorIndex);
+                  return (
+                    <tr
+                      key={row.strategy.id}
+                      className="border-b last:border-b-0 [&>td]:px-2 [&>td]:py-2 [&>td]:whitespace-nowrap [&>td:first-child]:pl-0 [&>td:last-child]:pr-0"
                     >
-                      {formatNumber(row.sharpe)}
-                    </td>
-                    <td className="tabular text-right text-[var(--loss)]">
-                      {formatPercent(row.maxDrawdown, 1)}
-                    </td>
-                    <td>
-                      <Sparkline
-                        values={row.sparkline}
-                        zeroTick={0}
-                        stroke={seriesColor(palette, row.strategy.colorIndex)}
-                      />
-                    </td>
-                  </tr>
-                ))}
+                      <td>
+                        <div className="flex min-w-36 items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={isVisible}
+                            onChange={() => toggleRunSeries(row.run.id)}
+                            aria-label={`Show ${row.strategy.name} on comparison chart`}
+                            title={`${isVisible ? 'Hide' : 'Show'} ${row.strategy.name} on chart`}
+                            className="size-3.5 shrink-0 cursor-pointer rounded-[3px] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:outline-none"
+                            style={{ accentColor: color }}
+                          />
+                          <div className="max-w-64 whitespace-normal">
+                            <Link
+                              to={paths.backtestDetail(row.run.id)}
+                              className="font-medium hover:underline"
+                            >
+                              {row.strategy.name}
+                            </Link>
+                            <p className="tabular text-[10px] text-muted-foreground">
+                              {runIndex.get(row.run.id)?.strategyName} · {row.run.symbol}
+                            </p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className={cn('tabular text-right', toneClass[toneFromValue(row.alpha)])}>
+                        {formatSigned(row.alpha, (n) => formatPercent(n, 1))}
+                      </td>
+                      <td className="tabular text-right">{formatNumber(row.beta)}</td>
+                      <td
+                        className="tabular text-right"
+                        title={Number.isFinite(row.sharpe) ? String(row.sharpe) : undefined}
+                      >
+                        {formatNumber(row.sharpe)}
+                      </td>
+                      <td className="tabular text-right text-[var(--loss)]">
+                        {formatPercent(row.maxDrawdown, 1)}
+                      </td>
+                      <td>
+                        <Sparkline values={row.sparkline} zeroTick={0} stroke={color} />
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
             {!loadingBook && model.rows.length === 0 ? (

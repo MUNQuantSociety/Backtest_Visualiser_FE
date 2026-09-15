@@ -6,14 +6,13 @@ import type { CoverageResponse, TickerCoverage } from './types';
  * clamping and the arithmetic can be asserted without rendering the form.
  */
 
-export type WindowPreset = '1y' | '2y' | '5y' | 'max' | '2022';
+export type WindowPreset = '1y' | '2y' | '5y' | 'max';
 
 export const WINDOW_PRESETS: readonly { value: WindowPreset; label: string }[] = [
   { value: '1y', label: '1Y' },
   { value: '2y', label: '2Y' },
   { value: '5y', label: '5Y' },
   { value: 'max', label: 'Max' },
-  { value: '2022', label: '2022' },
 ];
 
 export function isoDay(value: Date): string {
@@ -37,9 +36,6 @@ export function presetWindow(
 ): { startDate: string; endDate: string } {
   const { start, end } = coverage;
   if (preset === 'max') return { startDate: start, endDate: end };
-  if (preset === '2022') {
-    return { startDate: clamp('2022-01-01', start, end), endDate: clamp('2022-12-31', start, end) };
-  }
   const years = preset === '1y' ? 1 : preset === '2y' ? 2 : 5;
   const from = new Date(`${end}T00:00:00Z`);
   from.setUTCFullYear(from.getUTCFullYear() - years);
