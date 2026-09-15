@@ -124,6 +124,11 @@ describe('temporary development backtest ownership', () => {
     expect(requests[0]!.headers.get('X-User-Id')).toBe(config.devUserId);
   });
 
+  it('includes the owner on the symbol suggestions the ticker field asks for', async () => {
+    await apiClient.get('/market-data/search-symbols', { params: { query: 'AA' } });
+    expect(requests[0]!.headers.get('X-User-Id')).toBe(config.devUserId);
+  });
+
   it.each([
     '/strategies/check',
     '/strategies/upload/check',

@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router';
 
 import { paths } from '@/app/paths';
 import { Button } from '@/components/ui/button';
+import { InfoTip } from '@/components/ui/info-tip';
 import { Segmented } from '@/components/ui/segmented';
 import { useEngineIndicators, useStrategies } from '@/features/strategies';
 import { ApiError } from '@/lib/api-client';
@@ -17,6 +18,7 @@ import {
   useTickerValidation,
   validateTickers,
 } from './backtests-api';
+import { RUN_FORM_TIPS } from './run-form-copy';
 import { deleteRunPreset, listRunPresets, saveRunPreset, type RunPreset } from './run-presets';
 import {
   coverageSegments,
@@ -31,6 +33,7 @@ import {
   type CoverageDot,
   type WindowPreset,
 } from './run-window';
+import { TickerCombobox } from './ticker-combobox';
 import { backtestRunRequestSchema } from './types';
 
 const log = createLogger('backtest-form');
@@ -110,6 +113,7 @@ export function RunBacktestForm({
   const [tickerError, setTickerError] = useState<string | null>(null);
   const [checkingTicker, setCheckingTicker] = useState(false);
   const tickerRequest = useRef<AbortController | null>(null);
+  const universeBoxRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Saved-run presets: named snapshots of this form, recovered from the
@@ -291,9 +295,12 @@ export function RunBacktestForm({
     setTickerError(null);
   }
 
-  async function addTicker() {
-    const ticker = tickerDraft.trim().toUpperCase();
+  async function addTicker(explicit?: string) {
+    const ticker = (explicit ?? tickerDraft).trim().toUpperCase();
     if (!ticker || !strategyKey || tickerRequest.current) return;
+    // A picked suggestion becomes the draft, so the status line names it
+    // while it is checked and the field shows what was chosen if that fails.
+    if (explicit !== undefined) setTickerDraft(ticker);
     if (universe.includes(ticker)) {
       setTickerDraft('');
       setTickerError(null);
@@ -467,7 +474,7 @@ export function RunBacktestForm({
      */
     <form onSubmit={handleSubmit} noValidate>
       <div className={cn('space-y-[22px]', layout === 'dialog' ? 'px-6 py-5' : '')}>
-        <Row label="Strategy">
+        <Row label="Strategy" tip={RUN_FORM_TIPS.strategy}>
           <div role="radiogroup" aria-label="Strategy" className="grid gap-2 sm:grid-cols-2">
             {runnable.map((strategy) => {
               const active = strategy.id === strategyKey;
@@ -531,8 +538,11 @@ export function RunBacktestForm({
           </div>
         </Row>
 
-        <Row label="Universe">
-          <div className="flex min-h-9 flex-wrap items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1.5">
+        <Row label="Universe" tip={RUN_FORM_TIPS.universe}>
+          <div
+            ref={universeBoxRef}
+            className="flex min-h-9 flex-wrap items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1.5"
+          >
             {universe.map((ticker) => (
               <span
                 key={ticker}
@@ -556,29 +566,24 @@ export function RunBacktestForm({
                 </button>
               </span>
             ))}
-            <input
+            <TickerCombobox
               id={tickerId}
-              aria-label="Add ticker"
               value={tickerDraft}
-              aria-invalid={Boolean(tickerError)}
-              aria-describedby={`${tickerId}-status`}
-              onChange={(event) => {
+              invalid={Boolean(tickerError)}
+              describedBy={`${tickerId}-status`}
+              onChange={(next) => {
                 cancelTickerCheck();
-                setTickerDraft(event.target.value);
+                setTickerDraft(next);
                 setError(null);
               }}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  event.preventDefault();
-                  void addTicker();
-                }
+              onSubmit={(symbol) => {
+                void addTicker(symbol);
               }}
               onBlur={() => {
                 void addTicker();
               }}
-              placeholder="Add ticker…"
               disabled={!strategyKey}
-              className="tabular min-w-24 flex-1 bg-transparent px-1 text-xs outline-none placeholder:text-muted-foreground"
+              anchorRef={universeBoxRef}
             />
           </div>
           <div id={`${tickerId}-status`} className="mt-1.5 text-[11px]" aria-live="polite">
@@ -627,7 +632,7 @@ export function RunBacktestForm({
           ) : null}
         </Row>
 
-        <Row label="Window">
+        <Row label="Window" tip={RUN_FORM_TIPS.window}>
           <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
             <div className="space-y-1.5">
               <label htmlFor={startId} className="text-[13px] font-medium">
@@ -688,7 +693,7 @@ export function RunBacktestForm({
           />
         </Row>
 
-        <Row label="Capital & costs">
+        <Row label="Capital & costs" tip={RUN_FORM_TIPS.capital}>
           <div className="grid gap-3 sm:grid-cols-[1.4fr_1fr_1fr]">
             <UnitField id={capitalId} label="Initial capital" unit="USD">
               <input
@@ -732,7 +737,7 @@ export function RunBacktestForm({
           </div>
         </Row>
 
-        <Row label="Indicators">
+        <Row label="Indicators" tip={RUN_FORM_TIPS.indicators}>
           <p className="text-[13px] text-muted-foreground">
             Indicators are defined by the selected strategy — a run cannot add or remove them.
           </p>
@@ -806,7 +811,7 @@ export function RunBacktestForm({
         </Row>
 
         {chosen && chosen.parameters.length > 0 ? (
-          <Row label="Parameters">
+          <Row label="Parameters" tip={RUN_FORM_TIPS.parameters}>
             <div className="grid gap-3 sm:grid-cols-3">
               {chosen.parameters.map((spec) => {
                 const raw = paramValues[spec.key];
@@ -888,7 +893,7 @@ export function RunBacktestForm({
           </Row>
         ) : null}
 
-        <Row label="Run name">
+        <Row label="Run name" tip={RUN_FORM_TIPS.runName}>
           <input
             id={nameId}
             aria-label="Run name"
@@ -1127,10 +1132,13 @@ export function RunBacktestForm({
 }
 
 /** One `150px | 1fr` row: section label on the left, controls on the right. */
-function Row({ label, children }: { label: string; children: ReactNode }) {
+function Row({ label, tip, children }: { label: string; tip: string; children: ReactNode }) {
   return (
     <div className="grid gap-2 sm:grid-cols-[150px_1fr] sm:gap-4">
-      <p className="text-[13px] font-medium">{label}</p>
+      <p className="flex items-center gap-1 text-[13px] font-medium">
+        {label}
+        <InfoTip label={label}>{tip}</InfoTip>
+      </p>
       <div className="min-w-0">{children}</div>
     </div>
   );
