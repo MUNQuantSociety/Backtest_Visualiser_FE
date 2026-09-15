@@ -166,6 +166,7 @@ function createApiClient(): AxiosInstance {
       const backtestsPath = `${backend.pathname.replace(/\/$/, '')}/backtests`;
       const strategiesPath = `${backend.pathname.replace(/\/$/, '')}/strategies`;
       const validateTickersPath = `${backend.pathname.replace(/\/$/, '')}/market-data/validate-tickers`;
+      const searchSymbolsPath = `${backend.pathname.replace(/\/$/, '')}/market-data/search-symbols`;
       const authMePath = `${backend.pathname.replace(/\/$/, '')}/auth/me`;
       const method = config.method?.toLowerCase();
       const isStrategyUpload =
@@ -190,6 +191,7 @@ function createApiClient(): AxiosInstance {
         (url.pathname === backtestsPath ||
           url.pathname.startsWith(`${backtestsPath}/`) ||
           url.pathname === validateTickersPath ||
+          url.pathname === searchSymbolsPath ||
           url.pathname === authMePath ||
           isStrategyUpload ||
           isStrategyOwnerAction)

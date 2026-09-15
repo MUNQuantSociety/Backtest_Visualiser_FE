@@ -21,12 +21,7 @@ export type BacktestStatus = z.infer<typeof backtestStatusSchema>;
  * disk, which is why they are worth offering at all: the CSV a student opens in
  * a spreadsheet holds the same numbers the charts above it drew.
  */
-export const EXPORT_FILENAMES = [
-  'equity.csv',
-  'trades.csv',
-  'metrics.csv',
-  'report.json',
-] as const;
+export const EXPORT_FILENAMES = ['equity.csv', 'trades.csv', 'metrics.csv', 'report.json'] as const;
 export type ExportFilename = (typeof EXPORT_FILENAMES)[number];
 
 export const equityPointSchema = z.object({
@@ -180,6 +175,26 @@ export const tickerValidationSchema = z.object({
   tickers: z.array(z.object({ ticker: z.string(), status: z.enum(['valid', 'unknown']) })),
   unknown: z.array(z.string()),
 });
+
+/** Symbols offered while a ticker is typed; a chosen one is still validated. */
+export const symbolSearchSchema = z.object({
+  matches: z.array(
+    z.object({
+      symbol: z.string(),
+      name: z.string().nullable().default(null),
+      exchange: z.string().nullable().default(null),
+      // `database` has bars loaded here, `run` has been backtested before;
+      // both are answered from memory. `fmp` and `yahoo` came from a provider.
+      source: z.enum(['database', 'run', 'fmp', 'yahoo']),
+    }),
+  ),
+  truncated: z.boolean(),
+  // Set when the providers failed but known tickers still answered: the
+  // list is real but stops at what this deployment already knows.
+  providerError: z.string().nullable().default(null),
+});
+export type SymbolSearchResponse = z.infer<typeof symbolSearchSchema>;
+export type SymbolMatch = SymbolSearchResponse['matches'][number];
 
 /** Query parameters accepted by the list endpoint. */
 export interface BacktestFilters {

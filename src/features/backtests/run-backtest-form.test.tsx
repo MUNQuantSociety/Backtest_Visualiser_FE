@@ -122,10 +122,35 @@ beforeEach(() => {
           unknown: [],
         });
       }
+      if (url === '/market-data/search-symbols') {
+        // Nothing suggested unless a test says otherwise: typing then Enter
+        // must behave exactly as it did before suggestions existed.
+        return Promise.resolve({ matches: [], truncated: false, providerError: null });
+      }
       throw new Error(`unexpected GET ${url}`);
     },
   );
 });
+
+function interceptSymbolSearch(query: string, response: () => Promise<unknown>) {
+  const fallback = get.getMockImplementation()!;
+  get.mockImplementation((url, config) => {
+    const params = config?.params as { query?: string } | undefined;
+    if (url === '/market-data/search-symbols' && params?.query === query) {
+      return response();
+    }
+    return fallback(url, config);
+  });
+}
+
+const SUGGESTIONS = {
+  matches: [
+    { symbol: 'MSFT', name: 'Microsoft Corporation', exchange: 'NASDAQ', source: 'database' },
+    { symbol: 'MSTR', name: 'MicroStrategy', exchange: 'NASDAQ', source: 'fmp' },
+  ],
+  truncated: false,
+  providerError: null,
+};
 
 function interceptTickerCheck(ticker: string, response: () => Promise<unknown>) {
   const fallback = get.getMockImplementation()!;
@@ -706,5 +731,185 @@ describe('RunBacktestForm', () => {
     expect(screen.getByLabelText('Run name')).toHaveValue('Keep my inputs');
     expect(screen.getByLabelText('Current path')).toHaveTextContent(/^\/$/);
     expect(globalThis.scrollTo).not.toHaveBeenCalled();
+  });
+});
+
+describe('ticker suggestions', () => {
+  async function typeIntoField(text: string) {
+    await pickStrategy('portfolio_1');
+    const field = screen.getByLabelText('Add ticker');
+    await userEvent.type(field, text);
+    return field;
+  }
+
+  it('offers matching symbols as a listbox the input controls', async () => {
+    interceptSymbolSearch('MS', () => Promise.resolve(SUGGESTIONS));
+    renderWithProviders(<RunBacktestForm />);
+
+    const field = await typeIntoField('ms');
+
+    const listbox = await screen.findByRole('listbox', { name: 'Ticker suggestions' });
+    expect(field).toHaveAttribute('role', 'combobox');
+    expect(field).toHaveAttribute('aria-autocomplete', 'list');
+    expect(field).toHaveAttribute('aria-expanded', 'true');
+    expect(field).toHaveAttribute('aria-controls', listbox.id);
+    const options = within(listbox).getAllByRole('option');
+    expect(options.map((option) => option.textContent)).toEqual([
+      'MSFTMicrosoft CorporationNASDAQloaded',
+      'MSTRMicroStrategyNASDAQ',
+    ]);
+  });
+
+  it('says when only tickers known here could be offered', async () => {
+    interceptSymbolSearch('MS', () =>
+      Promise.resolve({
+        matches: [{ symbol: 'MSFT', name: null, exchange: null, source: 'run' }],
+        truncated: false,
+        providerError: 'FMP symbol lookup for MS failed (HTTP 503).',
+      }),
+    );
+    renderWithProviders(<RunBacktestForm />);
+    await typeIntoField('ms');
+
+    const listbox = await screen.findByRole('listbox', { name: 'Ticker suggestions' });
+    expect(within(listbox).getByRole('option')).toHaveTextContent('MSFTran');
+    expect(listbox).toHaveTextContent(
+      'Only tickers known here — the symbol provider is unavailable.',
+    );
+  });
+
+  it('adds the highlighted suggestion through the same verification as a typed symbol', async () => {
+    interceptSymbolSearch('MS', () => Promise.resolve(SUGGESTIONS));
+    renderWithProviders(<RunBacktestForm />);
+    const field = await typeIntoField('ms');
+    await screen.findByRole('listbox', { name: 'Ticker suggestions' });
+
+    await userEvent.keyboard('{ArrowDown}');
+    const active = field.getAttribute('aria-activedescendant') ?? '';
+    expect(active).not.toBe('');
+    expect(document.getElementById(active)).toHaveTextContent('MSFT');
+    await userEvent.keyboard('{Enter}');
+
+    expect(await screen.findByRole('button', { name: 'Remove MSFT' })).toBeInTheDocument();
+    expect(get).toHaveBeenCalledWith(
+      '/market-data/validate-tickers',
+      expect.objectContaining({ params: { tickers: 'MSFT' } }),
+    );
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    expect(field).toHaveValue('');
+  });
+
+  it('clicking a suggestion adds it once, without the blur adding the typed text too', async () => {
+    interceptSymbolSearch('MS', () => Promise.resolve(SUGGESTIONS));
+    renderWithProviders(<RunBacktestForm />);
+    await typeIntoField('ms');
+    const listbox = await screen.findByRole('listbox', { name: 'Ticker suggestions' });
+
+    await userEvent.click(within(listbox).getByRole('option', { name: /MSTR/ }));
+
+    expect(await screen.findByRole('button', { name: 'Remove MSTR' })).toBeInTheDocument();
+    const checked = get.mock.calls
+      .filter(([url]) => url === '/market-data/validate-tickers')
+      .map(([, config]) => (config as { params: { tickers: string } }).params.tickers);
+    // Exactly one check for the pick; none for the half-typed "MS" the blur
+    // would otherwise have submitted.
+    expect(checked.filter((tickers) => tickers === 'MSTR')).toHaveLength(1);
+    expect(checked).not.toContain('MS');
+  });
+
+  it('Enter with nothing highlighted verifies the typed text as before', async () => {
+    interceptSymbolSearch('MS', () => Promise.resolve(SUGGESTIONS));
+    renderWithProviders(<RunBacktestForm />);
+    await typeIntoField('ms');
+    await screen.findByRole('listbox', { name: 'Ticker suggestions' });
+
+    await userEvent.keyboard('{Enter}');
+
+    expect(await screen.findByRole('button', { name: 'Remove MS' })).toBeInTheDocument();
+  });
+
+  it('Escape closes the suggestions and leaves the dialog open', async () => {
+    interceptSymbolSearch('MS', () => Promise.resolve(SUGGESTIONS));
+    renderWithProviders(<RunBacktestDialog initialStrategyKey="portfolio_1" />);
+    const dialog = mockNativeDialog();
+    fireEvent.click(screen.getByRole('button', { name: /run backtest/i }));
+    await waitFor(() => expect(screen.getByLabelText('End')).toHaveValue('2026-07-15'));
+    await userEvent.type(screen.getByLabelText('Add ticker'), 'ms');
+    await screen.findByRole('listbox', { name: 'Ticker suggestions' });
+
+    await userEvent.keyboard('{Escape}');
+
+    await waitFor(() => {
+      expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    });
+    expect(dialog.open).toBe(true);
+    expect(screen.getByLabelText('Add ticker')).toHaveValue('ms');
+  });
+
+  it('says when nothing matches, and when the page was cut short', async () => {
+    interceptSymbolSearch('ZZ', () =>
+      Promise.resolve({ matches: [], truncated: false, providerError: null }),
+    );
+    renderWithProviders(<RunBacktestForm />);
+    await typeIntoField('zz');
+
+    expect(await screen.findByText('No FMP symbols start with ZZ.')).toBeInTheDocument();
+
+    await userEvent.clear(screen.getByLabelText('Add ticker'));
+    interceptSymbolSearch('MS', () => Promise.resolve({ ...SUGGESTIONS, truncated: true }));
+    await userEvent.type(screen.getByLabelText('Add ticker'), 'ms');
+
+    expect(await screen.findByText('Showing the first 2 — keep typing.')).toBeInTheDocument();
+  });
+
+  it('a failed search leaves Enter working exactly as before', async () => {
+    interceptSymbolSearch('MS', () =>
+      Promise.reject(new ApiError('Unavailable', 503, 'UNAVAILABLE')),
+    );
+    renderWithProviders(<RunBacktestForm />);
+    await typeIntoField('ms');
+
+    expect(
+      await screen.findByText('Suggestions unavailable — press Enter to verify MS.'),
+    ).toBeInTheDocument();
+    await userEvent.keyboard('{Enter}');
+
+    expect(await screen.findByRole('button', { name: 'Remove MS' })).toBeInTheDocument();
+  });
+
+  it('does not search for a single character', async () => {
+    renderWithProviders(<RunBacktestForm />);
+    await typeIntoField('m');
+
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(get.mock.calls.filter(([url]) => url === '/market-data/search-symbols')).toHaveLength(0);
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+  });
+});
+
+describe('section info bubbles', () => {
+  it('explains every section on its ⓘ, and Escape on one leaves the dialog open', async () => {
+    renderWithProviders(<RunBacktestDialog initialStrategyKey="portfolio_1" />);
+    const dialog = mockNativeDialog();
+    fireEvent.click(screen.getByRole('button', { name: /run backtest/i }));
+    await waitFor(() => expect(screen.getByLabelText('End')).toHaveValue('2026-07-15'));
+
+    for (const label of [
+      'Strategy',
+      'Universe',
+      'Window',
+      'Capital & costs',
+      'Indicators',
+      'Run name',
+    ]) {
+      const trigger = screen.getByRole('button', { name: `About ${label}` });
+      await userEvent.click(trigger);
+      const bubble = await screen.findByRole('tooltip');
+      expect(bubble.textContent?.length ?? 0).toBeGreaterThan(40);
+      expect(trigger).toHaveAttribute('aria-describedby', bubble.id);
+      await userEvent.keyboard('{Escape}');
+      await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument());
+    }
+    expect(dialog.open).toBe(true);
   });
 });

@@ -1,4 +1,10 @@
-import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  keepPreviousData,
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 
 import { env } from '@/config/env';
 import { ApiError, apiClient } from '@/lib/api-client';
@@ -12,6 +18,7 @@ import {
   backtestSummarySchema,
   coverageResponseSchema,
   isInFlight,
+  symbolSearchSchema,
   tickerValidationSchema,
   type BacktestDetail,
   type BacktestFilters,
@@ -19,6 +26,7 @@ import {
   type BacktestSummary,
   type CoverageResponse,
   type ExportFilename,
+  type SymbolSearchResponse,
 } from './types';
 
 /**
@@ -239,6 +247,39 @@ export function useTickerValidation(tickers: readonly string[], enabled: boolean
     enabled: enabled && tickers.length > 0,
     staleTime: 60_000,
     retry: false,
+  });
+}
+
+/** Shorter than this and a prefix page is noise; one-letter tickers still go through Enter. */
+export const SYMBOL_SEARCH_MIN_LENGTH = 2;
+
+export async function searchSymbols(
+  query: string,
+  signal?: AbortSignal,
+): Promise<SymbolSearchResponse> {
+  if (env.useFixtures) return { matches: [], truncated: false, providerError: null };
+  const data = await apiClient.get<unknown>('/market-data/search-symbols', {
+    params: { query },
+    ...(signal ? { signal } : {}),
+  });
+  return symbolSearchSchema.parse(data);
+}
+
+/**
+ * Suggestions for the ticker being typed.
+ *
+ * The previous page stays on screen while the next loads, so the list does
+ * not blink empty between keystrokes. A key change aborts the request in
+ * flight through the query's own signal; nothing here has to track that.
+ */
+export function useSymbolSearch(query: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['market-data', 'search-symbols', query],
+    queryFn: ({ signal }) => searchSymbols(query, signal),
+    enabled: enabled && query.length >= SYMBOL_SEARCH_MIN_LENGTH,
+    staleTime: 60_000,
+    retry: false,
+    placeholderData: keepPreviousData,
   });
 }
 
