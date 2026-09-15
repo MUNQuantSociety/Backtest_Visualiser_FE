@@ -1068,7 +1068,7 @@ export function RunBacktestForm({
         <span className="tabular text-xs text-muted-foreground">
           {window
             ? `${formatNumber(sessions, 0)} sessions · ${String(universe.length)} tickers · ${formatNumber(bars, 0)} bars · est. ${String(estimateSeconds)}s`
-            : 'Pick a strategy and a window.'}
+            : null}
         </span>
         <div className="flex items-center gap-2">
           <Button

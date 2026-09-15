@@ -8,6 +8,7 @@ import {
   presetWindow,
   sessionsIn,
   tickerCoverageState,
+  WINDOW_PRESETS,
 } from './run-window';
 
 const COVERAGE = { start: '2019-03-14', end: '2025-07-18' };
@@ -29,15 +30,13 @@ describe('presetWindow', () => {
     });
   });
 
-  it('clamps the calendar-year preset to coverage', () => {
-    expect(presetWindow('2022', COVERAGE)).toEqual({
-      startDate: '2022-01-01',
-      endDate: '2022-12-31',
-    });
-    expect(presetWindow('2022', { start: '2022-06-01', end: '2025-07-18' })).toEqual({
-      startDate: '2022-06-01',
-      endDate: '2022-12-31',
-    });
+  it('exposes only the rolling and maximum window presets', () => {
+    expect(WINDOW_PRESETS).toEqual([
+      { value: '1y', label: '1Y' },
+      { value: '2y', label: '2Y' },
+      { value: '5y', label: '5Y' },
+      { value: 'max', label: 'Max' },
+    ]);
   });
 
   it('round-trips through matchingPreset', () => {
