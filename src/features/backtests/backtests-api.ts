@@ -5,8 +5,10 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
+import { useEffect, useRef } from 'react';
 
 import { env } from '@/config/env';
+import { strategyKeys } from '@/features/strategies/keys';
 import { ApiError, apiClient } from '@/lib/api-client';
 import { saveBlob } from '@/lib/download';
 import { createLogger } from '@/lib/logger';
@@ -378,6 +380,9 @@ export function useBacktests(filters: BacktestFilters = {}) {
     // Keeps the previous page on screen while the next one loads instead of
     // flashing a skeleton on every pagination click.
     placeholderData: (previous) => previous,
+    // A run may have finished while its detail page was open; the cached page
+    // would still show it running for the rest of the stale window.
+    refetchOnMount: 'always',
     // Only while something on this page can still change. A list of finished
     // runs is static, and polling it would be a request per interval forever.
     refetchInterval: (query) =>
@@ -391,7 +396,8 @@ export function useBacktests(filters: BacktestFilters = {}) {
 }
 
 export function useBacktest(id: string | undefined) {
-  return useQuery({
+  const queryClient = useQueryClient();
+  const query = useQuery({
     queryKey: backtestKeys.detail(id ?? ''),
     queryFn: ({ signal }) => fetchBacktest(id ?? '', signal),
     enabled: Boolean(id),
@@ -417,6 +423,31 @@ export function useBacktest(id: string | undefined) {
         : false,
     refetchIntervalInBackground: false,
   });
+
+  /*
+   * The detail poll is what notices a run finishing while its page is open.
+   * The lists only poll themselves while they hold an unfinished run, so a
+   * page that never saw this one start would keep it out (or show it running)
+   * until it went stale. Only the in-flight → finished transition of the
+   * *same* run counts: opening an old completed run must not refetch every
+   * run history there is, and neither must switching this hook from a running
+   * run to a cached finished one.
+   */
+  const status = query.data?.status;
+  const previous = useRef({ id, status });
+  useEffect(() => {
+    const before = previous.current;
+    previous.current = { id, status };
+    if (before.id !== id || before.status === undefined || status === undefined) return;
+    if (isInFlight(before.status) && !isInFlight(status)) {
+      void queryClient.invalidateQueries({ queryKey: backtestKeys.lists() });
+      // The catalogue carries each strategy's run count, best Sharpe and last
+      // run; a finished run moves all three.
+      void queryClient.invalidateQueries({ queryKey: strategyKeys.lists() });
+    }
+  }, [queryClient, id, status]);
+
+  return query;
 }
 
 /** Coverage for one strategy. Disabled until a strategy is actually chosen. */

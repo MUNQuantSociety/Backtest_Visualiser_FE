@@ -1,8 +1,11 @@
+import '@/test/storage-global';
+
 import { useLocation } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ApiError, apiClient } from '@/lib/api-client';
 import type * as ApiClientModule from '@/lib/api-client';
+import { useUiStore } from '@/lib/ui-store';
 import { installFakeStorage } from '@/test/fake-storage';
 import {
   act,
@@ -653,6 +656,42 @@ describe('RunBacktestForm', () => {
     });
   });
 
+  it('scrolls the preset panel into view when Save as preset is pressed', async () => {
+    const scroll = vi.spyOn(Element.prototype, 'scrollIntoView');
+    renderWithProviders(<RunBacktestForm />);
+    await pickStrategy('portfolio_1');
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Save as preset' })).toBeEnabled();
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save as preset' }));
+
+    const panel = screen.getByLabelText('Preset name').closest('div.mb-4');
+    expect(scroll).toHaveBeenCalledTimes(1);
+    expect(scroll.mock.instances[0]).toBe(panel);
+  });
+
+  it('scrolls the preset panel into view when Presets is pressed', async () => {
+    const scroll = vi.spyOn(Element.prototype, 'scrollIntoView');
+    renderWithProviders(<RunBacktestForm />);
+
+    await userEvent.click(screen.getByRole('button', { name: /^Presets/ }));
+
+    const panel = screen.getByText('Saved presets').closest('div.mb-4');
+    expect(scroll).toHaveBeenCalledTimes(1);
+    expect(scroll.mock.instances[0]).toBe(panel);
+  });
+
+  it('jumps to the preset panel again when its button is pressed while already open', async () => {
+    const scroll = vi.spyOn(Element.prototype, 'scrollIntoView');
+    renderWithProviders(<RunBacktestForm />);
+
+    await userEvent.click(screen.getByRole('button', { name: /^Presets/ }));
+    await userEvent.click(screen.getByRole('button', { name: /^Presets/ }));
+
+    expect(scroll).toHaveBeenCalledTimes(2);
+  });
+
   it('keeps the modal pending, then closes it and opens the exact accepted run', async () => {
     let accept!: (value: unknown) => void;
     post.mockReturnValueOnce(
@@ -911,5 +950,28 @@ describe('section info bubbles', () => {
       await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument());
     }
     expect(dialog.open).toBe(true);
+  });
+});
+
+describe('sentiment gate demo panel', () => {
+  beforeEach(() => {
+    useUiStore.setState({ hideDemoPanels: false });
+  });
+
+  it('shows the sentiment gate while demo panels are visible', () => {
+    renderWithProviders(<RunBacktestForm />);
+    expect(screen.getByRole('switch', { name: /Sentiment gate/ })).toBeInTheDocument();
+    expect(screen.getByLabelText('Sentiment gate threshold')).toBeInTheDocument();
+  });
+
+  it('hides the sentiment gate when demo panels are hidden', () => {
+    renderWithProviders(<RunBacktestForm />);
+
+    act(() => {
+      useUiStore.setState({ hideDemoPanels: true });
+    });
+
+    expect(screen.queryByRole('switch', { name: /Sentiment gate/ })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Sentiment gate threshold')).not.toBeInTheDocument();
   });
 });

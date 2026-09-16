@@ -82,9 +82,9 @@ export default tseslint.config(
         {
           patterns: [
             {
-              group: ['@/features/*/*', '!@/features/*/data'],
+              group: ['@/features/*/*', '!@/features/*/data', '!@/features/*/keys'],
               message:
-                'Import from the feature barrel or its public data entry point instead of reaching into internals.',
+                'Import from the feature barrel, its public data entry point, or its query keys instead of reaching into internals.',
             },
             {
               group: ['../../*'],
