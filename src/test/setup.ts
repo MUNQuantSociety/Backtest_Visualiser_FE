@@ -30,6 +30,11 @@ class ResizeObserverStub {
 
 vi.stubGlobal('ResizeObserver', ResizeObserverStub);
 
+// Nor scrollIntoView: jsdom has no layout, so it leaves the method off the
+// prototype entirely. A spy lets a test assert that something asked to be
+// scrolled to, without pretending anything moved.
+Element.prototype.scrollIntoView = vi.fn();
+
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
   value: (query: string) => ({
