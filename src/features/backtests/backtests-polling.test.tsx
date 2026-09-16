@@ -1,8 +1,9 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { act, renderHook } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { strategyKeys } from '@/features/strategies/keys';
 import { ApiError, apiClient } from '@/lib/api-client';
 import type * as ApiClientModule from '@/lib/api-client';
 
@@ -188,6 +189,28 @@ describe('run history after a run finishes', () => {
 
     await advance(60_000);
     expect(listCalls()).toBe(2);
+    unmount();
+  });
+
+  it('refreshes the strategy catalogue too, since its run aggregates just moved', async () => {
+    const get = vi.mocked(apiClient.get);
+    get.mockImplementation((url) =>
+      Promise.resolve(url === '/backtests' ? { ...page, items: [older] } : run),
+    );
+    const strategies = vi.fn(() => Promise.resolve([]));
+    const { unmount } = renderHook(
+      () => ({
+        detail: useBacktest(run.id),
+        catalogue: useQuery({ queryKey: strategyKeys.lists(), queryFn: strategies }),
+      }),
+      { wrapper: Wrapper },
+    );
+    await advance(50);
+    expect(strategies).toHaveBeenCalledTimes(1);
+
+    get.mockImplementation(() => Promise.resolve(completed));
+    await advance(3_050);
+    expect(strategies).toHaveBeenCalledTimes(2);
     unmount();
   });
 

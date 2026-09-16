@@ -8,6 +8,7 @@ import {
 import { useEffect, useRef } from 'react';
 
 import { env } from '@/config/env';
+import { strategyKeys } from '@/features/strategies/keys';
 import { ApiError, apiClient } from '@/lib/api-client';
 import { saveBlob } from '@/lib/download';
 import { createLogger } from '@/lib/logger';
@@ -440,6 +441,9 @@ export function useBacktest(id: string | undefined) {
     if (before.id !== id || before.status === undefined || status === undefined) return;
     if (isInFlight(before.status) && !isInFlight(status)) {
       void queryClient.invalidateQueries({ queryKey: backtestKeys.lists() });
+      // The catalogue carries each strategy's run count, best Sharpe and last
+      // run; a finished run moves all three.
+      void queryClient.invalidateQueries({ queryKey: strategyKeys.lists() });
     }
   }, [queryClient, id, status]);
 

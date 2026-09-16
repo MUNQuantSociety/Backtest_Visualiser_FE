@@ -5,6 +5,7 @@ import { fetchBacktests } from '@/features/backtests/data';
 import { ApiError, apiClient } from '@/lib/api-client';
 
 import { fixtureStrategyBlueprints } from './fixtures';
+import { strategyKeys } from './keys';
 import {
   strategyCheckResultSchema,
   strategySchema,
@@ -32,12 +33,7 @@ async function withFixtureDelay<T>(value: T): Promise<T> {
   return value;
 }
 
-export const strategyKeys = {
-  all: ['strategies'] as const,
-  lists: () => [...strategyKeys.all, 'list'] as const,
-  detail: (key: string) => [...strategyKeys.all, 'detail', key] as const,
-  template: () => [...strategyKeys.all, 'template'] as const,
-} as const;
+export { strategyKeys };
 
 /**
  * The catalogue, with each strategy's run aggregates attached.
