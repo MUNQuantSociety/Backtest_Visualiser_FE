@@ -50,6 +50,7 @@ const strategy = {
   className: 'CurrentStrategy',
   description: 'A current strategy.',
   status: 'active',
+  origin: 'own',
   tags: [],
   parameters: [],
   universe: ['AAPL'],
@@ -65,6 +66,7 @@ const otherStrategy = {
   name: 'Other strategy',
   className: 'OtherStrategy',
   description: 'Another current strategy.',
+  origin: 'builtin',
   runCount: 0,
   bestSharpe: null,
   bestReturn: null,
@@ -102,6 +104,18 @@ beforeEach(() => {
 });
 
 describe('Backtests hub', () => {
+  it('lists strategies under My strategies and Built-in sections', async () => {
+    renderWithProviders(<LibraryPage />, { routes: ['/backtests'] });
+    const list = await screen.findByRole('listbox', { name: 'Strategies' });
+
+    const mine = await within(list).findByRole('group', { name: 'My strategies' });
+    const builtin = within(list).getByRole('group', { name: 'Built-in' });
+
+    expect(within(mine).getByRole('option', { name: /Current strategy/ })).toBeInTheDocument();
+    expect(within(builtin).getByRole('option', { name: /Other strategy/ })).toBeInTheDocument();
+    expect(within(list).queryByRole('group', { name: 'Community' })).not.toBeInTheDocument();
+  });
+
   it('starts with every saved run, including retired strategies, and exposes both creation actions', async () => {
     renderWithProviders(<LibraryPage />, { routes: ['/backtests'] });
     expect(screen.getByRole('heading', { name: 'Backtests', level: 1 })).toBeInTheDocument();
@@ -168,9 +182,13 @@ describe('Backtests hub', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Actions for Other strategy' }));
     await userEvent.click(screen.getByRole('menuitem', { name: 'Run backtest' }));
 
-    const group = await screen.findByRole('radiogroup', { name: 'Strategy' });
-    expect(within(group).getByRole('radio', { name: /Other strategy/ })).toBeChecked();
-    expect(within(group).getByRole('radio', { name: /Current strategy/ })).not.toBeChecked();
+    const select = await screen.findByRole('combobox', { name: 'Strategy' });
+    expect(
+      await within(select).findByRole('option', { name: 'Other strategy', selected: true }),
+    ).toBeInTheDocument();
+    expect(
+      within(select).getByRole('option', { name: 'Current strategy', selected: false }),
+    ).toBeInTheDocument();
   });
 
   it('does not reopen a closed run dialog on a re-render that recreates the same request', async () => {
@@ -187,12 +205,15 @@ describe('Backtests hub', () => {
     }
     await userEvent.click(screen.getByRole('button', { name: 'Actions for Other strategy' }));
     await userEvent.click(screen.getByRole('menuitem', { name: 'Run backtest' }));
-    await screen.findByRole('radiogroup', { name: 'Strategy' });
+    await screen.findByRole('combobox', { name: 'Strategy' });
 
     await userEvent.click(screen.getByRole('button', { name: 'Close' }));
     // Any unrelated re-render of the page: the search box.
-    await userEvent.type(screen.getByRole('searchbox', { name: 'Search strategies and runs' }), 'x');
+    await userEvent.type(
+      screen.getByRole('searchbox', { name: 'Search strategies and runs' }),
+      'x',
+    );
 
-    expect(screen.queryByRole('radiogroup', { name: 'Strategy' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: 'Strategy' })).not.toBeInTheDocument();
   });
 });

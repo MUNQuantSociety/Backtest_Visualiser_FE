@@ -1,80 +1,77 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { env } from '@/config/env';
-import { ApiError, apiClient } from '@/lib/api-client';
-import { createLogger } from '@/lib/logger';
+import { apiClient } from '@/lib/api-client';
 
-import { fixtureIndicators, fixtureNews } from './fixtures';
+import { fixtureIndicators } from './fixtures';
 import {
   indicatorsResponseSchema,
   newsResponseSchema,
+  newsStorySchema,
   type NewsArticle,
-  type NewsScope,
+  type NewsStory,
   type TickerIndicators,
 } from './types';
 
-const log = createLogger('market');
-
 /**
- * `GET /indicators` and `GET /news` do not exist on the backend yet. The panels
- * that need them were built ahead of the endpoints, so in dev a 404 — the
- * endpoint is missing, not broken — is served from fixtures as well as the
- * usual "nothing listening" cases. Every such panel carries a DemoBadge;
- * production never falls back and shows the error instead.
+ * Both endpoints are live and never fall back to fixtures on failure, in dev or
+ * production: a failed request shows as an error, not as plausible fake RSI
+ * values or headlines.
+ *
+ * News reads the scored-article table even in fixture mode (`VITE_USE_FIXTURES`),
+ * and only per backtest run, by its tickers and dates. Indicators still
+ * follow fixture mode, because their prices come from the same market data the
+ * rest of a fixture session fakes.
  *
  * Sentiment is folded into the indicators payload rather than a separate
  * request: the dashboard always wants both for the same tickers, and one
  * round trip per ticker set is cheaper than two.
  */
-const FALLBACK_STATUSES = new Set([0, 404, 502, 503, 504]);
-
-function canFallBack(error: unknown): boolean {
-  return env.isDev && error instanceof ApiError && FALLBACK_STATUSES.has(error.status);
-}
-
 const sortedKey = (tickers: readonly string[]) => [...tickers].sort().join(',');
 
 export async function fetchIndicators(tickers: readonly string[]): Promise<TickerIndicators[]> {
   if (tickers.length === 0) return [];
   if (env.useFixtures) return fixtureIndicators(tickers);
 
-  try {
-    const data = await apiClient.get<unknown>('/indicators', {
-      params: { tickers: sortedKey(tickers), window: '7d' },
-    });
-    return indicatorsResponseSchema.parse(data).items;
-  } catch (error) {
-    if (!canFallBack(error)) throw error;
-    log.warn('indicators endpoint unavailable, serving fixtures', { tickers: tickers.length });
-    return fixtureIndicators(tickers);
-  }
+  const data = await apiClient.get<unknown>('/indicators', {
+    params: { tickers: sortedKey(tickers), window: '7d' },
+  });
+  return indicatorsResponseSchema.parse(data).items;
 }
 
-export async function fetchNews(
-  tickers: readonly string[],
-  scope: NewsScope,
-  limit: number,
-): Promise<NewsArticle[]> {
-  if (env.useFixtures) return fixtureNews(tickers, limit);
+/** A backtest run's news: its tickers and its own date window (ISO dates, inclusive). */
+export interface RunNewsWindow {
+  tickers: readonly string[];
+  start: string;
+  end: string;
+}
 
-  try {
-    const data = await apiClient.get<unknown>('/news', {
-      params: { ...(scope === 'universe' ? { tickers: sortedKey(tickers) } : {}), limit },
-    });
-    return newsResponseSchema.parse(data).items;
-  } catch (error) {
-    if (!canFallBack(error)) throw error;
-    log.warn('news endpoint unavailable, serving fixtures', { scope, limit });
-    return fixtureNews(tickers, limit);
-  }
+/**
+ * The scored articles published during one run, newest first.
+ *
+ * The article table is a fixed historical dataset, not a live feed, so news is
+ * only ever asked for by a run's window; there is no "latest news".
+ */
+export async function fetchRunNews(window: RunNewsWindow, limit: number): Promise<NewsArticle[]> {
+  const data = await apiClient.get<unknown>('/news', {
+    params: { tickers: sortedKey(window.tickers), start: window.start, end: window.end, limit },
+  });
+  return newsResponseSchema.parse(data).items;
 }
 
 export const marketKeys = {
   all: ['market'] as const,
   indicators: (tickers: readonly string[]) =>
     [...marketKeys.all, 'indicators', sortedKey(tickers)] as const,
-  news: (tickers: readonly string[], scope: NewsScope, limit: number) =>
-    [...marketKeys.all, 'news', scope, limit, sortedKey(tickers)] as const,
+  runNews: (window: RunNewsWindow, limit: number) =>
+    [
+      ...marketKeys.all,
+      'news',
+      sortedKey(window.tickers),
+      window.start,
+      window.end,
+      limit,
+    ] as const,
 } as const;
 
 export function useIndicators(tickers: readonly string[]) {
@@ -87,11 +84,30 @@ export function useIndicators(tickers: readonly string[]) {
   });
 }
 
-export function useNews(tickers: readonly string[], scope: NewsScope, limit = 8) {
+/** One story's title and real summary paragraph, for its card. */
+export async function fetchNewsStory(id: string): Promise<NewsStory> {
+  const data = await apiClient.get<unknown>(`/news/${encodeURIComponent(id)}/story`);
+  return newsStorySchema.parse(data);
+}
+
+/** Loads a story when its card opens; `id` is null while no card is open. */
+export function useNewsStory(id: string | null) {
   return useQuery({
-    queryKey: marketKeys.news(tickers, scope, limit),
-    queryFn: () => fetchNews(tickers, scope, limit),
-    enabled: scope === 'all' || tickers.length > 0,
-    staleTime: 5 * 60 * 1000,
+    queryKey: [...marketKeys.all, 'story', id] as const,
+    queryFn: () => fetchNewsStory(id ?? ''),
+    enabled: id !== null,
+    // A published story does not change; the backend remembers the page too.
+    staleTime: Infinity,
+    retry: false,
+  });
+}
+
+export function useRunNews(window: RunNewsWindow, limit = 10) {
+  return useQuery({
+    queryKey: marketKeys.runNews(window, limit),
+    queryFn: () => fetchRunNews(window, limit),
+    enabled: window.tickers.length > 0 && Boolean(window.start && window.end),
+    // A past window's articles do not change.
+    staleTime: Infinity,
   });
 }

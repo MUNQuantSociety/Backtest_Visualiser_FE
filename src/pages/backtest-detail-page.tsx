@@ -13,9 +13,13 @@ import {
   ReportExports,
   RunBacktestDialog,
   RunStatusBanner,
+  runUniverse,
+  SentimentGateSummary,
+  TickerPnlTable,
   TradesTable,
   useBacktest,
 } from '@/features/backtests';
+import { RunNewsPanel } from '@/features/market';
 import {
   BetaScatter,
   DailyPnlBars,
@@ -48,6 +52,7 @@ const TABS = [
   { id: 'performance', label: 'Performance' },
   { id: 'risk', label: 'Risk' },
   { id: 'trades', label: 'Trades' },
+  { id: 'news', label: 'News' },
   { id: 'tearsheet', label: 'Tearsheet' },
 ] as const;
 
@@ -147,6 +152,7 @@ export default function BacktestDetailPage() {
           before readers interpret empty panels or unavailable metrics. */}
       {data ? <RunStatusBanner run={data} /> : null}
       {data ? <NoTradesExplanation run={data} /> : null}
+      {data ? <SentimentGateSummary run={data} /> : null}
       {data?.status === 'completed' && data.reportMetadata?.execution?.fillCount === 0 ? (
         <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
           Explore another strategy or run a different date window.
@@ -287,6 +293,7 @@ export default function BacktestDetailPage() {
 
       {active === 'trades' ? (
         <>
+          <TickerPnlTable detail={data} isLoading={isPending} />
           <TradesTable detail={data} isLoading={isPending} />
           <ChartContainer
             title="Distribution of profit &amp; loss per trade"
@@ -306,6 +313,12 @@ export default function BacktestDetailPage() {
             <TradeDurationScatter trades={trades} />
           </ChartContainer>
         </>
+      ) : null}
+
+      {active === 'news' && data ? (
+        <RunNewsPanel
+          window={{ tickers: runUniverse(data), start: data.startDate, end: data.endDate }}
+        />
       ) : null}
 
       {active === 'tearsheet' ? (

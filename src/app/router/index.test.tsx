@@ -22,3 +22,15 @@ describe('Backtests routes', () => {
     memory.dispose();
   });
 });
+
+describe('Tools routes', () => {
+  it.each([
+    ['/tools/screener', 'Stock Screener'],
+    ['/tools/calculator', 'Financial Calculator'],
+  ])('serves a placeholder page at %s', async (path, heading) => {
+    const memory = createMemoryRouter(router.routes, { initialEntries: [path] });
+    render(<RouterProvider router={memory} />);
+    expect(await screen.findByRole('heading', { name: heading })).toBeInTheDocument();
+    memory.dispose();
+  });
+});

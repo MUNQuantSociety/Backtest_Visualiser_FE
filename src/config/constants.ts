@@ -2,11 +2,17 @@
 
 export const APP_NAME = 'MQS Backtest Engine';
 
-/** The two products this shell hosts. Used for nav section headings. */
+/**
+ * The two products this shell hosts. Only `backtests` heads a nav section
+ * today: the live pages are off the menu, and their section is now Tools.
+ */
 export const PRODUCT_NAMES = {
   backtests: 'Backtest Visualiser',
   live: 'MQS Master',
 } as const;
+
+/** The society's public website, linked from the Tools section of the nav. */
+export const SOCIETY_WEBSITE_URL = 'https://munquantsociety.com';
 
 /**
  * How often live views refetch. The live engine ticks its OMS every 5s

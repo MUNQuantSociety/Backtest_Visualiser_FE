@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { BAR_INTERVAL_VALUES } from './bar-interval';
+
 /**
  * Named snapshots of the run configuration, kept in localStorage.
  *
@@ -23,6 +25,8 @@ const runPresetConfigSchema = z.object({
   capital: z.string(),
   slippageBps: z.string(),
   commission: z.string(),
+  // Optional so presets saved before the bar-size choice still load (as daily).
+  barInterval: z.enum(BAR_INTERVAL_VALUES).optional(),
   paramValues: z.record(z.string(), z.union([z.string(), z.boolean()])),
   gateEnabled: z.boolean(),
   gateThreshold: z.number(),

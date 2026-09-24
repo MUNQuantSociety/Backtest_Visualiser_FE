@@ -1,4 +1,4 @@
-import type { ParameterSpec, Strategy, StrategyStatus } from './types';
+import type { ParameterSpec, Strategy, StrategyOrigin, StrategyStatus } from './types';
 
 /**
  * Demo data for the strategy catalogue, served when `VITE_USE_FIXTURES=true`.
@@ -18,6 +18,7 @@ interface Blueprint {
   className: string;
   description: string;
   status: StrategyStatus;
+  origin: StrategyOrigin;
   tags: string[];
   universe: string[];
   parameters: ParameterSpec[];
@@ -31,6 +32,7 @@ const BLUEPRINTS: readonly Blueprint[] = [
     description:
       'Ranks the universe by volatility-scaled momentum and holds the top decile, rebalancing when the z-score decays past the exit band.',
     status: 'active',
+    origin: 'builtin',
     tags: ['momentum', 'equities', 'daily'],
     universe: ['AAPL', 'TSLA', 'AMD', 'MSFT', 'NVDA'],
     parameters: [
@@ -54,6 +56,7 @@ const BLUEPRINTS: readonly Blueprint[] = [
     description:
       'Fades stretched moves against a rolling mean, sized by the deviation and closed when the spread normalises or the hold limit expires.',
     status: 'active',
+    origin: 'builtin',
     tags: ['reversion', 'financials', 'intraday'],
     universe: ['JPM', 'BAC', 'GS', 'MS'],
     parameters: [
@@ -84,6 +87,7 @@ const BLUEPRINTS: readonly Blueprint[] = [
     description:
       'Classic fast/slow crossover with an ATR-scaled trailing stop. Trades few, holds long, and expects a low win rate paid for by the tail.',
     status: 'active',
+    origin: 'builtin',
     tags: ['trend', 'index', 'daily'],
     universe: ['SPY', 'QQQ', 'IWM', 'TLT', 'GLD'],
     parameters: [
@@ -106,6 +110,7 @@ const BLUEPRINTS: readonly Blueprint[] = [
     description:
       'Trades the spread between two cointegrated names, re-estimating the hedge ratio on a fixed cadence rather than continuously.',
     status: 'active',
+    origin: 'own',
     tags: ['stat-arb', 'energy', 'intraday'],
     universe: ['XOM', 'CVX', 'COP', 'SLB'],
     parameters: [
@@ -128,6 +133,7 @@ const BLUEPRINTS: readonly Blueprint[] = [
     description:
       'Donchian channel breakout with a shorter exit channel, risking a fixed fraction of equity per position.',
     status: 'active',
+    origin: 'own',
     tags: ['breakout', 'equities', 'daily'],
     universe: ['NVDA', 'AMD', 'AVGO', 'MU'],
     parameters: [
@@ -157,6 +163,7 @@ const BLUEPRINTS: readonly Blueprint[] = [
     description:
       'Long the highest-yielding G10 legs against the lowest. Included deliberately as a strategy that has not worked in this window.',
     status: 'active',
+    origin: 'community',
     tags: ['carry', 'fx', 'intraday'],
     universe: ['G10'],
     parameters: [
@@ -181,6 +188,7 @@ const BLUEPRINTS: readonly Blueprint[] = [
     description:
       'Gradient-boosted ensemble over the standard factor set. Scaffolded but not yet wired to the feature store, so it has no runs.',
     status: 'draft',
+    origin: 'community',
     tags: ['ml', 'research'],
     universe: ['SPY', 'QQQ'],
     parameters: [
@@ -203,6 +211,7 @@ const BLUEPRINTS: readonly Blueprint[] = [
     description:
       'Held overnight into the open. Retired after the borrow costs ate the edge; kept for reference.',
     status: 'archived',
+    origin: 'own',
     tags: ['reversion', 'retired'],
     universe: ['SPY'],
     parameters: [

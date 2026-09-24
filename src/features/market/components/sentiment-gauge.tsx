@@ -31,13 +31,27 @@ export function SentimentGauge({ label, score }: { label: string; score: number 
   );
 }
 
-/** Centred diverging bar for a single signed score in [-1, 1]. */
-export function DivergingBar({ value, width = 96 }: { value: number; width?: number | undefined }) {
+/** Centred diverging bar for a single signed score in [-1, 1]. Sizes in pixels. */
+export function DivergingBar({
+  value,
+  width = 96,
+  height = 6,
+}: {
+  value: number;
+  width?: number | undefined;
+  height?: number | undefined;
+}) {
   const clamped = Math.max(-1, Math.min(1, value));
   const half = width / 2;
   const fill = Math.abs(clamped) * half;
   return (
-    <div className="relative h-1.5 rounded-full bg-muted" style={{ width }} aria-hidden>
+    // A block span rather than a div, so the bar can sit inside a button row.
+    <span
+      className="relative block rounded-full bg-muted"
+      style={{ width, height }}
+      data-testid="diverging-bar"
+      aria-hidden
+    >
       <span className="absolute top-0 bottom-0 left-1/2 w-px bg-[var(--border-strong)]" />
       <span
         className="absolute top-0 bottom-0 rounded-full"
@@ -47,6 +61,6 @@ export function DivergingBar({ value, width = 96 }: { value: number; width?: num
           background: clamped >= 0 ? 'var(--profit)' : 'var(--loss)',
         }}
       />
-    </div>
+    </span>
   );
 }

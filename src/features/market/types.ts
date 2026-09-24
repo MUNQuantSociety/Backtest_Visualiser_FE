@@ -12,6 +12,12 @@ export const tickerIndicatorsSchema = z.object({
   ticker: z.string(),
   /** Last close. */
   last: z.number(),
+  /**
+   * Last close against the session before, as a ratio, e.g. -0.012 for -1.2%.
+   * Optional because the backend and this app deploy separately: a backend
+   * that predates the field must not make the whole payload fail to parse.
+   */
+  change1d: z.number().optional(),
   rsi14: z.number().min(0).max(100),
   /** MACD histogram (12/26/9), in price units. */
   macdHistogram: z.number(),
@@ -37,6 +43,18 @@ export const newsArticleSchema = z.object({
   source: z.string(),
   publishedAt: z.string(),
   headline: z.string(),
+  /**
+   * The stored text the story card shows: title and body, cut at 1,000
+   * characters by the pipeline. Defaults so a backend that predates the field
+   * still lists news; the card then falls back to the headline.
+   */
+  summary: z.string().default(''),
+  /** The publisher's page. Only http(s) links are kept; anything else is dropped. */
+  url: z
+    .url({ protocol: /^https?$/ })
+    .nullable()
+    .catch(null)
+    .default(null),
   tickers: z.array(z.string()),
   /** Model sentiment for the article, in [-1, 1]. */
   score: z.number().min(-1).max(1),
@@ -46,5 +64,18 @@ export type NewsArticle = z.infer<typeof newsArticleSchema>;
 export const newsResponseSchema = z.object({
   items: z.array(newsArticleSchema),
 });
+
+/**
+ * One story's own title and summary paragraph, read from the publisher's page
+ * by `GET /news/{id}/story`. `summary` is null when no summary separate from
+ * the title could be found.
+ */
+export const newsStorySchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  summary: z.string().nullable(),
+  origin: z.enum(['publisher', 'stored', 'none']),
+});
+export type NewsStory = z.infer<typeof newsStorySchema>;
 
 export type NewsScope = 'universe' | 'all';

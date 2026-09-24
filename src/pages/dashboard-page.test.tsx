@@ -188,7 +188,6 @@ describe('Dashboard request isolation', () => {
     );
     const { container } = renderWithProviders(<DashboardPage />);
     expect(await screen.findByText('No runs yet.')).toBeInTheDocument();
-    expect(screen.getByText('No scored articles.')).toBeInTheDocument();
     expect(container.querySelector('.animate-pulse')).not.toBeInTheDocument();
     expect(vi.mocked(apiClient.get).mock.calls.map(([url]) => url)).not.toContain('/indicators');
   });
@@ -351,21 +350,31 @@ describe('Dashboard saved run comparison', () => {
   });
 });
 
-describe('Dashboard demo data panels', () => {
+describe('Dashboard market cards', () => {
   beforeEach(() => {
-    useUiStore.setState({ hideDemoPanels: false });
+    useUiStore.setState({ hideDemoPanels: true });
   });
 
-  it('hides the demo-marked market cards when the preference is on', async () => {
+  it('keeps the live indicators card when demo panels are hidden', async () => {
     renderWithProviders(<DashboardPage />);
+
     expect(await screen.findByText('Indicators & sentiment — universe')).toBeInTheDocument();
-    expect(screen.getByText('News — scored')).toBeInTheDocument();
+  });
 
-    act(() => {
-      useUiStore.setState({ hideDemoPanels: true });
+  it('asks for news from the backtest window, not the latest', async () => {
+    renderWithProviders(<DashboardPage />);
+
+    expect(await screen.findByText('News — scored')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(apiClient.get).toHaveBeenCalledWith('/news', {
+        params: { tickers: 'AAPL', start: '2025-01-01', end: '2025-12-31', limit: 8 },
+      });
     });
+  });
 
-    expect(screen.queryByText('Indicators & sentiment — universe')).not.toBeInTheDocument();
-    expect(screen.queryByText('News — scored')).not.toBeInTheDocument();
+  it('names the backtest window its news covers', async () => {
+    renderWithProviders(<DashboardPage />);
+
+    expect(await screen.findByText(/2025-01-01 to 2025-12-31/)).toBeInTheDocument();
   });
 });

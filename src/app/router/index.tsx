@@ -13,12 +13,16 @@ export const routePatterns = {
   backtests: paths.backtests,
   backtestDetail: '/backtests/:backtestId',
   compare: '/compare',
+  tickerDetail: '/tickers/:ticker',
 
   live: '/live',
   portfolios: '/live/portfolios',
   portfolioDetail: '/live/portfolios/:portfolioId',
   log: '/live/log',
   settings: '/live/settings',
+
+  stockScreener: '/tools/screener',
+  financialCalculator: '/tools/calculator',
 } as const;
 
 export const router = createBrowserRouter([
@@ -60,6 +64,13 @@ export const router = createBrowserRouter([
         },
       },
       {
+        path: routePatterns.tickerDetail,
+        lazy: async () => {
+          const TickerPage = await import('@/pages/ticker-page');
+          return { Component: TickerPage.default };
+        },
+      },
+      {
         path: routePatterns.live,
         lazy: async () => {
           const LiveOverviewPage = await import('@/pages/live-overview-page');
@@ -92,6 +103,20 @@ export const router = createBrowserRouter([
         lazy: async () => {
           const SettingsPage = await import('@/pages/settings-page');
           return { Component: SettingsPage.default };
+        },
+      },
+      {
+        path: routePatterns.stockScreener,
+        lazy: async () => {
+          const StockScreenerPage = await import('@/pages/stock-screener-page');
+          return { Component: StockScreenerPage.default };
+        },
+      },
+      {
+        path: routePatterns.financialCalculator,
+        lazy: async () => {
+          const FinancialCalculatorPage = await import('@/pages/financial-calculator-page');
+          return { Component: FinancialCalculatorPage.default };
         },
       },
     ],

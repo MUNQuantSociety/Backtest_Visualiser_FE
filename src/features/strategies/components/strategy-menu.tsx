@@ -1,3 +1,4 @@
+import { autoUpdate, flip, offset, shift, useFloating } from '@floating-ui/react';
 import { EllipsisVertical } from 'lucide-react';
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 
@@ -21,6 +22,15 @@ export function StrategyMenu({ label, children }: { label: string; children: Rea
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const menuId = useId();
+  // Fixed positioning so the menu is never clipped by a scrolling strategy
+  // list; it stays in the DOM under `containerRef`, so outside-click still works.
+  const { refs, floatingStyles } = useFloating({
+    open,
+    strategy: 'fixed',
+    placement: 'bottom-end',
+    middleware: [offset(4), flip({ padding: 8 }), shift({ padding: 8 })],
+    whileElementsMounted: autoUpdate,
+  });
 
   useEffect(() => {
     if (!open) return;
@@ -43,6 +53,9 @@ export function StrategyMenu({ label, children }: { label: string; children: Rea
   return (
     <div ref={containerRef} className="relative shrink-0">
       <button
+        ref={(node) => {
+          refs.setReference(node);
+        }}
         type="button"
         aria-label={label}
         aria-haspopup="menu"
@@ -63,13 +76,17 @@ export function StrategyMenu({ label, children }: { label: string; children: Rea
 
       {open ? (
         <div
+          ref={(node) => {
+            refs.setFloating(node);
+          }}
           id={menuId}
           role="menu"
           aria-label={label}
           // Right-aligned and above the cards below it: the trigger sits at the
           // right edge of a narrow column, so a left-aligned menu would hang
           // off the panel.
-          className="absolute right-0 z-30 mt-1 min-w-48 overflow-hidden rounded-md border border-[var(--border-strong)] bg-card py-1 shadow-[0_18px_40px_rgb(0_0_0/0.45)]"
+          style={floatingStyles}
+          className="z-30 min-w-48 overflow-hidden rounded-md border border-[var(--border-strong)] bg-card py-1 shadow-[0_18px_40px_rgb(0_0_0/0.45)]"
           onClick={(event) => {
             event.stopPropagation();
             // Any item click closes the menu; each one either navigates or

@@ -13,6 +13,14 @@ export const strategyStatusSchema = z.enum(['active', 'draft', 'archived']);
 export type StrategyStatus = z.infer<typeof strategyStatusSchema>;
 
 /**
+ * Who a strategy belongs to, relative to the signed-in caller: `own` uploads,
+ * `community` uploads by other members, and the vendored `builtin`s. The
+ * backend computes it per request so owner ids never reach the client.
+ */
+export const strategyOriginSchema = z.enum(['own', 'community', 'builtin']);
+export type StrategyOrigin = z.infer<typeof strategyOriginSchema>;
+
+/**
  * One tunable input, described well enough to render a form control without the
  * UI hardcoding a field list per strategy.
  */
@@ -62,6 +70,11 @@ export const strategySchema = z.object({
   indicators: z.array(z.string()).default([]),
   validationState: z.string().nullable().default(null),
   validationRunId: z.string().nullable().default(null),
+  /*
+   * Defaults to `community` for a backend that predates the field: nothing
+   * is claimed as the caller's own without the server saying so.
+   */
+  origin: strategyOriginSchema.default('community'),
 });
 export type Strategy = z.infer<typeof strategySchema>;
 

@@ -56,13 +56,20 @@ export {
 } from './run-filters';
 export { RunsTable } from './runs-table';
 export { TradesTable } from './trades-table';
+export { TickerPnlTable } from './ticker-pnl-table';
 export { recordedFillCount } from './trade-report';
 export { RunBacktestDialog } from './run-backtest-dialog';
 export type { OpenRunRequest } from './run-backtest-dialog';
 export { RunBacktestForm } from './run-backtest-form';
+export { RunFormQuickStartDialog, type QuickStartGuideHandle } from './run-form-quick-start';
 export { backtestDetailSchema } from './types';
 export { RunStatusBanner } from './run-status';
+export { mergeRunRows } from './pending-runs';
+export { PendingRunWatcher, usePendingRunRows, usePendingRuns } from './use-pending-runs';
 export { NoTradesExplanation } from './no-trades-explanation';
+export { SentimentGateSummary } from './sentiment-gate-summary';
+export { runUniverse } from './run-universe';
+export { dashboardNewsWindow } from './dashboard-news-window';
 export {
   fetchBacktests,
   fetchAllBacktests,
@@ -77,6 +84,7 @@ export {
   useDeleteBacktest,
   useDownloadExport,
   useSubmitBacktest,
+  validateTickers,
 } from './backtests-api';
 export { backtestKeys } from './backtests-api';
 export { isInFlight } from './types';

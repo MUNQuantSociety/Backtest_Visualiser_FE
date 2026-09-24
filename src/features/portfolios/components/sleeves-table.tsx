@@ -34,10 +34,10 @@ export function SleevesTable({ rows, isLoading = false }: SleevesTableProps) {
   if (isLoading && rows.length === 0) return <Skeleton className="h-48" />;
 
   return (
-    <div className="overflow-x-auto">
+    <div className="report-table-scroll" role="region" aria-label="Sleeves rows" tabIndex={0}>
       <div className="min-w-[440px]">
         <div
-          className="grid gap-3 border-b pb-2 text-[10px] font-medium tracking-[0.06em] text-muted-foreground uppercase"
+          className="sticky top-0 z-10 grid gap-3 border-b bg-card pb-2 text-[10px] font-medium tracking-[0.06em] text-muted-foreground uppercase"
           style={{ gridTemplateColumns: GRID }}
         >
           <span>Sleeve</span>

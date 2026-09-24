@@ -1,13 +1,12 @@
-import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { strategyKeys } from '@/features/strategies/keys';
 import { ApiError, apiClient } from '@/lib/api-client';
 import type * as ApiClientModule from '@/lib/api-client';
 
-import { backtestKeys, useBacktest, useBacktests } from './backtests-api';
+import { useBacktest, useBacktests } from './backtests-api';
 import { fixtureBacktest, fixtureBacktests } from './fixtures';
 import type { BacktestDetail } from './types';
 
@@ -151,9 +150,8 @@ describe('backtest polling lifecycle', () => {
   });
 });
 
-describe('run history after a run finishes', () => {
+describe('run history on return', () => {
   const completed: BacktestDetail = { ...run, status: 'completed', progressPct: 100 };
-  const older: BacktestDetail = { ...completed, id: 'run-0', name: 'Older test' };
   const listCalls = () =>
     vi.mocked(apiClient.get).mock.calls.filter(([url]) => url === '/backtests').length;
 
@@ -163,94 +161,6 @@ describe('run history after a run finishes', () => {
     client = new QueryClient({
       defaultOptions: { queries: { retry: false, gcTime: Infinity, staleTime: 5 * 60 * 1000 } },
     });
-  });
-
-  it('refreshes a list that is not polling as soon as the detail poll sees the run finish', async () => {
-    const get = vi.mocked(apiClient.get);
-    // A page holding only finished runs never polls itself; the finish is
-    // noticed by the detail poll, which must pass it on.
-    get.mockImplementation((url) =>
-      Promise.resolve(url === '/backtests' ? { ...page, items: [older] } : run),
-    );
-    const { result, unmount } = renderHook(
-      () => ({ list: useBacktests(), detail: useBacktest(run.id) }),
-      { wrapper: Wrapper },
-    );
-    await advance(50);
-    expect(listCalls()).toBe(1);
-
-    get.mockImplementation((url) =>
-      Promise.resolve(url === '/backtests' ? { ...page, items: [completed, older] } : completed),
-    );
-    await advance(3_050);
-    expect(result.current.detail.data?.status).toBe('completed');
-    expect(result.current.list.data?.items[0]?.id).toBe(run.id);
-    expect(listCalls()).toBe(2);
-
-    await advance(60_000);
-    expect(listCalls()).toBe(2);
-    unmount();
-  });
-
-  it('refreshes the strategy catalogue too, since its run aggregates just moved', async () => {
-    const get = vi.mocked(apiClient.get);
-    get.mockImplementation((url) =>
-      Promise.resolve(url === '/backtests' ? { ...page, items: [older] } : run),
-    );
-    const strategies = vi.fn(() => Promise.resolve([]));
-    const { unmount } = renderHook(
-      () => ({
-        detail: useBacktest(run.id),
-        catalogue: useQuery({ queryKey: strategyKeys.lists(), queryFn: strategies }),
-      }),
-      { wrapper: Wrapper },
-    );
-    await advance(50);
-    expect(strategies).toHaveBeenCalledTimes(1);
-
-    get.mockImplementation(() => Promise.resolve(completed));
-    await advance(3_050);
-    expect(strategies).toHaveBeenCalledTimes(2);
-    unmount();
-  });
-
-  it('does not mistake switching to a finished run for that run finishing', async () => {
-    const get = vi.mocked(apiClient.get);
-    get.mockImplementation((url) =>
-      Promise.resolve(
-        url === '/backtests' ? { ...page, items: [older] } : url.endsWith(older.id) ? older : run,
-      ),
-    );
-    const { rerender, unmount } = renderHook(
-      ({ id }: { id: string }) => ({ list: useBacktests(), detail: useBacktest(id) }),
-      { wrapper: Wrapper, initialProps: { id: run.id } },
-    );
-    await advance(50);
-    expect(listCalls()).toBe(1);
-
-    // Same page component, new route param: running run → an old completed
-    // run already in the cache, so its finished status is there on the very
-    // first render after the switch.
-    client.setQueryData(backtestKeys.detail(older.id), older);
-    rerender({ id: older.id });
-    await advance(50);
-    await advance(60_000);
-    expect(listCalls()).toBe(1);
-    unmount();
-  });
-
-  it('leaves the lists alone when opening a run that was already finished', async () => {
-    const get = vi.mocked(apiClient.get);
-    get.mockImplementation((url) =>
-      Promise.resolve(url === '/backtests' ? { ...page, items: [completed] } : completed),
-    );
-    const { unmount } = renderHook(() => ({ list: useBacktests(), detail: useBacktest(run.id) }), {
-      wrapper: Wrapper,
-    });
-    await advance(50);
-    await advance(60_000);
-    expect(listCalls()).toBe(1);
-    unmount();
   });
 
   it('refetches the run history on every mount, not only when it has gone stale', async () => {

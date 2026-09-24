@@ -19,6 +19,11 @@ export default defineConfig({
     setupFiles: ['./src/test/setup.ts'],
     css: false,
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
+    // Above src/test/setup.ts's 5 s `findBy*` budget, which alone equals
+    // Vitest's 5 s default: a run-form test chains several such waits, and
+    // under a parallel run it hit the test timeout at the `it(` line with no
+    // clue which step was slow. A missing element still fails, after 5 s.
+    testTimeout: 15_000,
 
     coverage: {
       provider: 'v8',

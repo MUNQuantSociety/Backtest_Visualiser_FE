@@ -45,10 +45,11 @@ vi.mock('@/lib/api-client', async (importOriginal) => {
 const get = vi.mocked(apiClient.get);
 const post = vi.mocked(apiClient.post);
 
-function strategy(id: string, name: string, status = 'active') {
+function strategy(id: string, name: string, status = 'active', origin = 'builtin') {
   return {
     id,
     name,
+    origin,
     className: name,
     description: '',
     status,
@@ -94,8 +95,8 @@ beforeEach(() => {
         return Promise.resolve({
           items: [
             strategy('portfolio_1', 'Vol Momentum'),
-            strategy('portfolio_2', 'Mean Reversion'),
-            strategy('portfolio_3', 'Broken Universe'),
+            strategy('portfolio_2', 'Mean Reversion', 'active', 'own'),
+            strategy('portfolio_3', 'Broken Universe', 'active', 'community'),
             strategy('draft_one', 'Unvalidated Draft', 'draft'),
           ],
           total: 4,
@@ -134,6 +135,27 @@ beforeEach(() => {
     },
   );
 });
+
+/** A queued run as `POST /backtests` returns it. */
+function queuedRun(id: string) {
+  return {
+    id,
+    name: 'x',
+    strategyId: 'portfolio_1',
+    strategyName: 'Vol Momentum',
+    symbol: 'AAPL',
+    timeframe: '1d',
+    status: 'queued',
+    startDate: '2025-07-15',
+    endDate: '2026-07-15',
+    createdAt: '2026-09-01T10:00:00Z',
+    initialCapital: 100_000,
+    finalEquity: 100_000,
+    totalReturn: 0,
+    sharpe: 0,
+    maxDrawdown: 0,
+  };
+}
 
 function interceptSymbolSearch(query: string, response: () => Promise<unknown>) {
   const fallback = get.getMockImplementation()!;
@@ -180,11 +202,10 @@ function submitForm() {
   fireEvent.submit(form as HTMLFormElement);
 }
 
-/** Strategies are radio cards; the accessible name is the card's whole text. */
+/** Strategies are a grouped select; wait for the option to load, then choose it. */
 async function pickStrategy(id: string) {
-  const radio = await screen.findByRole('radio', { name: new RegExp(NAMES[id] ?? id) });
-  await userEvent.click(radio);
-  return radio;
+  await screen.findByRole('option', { name: NAMES[id] ?? id });
+  await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Strategy' }), id);
 }
 
 function CurrentPath() {
@@ -218,9 +239,32 @@ describe('RunBacktestForm', () => {
       await Promise.resolve();
     });
 
-    expect(await screen.findByRole('radio', { name: /Vol Momentum/ })).toBeInTheDocument();
+    expect(await screen.findByRole('option', { name: 'Vol Momentum' })).toBeInTheDocument();
     // A draft has not been proven to run; the backend would refuse it anyway.
-    expect(screen.queryByRole('radio', { name: /Unvalidated Draft/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Unvalidated Draft' })).not.toBeInTheDocument();
+  });
+
+  it('groups runnable strategies as mine, community, then built-in', async () => {
+    renderWithProviders(<RunBacktestForm />);
+    const select = await screen.findByRole('combobox', { name: 'Strategy' });
+    await within(select).findByRole('option', { name: 'Vol Momentum' });
+
+    const groups = within(select).getAllByRole('group');
+
+    expect(groups.map((group) => group.getAttribute('label'))).toEqual([
+      'My strategies',
+      'Community',
+      'Built-in',
+    ]);
+    expect(within(groups[0]!).getByRole('option', { name: 'Mean Reversion' })).toBeInTheDocument();
+  });
+
+  it('shows the chosen strategy universe under the select', async () => {
+    renderWithProviders(<RunBacktestForm />);
+
+    await pickStrategy('portfolio_1');
+
+    expect(screen.getByText(/AAPL · best Sharpe/)).toBeInTheDocument();
   });
 
   it('bounds the date inputs by the strategy coverage', async () => {
@@ -355,6 +399,50 @@ describe('RunBacktestForm', () => {
       expect(post).toHaveBeenCalledTimes(1);
     });
     expect(post.mock.calls[0]?.[1]).toMatchObject({ params: { universe: ['AAPL', 'MSFT'] } });
+  });
+
+  it('runs on daily bars unless another timestep is chosen', async () => {
+    post.mockResolvedValue(queuedRun('bt-11'));
+    renderWithProviders(<RunBacktestForm />);
+    await pickStrategy('portfolio_1');
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /run backtest/i })).toBeEnabled();
+    });
+
+    expect(screen.getByRole('radio', { name: '1D' })).toBeChecked();
+    submitForm();
+
+    await waitFor(() => {
+      expect(post).toHaveBeenCalledTimes(1);
+    });
+    expect(post.mock.calls[0]?.[1]).toMatchObject({ params: { barIntervalSeconds: 86_400 } });
+  });
+
+  it('sends the chosen bar timestep in seconds', async () => {
+    post.mockResolvedValue(queuedRun('bt-12'));
+    renderWithProviders(<RunBacktestForm />);
+    await pickStrategy('portfolio_1');
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /run backtest/i })).toBeEnabled();
+    });
+
+    await userEvent.click(screen.getByRole('radio', { name: '1h' }));
+    submitForm();
+
+    await waitFor(() => {
+      expect(post).toHaveBeenCalledTimes(1);
+    });
+    expect(post.mock.calls[0]?.[1]).toMatchObject({ params: { barIntervalSeconds: 3_600 } });
+  });
+
+  it('warns that intraday runs can be refused as too large', async () => {
+    renderWithProviders(<RunBacktestForm />);
+    await pickStrategy('portfolio_1');
+    expect(screen.queryByText(/Intraday runs load many more bars/)).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('radio', { name: '1m' }));
+
+    expect(screen.getByText(/Intraday runs load many more bars/)).toBeInTheDocument();
   });
 
   it('refuses to submit when the universe has no data, and says which ticker', async () => {
@@ -566,7 +654,38 @@ describe('RunBacktestForm', () => {
         capital: '100000',
         slippageBps: '5',
         commission: '0.005',
+        barInterval: '86400',
       },
+    });
+  });
+
+  it('restores a preset saved without a bar timestep as daily bars', async () => {
+    saveRunPreset('Before timesteps', {
+      strategyKey: 'portfolio_1',
+      runName: '',
+      universe: ['AAPL'],
+      startDate: '2025-07-15',
+      endDate: '2026-07-15',
+      capital: '100000',
+      slippageBps: '5',
+      commission: '0.005',
+      paramValues: {},
+      gateEnabled: false,
+      gateThreshold: -0.25,
+    });
+    renderWithProviders(<RunBacktestForm />);
+    await pickStrategy('portfolio_1');
+    await userEvent.click(screen.getByRole('radio', { name: '5m' }));
+
+    await userEvent.click(screen.getByRole('button', { name: /^Presets/ }));
+    const loadButton = await screen.findByRole('button', { name: 'Load' });
+    await waitFor(() => {
+      expect(loadButton).toBeEnabled();
+    });
+    await userEvent.click(loadButton);
+
+    await waitFor(() => {
+      expect(screen.getByRole('radio', { name: '1D' })).toBeChecked();
     });
   });
 
@@ -580,6 +699,7 @@ describe('RunBacktestForm', () => {
       capital: '50000',
       slippageBps: '8',
       commission: '0.01',
+      barInterval: '900',
       paramValues: {},
       gateEnabled: false,
       gateThreshold: -0.25,
@@ -601,7 +721,8 @@ describe('RunBacktestForm', () => {
     expect(screen.getByLabelText('Initial capital')).toHaveValue(50000);
     expect(screen.getByLabelText('Slippage')).toHaveValue(8);
     expect(screen.getByLabelText('Commission')).toHaveValue(0.01);
-    expect(screen.getByRole('radio', { name: /Mean Reversion/ })).toBeChecked();
+    expect(screen.getByRole('radio', { name: '15m' })).toBeChecked();
+    expect(screen.getByRole('combobox', { name: 'Strategy' })).toHaveDisplayValue('Mean Reversion');
     expect(screen.getByRole('button', { name: 'Remove AAPL' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Remove MSFT' })).toBeInTheDocument();
     expect(screen.queryByText('Saved presets')).not.toBeInTheDocument();
@@ -953,25 +1074,126 @@ describe('section info bubbles', () => {
   });
 });
 
-describe('sentiment gate demo panel', () => {
-  beforeEach(() => {
-    useUiStore.setState({ hideDemoPanels: false });
+describe('quick start guide', () => {
+  /** Both dialogs need the stand-ins: the guide is a dialog inside the run dialog. */
+  function mockEveryNativeDialog() {
+    const [runDialog, guideDialog] = [...document.querySelectorAll('dialog')].map((dialog) => {
+      dialog.showModal = () => {
+        dialog.open = true;
+      };
+      dialog.close = () => {
+        dialog.open = false;
+        dialog.dispatchEvent(new Event('close'));
+      };
+      return dialog;
+    });
+    return { runDialog: runDialog!, guideDialog: guideDialog! };
+  }
+
+  async function openRunDialog() {
+    renderWithProviders(<RunBacktestDialog initialStrategyKey="portfolio_1" />);
+    const dialogs = mockEveryNativeDialog();
+    fireEvent.click(screen.getByRole('button', { name: /run backtest/i }));
+    await waitFor(() => expect(screen.getByLabelText('End')).toHaveValue('2026-07-15'));
+    return dialogs;
+  }
+
+  async function openGuideFromMenu() {
+    await userEvent.click(screen.getByRole('button', { name: 'Run form help' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Run form quick start' }));
+  }
+
+  it('lists the steps of the form in order when chosen from the help menu', async () => {
+    const { guideDialog } = await openRunDialog();
+
+    await openGuideFromMenu();
+
+    expect(guideDialog.open).toBe(true);
+    const steps = within(guideDialog)
+      .getAllByRole('listitem')
+      .filter((item) => item.closest('ol'));
+    expect(steps.map((step) => step.querySelector('p')?.textContent)).toEqual([
+      'Pick a strategy',
+      'Check the universe',
+      'Set the window',
+      'Set capital and costs',
+      'Tune the parameters',
+      'Name it and run',
+    ]);
   });
 
-  it('shows the sentiment gate while demo panels are visible', () => {
-    renderWithProviders(<RunBacktestForm />);
-    expect(screen.getByRole('switch', { name: /Sentiment gate/ })).toBeInTheDocument();
-    expect(screen.getByLabelText('Sentiment gate threshold')).toBeInTheDocument();
+  it('closes the help menu once an entry is chosen', async () => {
+    await openRunDialog();
+
+    await openGuideFromMenu();
+
+    expect(screen.queryByRole('menu', { name: 'Run form help' })).not.toBeInTheDocument();
   });
 
-  it('hides the sentiment gate when demo panels are hidden', () => {
+  it('closing the guide keeps the run form mounted', async () => {
+    const { runDialog, guideDialog } = await openRunDialog();
+    await openGuideFromMenu();
+
+    await userEvent.click(within(guideDialog).getByRole('button', { name: 'Got it' }));
+
+    expect(guideDialog.open).toBe(false);
+    expect(runDialog.open).toBe(true);
+    expect(screen.getByLabelText('End')).toHaveValue('2026-07-15');
+  });
+});
+
+describe('sentiment gate', () => {
+  it('stays available when demo panels are hidden', () => {
+    useUiStore.setState({ hideDemoPanels: true });
+
     renderWithProviders(<RunBacktestForm />);
 
-    act(() => {
-      useUiStore.setState({ hideDemoPanels: true });
+    expect(screen.getByRole('switch', { name: /Sentiment gate/ })).toBeEnabled();
+  });
+
+  it('enables the threshold once the gate is switched on', async () => {
+    renderWithProviders(<RunBacktestForm />);
+    expect(screen.getByLabelText('Sentiment gate threshold')).toBeDisabled();
+
+    await userEvent.click(screen.getByRole('switch', { name: /Sentiment gate/ }));
+
+    expect(screen.getByLabelText('Sentiment gate threshold')).toBeEnabled();
+  });
+
+  it('submits the gate enabled with its threshold', async () => {
+    post.mockResolvedValue({
+      id: 'bt-11',
+      name: 'x',
+      strategyId: 'portfolio_1',
+      strategyName: 'Vol Momentum',
+      symbol: 'MULTI',
+      timeframe: '1d',
+      status: 'queued',
+      startDate: '2025-07-15',
+      endDate: '2026-07-15',
+      createdAt: '2026-09-01T10:00:00Z',
+      initialCapital: 100_000,
+      finalEquity: 100_000,
+      totalReturn: 0,
+      sharpe: 0,
+      maxDrawdown: 0,
+    });
+    renderWithProviders(<RunBacktestForm />);
+    await pickStrategy('portfolio_1');
+    await waitFor(() => {
+      expect(screen.getByLabelText('End')).toHaveValue('2026-07-15');
     });
 
-    expect(screen.queryByRole('switch', { name: /Sentiment gate/ })).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('Sentiment gate threshold')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('switch', { name: /Sentiment gate/ }));
+    submitForm();
+
+    await waitFor(() => {
+      expect(post).toHaveBeenCalledTimes(1);
+    });
+    const [, body] = post.mock.calls[0] ?? [];
+    expect((body as { params: Record<string, unknown> }).params['sentimentGate']).toEqual({
+      enabled: true,
+      threshold: -0.25,
+    });
   });
 });

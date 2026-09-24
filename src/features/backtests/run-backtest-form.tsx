@@ -3,14 +3,12 @@ import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type React
 import { useNavigate } from 'react-router';
 
 import { paths } from '@/app/paths';
-import { DemoBadge } from '@/components/common/demo-badge';
 import { Button } from '@/components/ui/button';
 import { InfoTip } from '@/components/ui/info-tip';
 import { Segmented } from '@/components/ui/segmented';
-import { useEngineIndicators, useStrategies } from '@/features/strategies';
+import { groupByOrigin, useEngineIndicators, useStrategies } from '@/features/strategies';
 import { ApiError } from '@/lib/api-client';
 import { createLogger } from '@/lib/logger';
-import { useHideDemoPanels } from '@/lib/ui-store';
 import { cn } from '@/lib/utils';
 import { formatNumber } from '@/utils/format';
 
@@ -20,6 +18,13 @@ import {
   useTickerValidation,
   validateTickers,
 } from './backtests-api';
+import {
+  BAR_INTERVALS,
+  barIntervalSeconds,
+  DEFAULT_BAR_INTERVAL,
+  isIntradayBar,
+  type BarInterval,
+} from './bar-interval';
 import { RUN_FORM_TIPS } from './run-form-copy';
 import { deleteRunPreset, listRunPresets, saveRunPreset, type RunPreset } from './run-presets';
 import {
@@ -54,7 +59,9 @@ const log = createLogger('backtest-form');
  *
  * Universe, costs and the sentiment gate travel inside `params`: the
  * backend separates these reserved execution controls from strategy specs.
- * Indicators belong to strategy code; sentiment gating stays disabled.
+ * Indicators belong to strategy code. The sentiment gate is enforced by the
+ * engine against live news scores, and only in event mode, which is the only
+ * mode this form submits.
  */
 
 const DEFAULT_CAPITAL = 100_000;
@@ -102,15 +109,13 @@ export function RunBacktestForm({
   const strategies = useStrategies();
   const submit = useSubmitBacktest();
   const navigate = useNavigate();
-  // The sentiment gate reads the news score, and news is still fixture data,
-  // so the row follows the demo panels: hidden in production, toggleable in dev.
-  const hideDemoPanels = useHideDemoPanels();
 
   const [strategyKey, setStrategyKey] = useState(initialStrategyKey ?? '');
   const [name, setName] = useState('');
   const [capital, setCapital] = useState(String(DEFAULT_CAPITAL));
   const [slippageBps, setSlippageBps] = useState(String(DEFAULT_SLIPPAGE_BPS));
   const [commission, setCommission] = useState(String(DEFAULT_COMMISSION));
+  const [barInterval, setBarInterval] = useState<BarInterval>(DEFAULT_BAR_INTERVAL);
   const [gateEnabled, setGateEnabled] = useState(false);
   const [gateThreshold, setGateThreshold] = useState(DEFAULT_SENTIMENT_THRESHOLD);
   const [paramValues, setParamValues] = useState<Record<string, string | boolean>>({});
@@ -263,6 +268,7 @@ export function RunBacktestForm({
       capital,
       slippageBps,
       commission,
+      barInterval,
       paramValues: { ...paramValues },
       gateEnabled,
       gateThreshold,
@@ -298,6 +304,8 @@ export function RunBacktestForm({
     setCapital(preset.config.capital);
     setSlippageBps(preset.config.slippageBps);
     setCommission(preset.config.commission);
+    // Presets saved before the choice existed were daily runs.
+    setBarInterval(preset.config.barInterval ?? DEFAULT_BAR_INTERVAL);
     setParamValues({ ...preset.config.paramValues });
     setGateEnabled(preset.config.gateEnabled);
     setGateThreshold(preset.config.gateThreshold);
@@ -398,6 +406,7 @@ export function RunBacktestForm({
       universe,
       slippageBps: Number(slippageBps),
       commissionPerShare: Number(commission),
+      barIntervalSeconds: barIntervalSeconds(barInterval),
       sentimentGate: { enabled: gateEnabled, threshold: gateThreshold },
       ...strategyParams,
     };
@@ -498,67 +507,44 @@ export function RunBacktestForm({
     <form onSubmit={handleSubmit} noValidate>
       <div className={cn('space-y-[22px]', layout === 'dialog' ? 'px-6 py-5' : '')}>
         <Row label="Strategy" tip={RUN_FORM_TIPS.strategy}>
-          <div role="radiogroup" aria-label="Strategy" className="grid gap-2 sm:grid-cols-2">
-            {runnable.map((strategy) => {
-              const active = strategy.id === strategyKey;
-              return (
-                <label
-                  key={strategy.id}
-                  className={cn(
-                    'flex cursor-pointer items-center gap-3 rounded-md border px-3 py-2.5 transition-colors',
-                    // The chosen card takes the full row, per the spec: it is the one
-                    // whose name and universe must not be cut short.
-                    active
-                      ? 'border-primary bg-selected sm:col-span-2'
-                      : 'border-border hover:bg-muted/60',
-                  )}
-                >
-                  <input
-                    type="radio"
-                    name="strategy"
-                    value={strategy.id}
-                    checked={active}
-                    onChange={() => {
-                      chooseStrategy(strategy.id);
-                    }}
-                    className="sr-only"
-                  />
-                  <span
-                    aria-hidden
-                    className={cn(
-                      'flex size-3.5 shrink-0 items-center justify-center rounded-full border',
-                      active ? 'border-primary' : 'border-[var(--border-strong)]',
-                    )}
-                  >
-                    {active ? <span className="size-2 rounded-full bg-primary" /> : null}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span
-                      className={cn(
-                        'block truncate text-[13px] font-medium',
-                        active && 'text-selected-foreground',
-                      )}
-                    >
-                      {strategy.name}
-                    </span>
-                    <span className="tabular block truncate text-[11px] text-muted-foreground">
-                      {strategy.universe.join(', ')}
-                    </span>
-                  </span>
-                  <span className="tabular shrink-0 text-[11px] text-muted-foreground">
-                    best Sharpe{' '}
-                    {strategy.bestSharpe === null ? '—' : formatNumber(strategy.bestSharpe)}
-                  </span>
-                </label>
-              );
-            })}
-            {strategies.isPending ? (
-              <p className="text-xs text-muted-foreground">Loading strategies…</p>
-            ) : null}
-            {!strategies.isPending && runnable.length === 0 ? (
-              <p className="text-xs text-muted-foreground">No active strategies to run.</p>
-            ) : null}
-          </div>
+          {/*
+           * A grouped native select rather than one card per strategy: the
+           * catalogue grows with every member's uploads, and a card grid had
+           * no ceiling. The select is keyboard- and screen-reader-native and
+           * the optgroups carry the mine / community / built-in split.
+           */}
+          <select
+            aria-label="Strategy"
+            value={chosen?.id ?? ''}
+            disabled={runnable.length === 0}
+            onChange={(event) => {
+              chooseStrategy(event.target.value);
+            }}
+            className={cn(fieldClass, 'cursor-pointer disabled:cursor-not-allowed')}
+          >
+            <option value="" disabled>
+              {strategies.isPending
+                ? 'Loading strategies…'
+                : runnable.length === 0
+                  ? 'No active strategies to run'
+                  : 'Choose a strategy'}
+            </option>
+            {groupByOrigin(runnable).map((group) => (
+              <optgroup key={group.origin} label={group.label}>
+                {group.items.map((strategy) => (
+                  <option key={strategy.id} value={strategy.id}>
+                    {strategy.name}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+          {chosen ? (
+            <p className="tabular mt-1.5 truncate text-[11px] text-muted-foreground">
+              {chosen.universe.join(', ')} · best Sharpe{' '}
+              {chosen.bestSharpe === null ? '—' : formatNumber(chosen.bestSharpe)}
+            </p>
+          ) : null}
         </Row>
 
         <Row label="Universe" tip={RUN_FORM_TIPS.universe}>
@@ -716,6 +702,22 @@ export function RunBacktestForm({
           />
         </Row>
 
+        <Row label="Bar timestep" tip={RUN_FORM_TIPS.barInterval}>
+          <Segmented
+            value={barInterval}
+            options={BAR_INTERVALS}
+            onChange={setBarInterval}
+            ariaLabel="Bar timestep"
+          />
+          {isIntradayBar(barInterval) ? (
+            <p className="mt-1.5 text-[11px] text-muted-foreground">
+              Intraday runs load many more bars: a long window, many tickers or a long strategy
+              lookback can be refused as too large, and a source that stores only hourly bars
+              refuses anything finer.
+            </p>
+          ) : null}
+        </Row>
+
         <Row label="Capital & costs" tip={RUN_FORM_TIPS.capital}>
           <div className="grid gap-3 sm:grid-cols-[1.4fr_1fr_1fr]">
             <UnitField id={capitalId} label="Initial capital" unit="USD">
@@ -783,57 +785,53 @@ export function RunBacktestForm({
               );
             })}
           </ul>
-          {!hideDemoPanels && (
-            <div className="mt-2 flex flex-wrap items-center gap-3 rounded-md bg-background px-3 py-2 text-[13px]">
-              <label htmlFor={gateId} className="flex cursor-pointer items-center gap-2">
-                <input
-                  id={gateId}
-                  type="checkbox"
-                  role="switch"
-                  disabled
-                  aria-checked={gateEnabled}
-                  checked={gateEnabled}
-                  onChange={(event) => {
-                    setGateEnabled(event.target.checked);
-                  }}
-                  className="sr-only"
-                />
-                <span
-                  aria-hidden
-                  className={cn(
-                    'relative h-4 w-7 rounded-full transition-colors',
-                    gateEnabled ? 'bg-primary' : 'bg-[var(--border-strong)]',
-                  )}
-                >
-                  <span
-                    className={cn(
-                      'absolute top-0.5 size-3 rounded-full bg-background transition-transform',
-                      gateEnabled ? 'translate-x-3.5' : 'translate-x-0.5',
-                    )}
-                  />
-                </span>
-                <span className="font-medium">Sentiment gate</span>
-                <DemoBadge reason="news scoring is not built yet" />
-              </label>
-              <span className="text-muted-foreground">
-                — skip long entries when the 7d article score is below
-              </span>
+          <div className="mt-2 flex flex-wrap items-center gap-3 rounded-md bg-background px-3 py-2 text-[13px]">
+            <label htmlFor={gateId} className="flex cursor-pointer items-center gap-2">
               <input
-                type="range"
-                aria-label="Sentiment gate threshold"
-                min={-1}
-                max={0}
-                step={0.05}
-                value={gateThreshold}
-                disabled={!gateEnabled}
+                id={gateId}
+                type="checkbox"
+                role="switch"
+                aria-checked={gateEnabled}
+                checked={gateEnabled}
                 onChange={(event) => {
-                  setGateThreshold(Number(event.target.value));
+                  setGateEnabled(event.target.checked);
                 }}
-                className="h-1.5 w-[120px] accent-primary disabled:opacity-40"
+                className="sr-only"
               />
-              <span className="tabular w-12 text-right">{gateThreshold.toFixed(2)}</span>
-            </div>
-          )}
+              <span
+                aria-hidden
+                className={cn(
+                  'relative h-4 w-7 rounded-full transition-colors',
+                  gateEnabled ? 'bg-primary' : 'bg-[var(--border-strong)]',
+                )}
+              >
+                <span
+                  className={cn(
+                    'absolute top-0.5 size-3 rounded-full bg-background transition-transform',
+                    gateEnabled ? 'translate-x-3.5' : 'translate-x-0.5',
+                  )}
+                />
+              </span>
+              <span className="font-medium">Sentiment gate</span>
+            </label>
+            <span className="text-muted-foreground">
+              — skip long entries when the 7d article score is below
+            </span>
+            <input
+              type="range"
+              aria-label="Sentiment gate threshold"
+              min={-1}
+              max={0}
+              step={0.05}
+              value={gateThreshold}
+              disabled={!gateEnabled}
+              onChange={(event) => {
+                setGateThreshold(Number(event.target.value));
+              }}
+              className="h-1.5 w-[120px] accent-primary disabled:opacity-40"
+            />
+            <span className="tabular w-12 text-right">{gateThreshold.toFixed(2)}</span>
+          </div>
         </Row>
 
         {chosen && chosen.parameters.length > 0 ? (
@@ -1026,7 +1024,7 @@ export function RunBacktestForm({
                   Nothing saved yet. Use Save as preset to capture the current run.
                 </p>
               ) : (
-                <ul className="space-y-1.5">
+                <ul aria-label="Saved presets" className="list-scroll space-y-1.5 pr-1">
                   {savedPresets.map((preset) => {
                     const strategyName = runnable.find(
                       (strategy) => strategy.id === preset.config.strategyKey,
