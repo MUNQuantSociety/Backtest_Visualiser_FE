@@ -12,6 +12,26 @@ function Subject() {
 }
 
 describe('InfoTip', () => {
+  it('sets its own text style instead of inheriting its label’s', async () => {
+    // A table heading is monospace, uppercase and unwrapped; the bubble must
+    // still read as wrapped prose.
+    render(
+      <p className="tabular tracking-[0.06em] whitespace-nowrap uppercase">
+        <InfoTip label="RSI 14">Wilder’s 14-session RSI.</InfoTip>
+      </p>,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'About RSI 14' }));
+
+    expect(screen.getByRole('tooltip')).toHaveClass(
+      'font-sans',
+      'whitespace-normal',
+      'normal-case',
+      'tracking-normal',
+      'font-normal',
+    );
+  });
+
   it('opens on keyboard focus and is what the trigger is described by', async () => {
     render(<Subject />);
     const trigger = screen.getByRole('button', { name: 'About Window' });

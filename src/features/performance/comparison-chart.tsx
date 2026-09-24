@@ -6,6 +6,7 @@ import {
   type IChartApi,
   type ISeriesApi,
   type LineData,
+  type MouseEventParams,
   type Time,
 } from 'lightweight-charts';
 import { useEffect, useMemo, useRef } from 'react';
@@ -22,6 +23,35 @@ export interface ComparisonSeries {
   colorIndex?: number | undefined;
 }
 
+/** Where the pointer is on the chart: the date under it and its position in px. */
+export interface ChartPointer {
+  date: string;
+  /** From the chart's left edge. */
+  x: number;
+  /** From the chart's top edge. */
+  y: number;
+  /** The chart's own width, so a caller can keep an overlay inside it. */
+  width: number;
+}
+
+/** The ISO date of a crosshair time, whatever form the library hands back. */
+function timeToDate(time: Time | undefined): string | null {
+  if (time === undefined) return null;
+  if (typeof time === 'string') return time;
+  if (typeof time === 'number') return new Date(time * 1000).toISOString().slice(0, 10);
+  return [
+    String(time.year),
+    String(time.month).padStart(2, '0'),
+    String(time.day).padStart(2, '0'),
+  ].join('-');
+}
+
+function toPointer(event: MouseEventParams, width: number): ChartPointer | null {
+  const date = timeToDate(event.time);
+  if (date === null || !event.point) return null;
+  return { date, x: event.point.x, y: event.point.y, width };
+}
+
 interface ComparisonChartProps {
   /** Hide labels on dense dashboards whose adjacent table identifies each run. */
   showSeriesLabels?: boolean | undefined;
@@ -34,6 +64,10 @@ interface ComparisonChartProps {
    * rest, so the gap to it is what doing nothing would have earned.
    */
   benchmark?: { title: string; points: readonly EquityPoint[] } | undefined;
+  /** Called as the pointer moves over a date, and with null when it leaves. */
+  onPointerMove?: ((pointer: ChartPointer | null) => void) | undefined;
+  /** Called when a date on the chart is clicked. */
+  onPointerClick?: ((pointer: ChartPointer) => void) | undefined;
 }
 
 function rebased(points: readonly EquityPoint[]): LineData<Time>[] {
@@ -59,6 +93,8 @@ export function ComparisonChart({
   series,
   benchmark,
   showSeriesLabels = true,
+  onPointerMove,
+  onPointerClick,
 }: ComparisonChartProps) {
   // Either prop shape becomes the same list, so the drawing code has one path.
   const lines = useMemo<readonly ComparisonSeries[]>(
@@ -84,6 +120,13 @@ export function ComparisonChart({
    * theme effect further down is what keeps colours current.
    */
   const paletteRef = useRef(palette);
+  // Latest callbacks, read by handlers subscribed once with the chart.
+  const onPointerMoveRef = useRef(onPointerMove);
+  const onPointerClickRef = useRef(onPointerClick);
+  useEffect(() => {
+    onPointerMoveRef.current = onPointerMove;
+    onPointerClickRef.current = onPointerClick;
+  }, [onPointerMove, onPointerClick]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -112,7 +155,18 @@ export function ComparisonChart({
     });
 
     chartRef.current = chart;
+    const handleMove = (event: MouseEventParams) => {
+      onPointerMoveRef.current?.(toPointer(event, container.clientWidth));
+    };
+    const handleClick = (event: MouseEventParams) => {
+      const pointer = toPointer(event, container.clientWidth);
+      if (pointer) onPointerClickRef.current?.(pointer);
+    };
+    chart.subscribeCrosshairMove(handleMove);
+    chart.subscribeClick(handleClick);
     return () => {
+      chart.unsubscribeCrosshairMove(handleMove);
+      chart.unsubscribeClick(handleClick);
       chart.remove();
       chartRef.current = null;
       seriesRef.current = [];

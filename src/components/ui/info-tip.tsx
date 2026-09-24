@@ -82,7 +82,9 @@ export function InfoTip({ label, children }: { label: string; children: ReactNod
           }}
           id={panelId}
           style={floatingStyles}
-          className="z-20 max-w-xs rounded-md border border-[var(--border-strong)] bg-card px-3 py-2 text-[12px] leading-relaxed text-card-foreground shadow-[0_18px_40px_rgb(0_0_0/0.45)]"
+          // Resets the text style it would inherit from wherever it sits: a
+          // table heading is monospace, uppercase and unwrapped.
+          className="z-20 max-w-xs rounded-md border border-[var(--border-strong)] bg-card px-3 py-2 text-left font-sans text-[12px] leading-relaxed font-normal tracking-normal whitespace-normal text-card-foreground normal-case shadow-[0_18px_40px_rgb(0_0_0/0.45)]"
           {...getFloatingProps()}
         >
           {children}

@@ -29,7 +29,7 @@ export { EquityCurveChart } from './equity-curve-chart';
  */
 export { MetricsGrid } from './metric-grid';
 export { MetricsTable } from './metric-table';
-export { ComparisonChart, type ComparisonSeries } from './comparison-chart';
+export { ComparisonChart, type ChartPointer, type ComparisonSeries } from './comparison-chart';
 export { DrawdownOverlay } from './drawdown-overlay';
 export { MonthlyDifferenceHeatmap } from './monthly-difference-heatmap';
 export { RollingSharpeOverlay } from './rolling-sharpe-overlay';

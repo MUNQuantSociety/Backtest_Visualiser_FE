@@ -167,6 +167,7 @@ function createApiClient(): AxiosInstance {
       const strategiesPath = `${backend.pathname.replace(/\/$/, '')}/strategies`;
       const validateTickersPath = `${backend.pathname.replace(/\/$/, '')}/market-data/validate-tickers`;
       const searchSymbolsPath = `${backend.pathname.replace(/\/$/, '')}/market-data/search-symbols`;
+      const closesPath = `${backend.pathname.replace(/\/$/, '')}/market-data/closes`;
       const authMePath = `${backend.pathname.replace(/\/$/, '')}/auth/me`;
       // Signed-in market reads: a run's scored news and the dashboard indicators.
       const marketPaths = ['news', 'indicators'].map(
@@ -198,6 +199,7 @@ function createApiClient(): AxiosInstance {
           url.pathname.startsWith(`${backtestsPath}/`) ||
           url.pathname === validateTickersPath ||
           url.pathname === searchSymbolsPath ||
+          url.pathname === closesPath ||
           url.pathname === authMePath ||
           marketPaths.includes(url.pathname) ||
           newsStoryPath.test(url.pathname) ||

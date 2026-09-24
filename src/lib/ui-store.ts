@@ -17,6 +17,9 @@ export type Theme = 'light' | 'dark' | 'system';
 /** How far back the dashboard's book panels look. */
 export type DashboardPeriod = '1y' | '2y' | '5y' | 'max';
 
+/** What the dashboard's top runs are measured against: SPY, or each run's own buy-and-hold. */
+export type DashboardBenchmark = 'spy' | 'buyHold';
+
 /**
  * Demo panels are a development aid: visible in dev, hidden everywhere else.
  * The dev-only env var can additionally start them hidden inside dev.
@@ -28,6 +31,7 @@ export function demoPanelsHiddenByDefault(isDev: boolean, devHideDemoPanels: boo
 interface UiState {
   theme: Theme;
   dashboardPeriod: DashboardPeriod;
+  dashboardBenchmark: DashboardBenchmark;
   /** IDs currently pinned for side-by-side comparison. */
   comparisonIds: string[];
   /** When true, cards marked with <DemoBadge /> are hidden. */
@@ -35,6 +39,7 @@ interface UiState {
 
   setTheme: (theme: Theme) => void;
   setDashboardPeriod: (period: DashboardPeriod) => void;
+  setDashboardBenchmark: (benchmark: DashboardBenchmark) => void;
   toggleComparison: (id: string) => void;
   clearComparison: () => void;
   setHideDemoPanels: (hide: boolean) => void;
@@ -45,6 +50,7 @@ export const useUiStore = create<UiState>()(
     (set) => ({
       theme: 'system',
       dashboardPeriod: '2y',
+      dashboardBenchmark: 'spy',
       comparisonIds: [],
       // Seeds the store on first visit. Demo panels are dev-only: hidden in
       // production, visible in dev, optionally hidden there by the env var. A
@@ -57,6 +63,10 @@ export const useUiStore = create<UiState>()(
 
       setDashboardPeriod: (period) => {
         set({ dashboardPeriod: period });
+      },
+
+      setDashboardBenchmark: (benchmark) => {
+        set({ dashboardBenchmark: benchmark });
       },
 
       toggleComparison: (id) => {
@@ -80,10 +90,15 @@ export const useUiStore = create<UiState>()(
       // Comparison selections are per-session; only persist real preferences.
       partialize: (state) =>
         env.isProd
-          ? { theme: state.theme, dashboardPeriod: state.dashboardPeriod }
+          ? {
+              theme: state.theme,
+              dashboardPeriod: state.dashboardPeriod,
+              dashboardBenchmark: state.dashboardBenchmark,
+            }
           : {
               theme: state.theme,
               dashboardPeriod: state.dashboardPeriod,
+              dashboardBenchmark: state.dashboardBenchmark,
               hideDemoPanels: state.hideDemoPanels,
             },
       // A production build never shows demo panels, even if a dev session left
@@ -105,5 +120,7 @@ export const useTheme = () => useUiStore((state) => state.theme);
 export const useSetTheme = () => useUiStore((state) => state.setTheme);
 export const useDashboardPeriod = () => useUiStore((state) => state.dashboardPeriod);
 export const useSetDashboardPeriod = () => useUiStore((state) => state.setDashboardPeriod);
+export const useDashboardBenchmark = () => useUiStore((state) => state.dashboardBenchmark);
+export const useSetDashboardBenchmark = () => useUiStore((state) => state.setDashboardBenchmark);
 export const useHideDemoPanels = () => useUiStore((state) => state.hideDemoPanels);
 export const useSetHideDemoPanels = () => useUiStore((state) => state.setHideDemoPanels);

@@ -26,6 +26,18 @@ export {
   type UniverseRow,
 } from './book';
 export {
+  buyHoldCurve,
+  closesCurve,
+  topRunsByReturn,
+  valuesAt,
+  withBenchmarkCloses,
+  type BenchmarkClose,
+  type BenchmarkMode,
+  type RunValueAt,
+} from './benchmark-book';
+export { SPY_TICKER, useBenchmarkCloses } from './benchmark-api';
+export { RunPointerCard } from './run-pointer-card';
+export {
   chipParts,
   chipSummary,
   compareContext,
