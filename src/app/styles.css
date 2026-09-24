@@ -211,16 +211,29 @@
 }
 
 @layer components {
-  .report-table-scroll {
-    max-height: min(60vh, 36rem);
-    overflow: auto;
+  .library-scroll-region {
+    overflow-y: scroll;
     overscroll-behavior: contain;
     scrollbar-gutter: stable;
     scrollbar-width: thin;
-    scrollbar-color: var(--muted-foreground) var(--card);
+    scrollbar-color: var(--muted-foreground) transparent;
+  }
+
+  /* The controls above each Library list stay fixed while their rows scroll.
+     Viewport-aware caps keep the default All-runs view inside the page instead
+     of creating a third, outer scrollbar. */
+  .strategy-picker-scroll {
+    max-height: clamp(12rem, calc(100dvh - 22rem), 36rem);
+    padding-right: 0.25rem;
+  }
+
+  .report-table-scroll {
+    max-height: clamp(12rem, calc(100dvh - 27rem), 36rem);
+    overflow-x: auto;
   }
 
   @media print {
+    .library-scroll-region,
     .report-table-scroll {
       max-height: none;
       overflow: visible;

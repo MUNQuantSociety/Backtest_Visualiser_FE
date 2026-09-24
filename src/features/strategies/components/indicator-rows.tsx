@@ -142,7 +142,12 @@ export function IndicatorRows({
                 // `params` is untyped JSON; only a number belongs in a period
                 // select, so anything else falls back to the engine default.
                 const stored = spec.params[parameter.key];
-                const selected = typeof stored === 'number' ? stored : parameter.default;
+                const selected =
+                  typeof stored === 'number'
+                    ? stored
+                    : typeof parameter.default === 'number'
+                      ? parameter.default
+                      : 14;
                 return (
                   <Field
                     key={parameter.key}

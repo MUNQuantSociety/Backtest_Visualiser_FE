@@ -325,6 +325,17 @@ describe('Dashboard saved run comparison', () => {
     expect(within(chart).getByText('neo')).toBeInTheDocument();
     expect(within(chart).getByText('Run 25')).toBeInTheDocument();
     const alpha = within(screen.getByRole('table', { name: 'Run alpha metrics' }));
+    const tempToggle = alpha.getByRole('checkbox', {
+      name: 'Show temp on comparison chart',
+    });
+    expect(tempToggle).toBeChecked();
+    await userEvent.click(tempToggle);
+    expect(within(chart).queryByText('temp')).not.toBeInTheDocument();
+    expect(within(chart).getByText('neo')).toBeInTheDocument();
+    expect(tempToggle).not.toBeChecked();
+    await userEvent.click(tempToggle);
+    expect(within(chart).getByText('temp')).toBeInTheDocument();
+    expect(tempToggle).toBeChecked();
     expect(alpha.getByRole('link', { name: 'temp' })).toHaveAttribute('href', '/backtests/run-0');
     expect(alpha.getByRole('link', { name: 'neo' })).toHaveAttribute('href', '/backtests/run-1');
     expect(alpha.getAllByRole('row')).toHaveLength(27);
