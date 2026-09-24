@@ -14,6 +14,8 @@ export const RUN_FORM_TIPS = {
     'The dates to simulate, bounded by the days every ticker in the universe has data for. Start defaults to one year before the last available bar. A ticker whose history begins late clamps the earliest start.',
   barInterval:
     'The length of one simulated bar, from one minute to one trading day. Indicators, fills and every strategy decision move one bar at a time, so an indicator period counts bars of this size. Intraday bars cover regular hours only (09:30–16:00 New York) and are labelled at their close.',
+  weights:
+    "How the run splits the book between its tickers. Default keeps the strategy's own weights, or splits equally once you change the universe. Custom sets a percentage per ticker; anything under 100% stays in cash, and more than 100% is refused because the engine does not model leverage.",
   capital:
     'Initial capital is the cash the run starts with. Slippage, in basis points, moves every fill against you; commission is charged per share. Both apply to each fill and shape the reported P&L.',
   indicators:
@@ -38,7 +40,7 @@ export const RUN_FORM_QUICK_START = [
   },
   {
     title: 'Check the universe',
-    body: 'Add or remove tickers for this run only. Watch the dot beside each one: green means data covers the whole window, amber only part of it, red none, and grey that coverage is not known yet. Hover a dot to read its state.',
+    body: 'Add or remove tickers for this run only. Watch the dot beside each one: green means data covers the whole window, amber only part of it, red none, and grey that coverage is not known yet. Hover a dot to read its state. Under Weights, Custom lets you set each ticker’s share of the book.',
   },
   {
     title: 'Set the window',

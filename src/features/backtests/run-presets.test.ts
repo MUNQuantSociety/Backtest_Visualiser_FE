@@ -42,6 +42,19 @@ describe('saveRunPreset', () => {
     expect(typeof loaded?.savedAt).toBe('string');
   });
 
+  it('keeps custom weights with the preset', () => {
+    const weights = { mode: 'custom' as const, percents: { AAPL: '60' } };
+    saveRunPreset('Weighted', snapshot({ weights }));
+
+    expect(listRunPresets()[0]?.config.weights).toEqual(weights);
+  });
+
+  it('loads a preset saved before weights existed, with none', () => {
+    saveRunPreset('Old preset', snapshot());
+
+    expect(listRunPresets()[0]?.config.weights).toBeUndefined();
+  });
+
   it('replaces an existing preset with the same name instead of duplicating it', () => {
     const first = saveRunPreset('My preset', snapshot({ slippageBps: '5' }));
     expect(first).not.toBeNull();

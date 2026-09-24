@@ -28,6 +28,13 @@ import {
 import { RUN_FORM_TIPS } from './run-form-copy';
 import { deleteRunPreset, listRunPresets, saveRunPreset, type RunPreset } from './run-presets';
 import {
+  equalWeightPercents,
+  parseWeightPercents,
+  type WeightMode,
+  type WeightPercents,
+} from './run-weights';
+import { WeightsField } from './run-weights-field';
+import {
   coverageSegments,
   coverageYearTicks,
   isoDay,
@@ -116,6 +123,9 @@ export function RunBacktestForm({
   const [slippageBps, setSlippageBps] = useState(String(DEFAULT_SLIPPAGE_BPS));
   const [commission, setCommission] = useState(String(DEFAULT_COMMISSION));
   const [barInterval, setBarInterval] = useState<BarInterval>(DEFAULT_BAR_INTERVAL);
+  const [weightMode, setWeightMode] = useState<WeightMode>('default');
+  // Typed percentages by ticker; a ticker added later starts blank (0%).
+  const [weightPercents, setWeightPercents] = useState<WeightPercents>({});
   const [gateEnabled, setGateEnabled] = useState(false);
   const [gateThreshold, setGateThreshold] = useState(DEFAULT_SENTIMENT_THRESHOLD);
   const [paramValues, setParamValues] = useState<Record<string, string | boolean>>({});
@@ -209,6 +219,8 @@ export function RunBacktestForm({
     !verification.isFetching &&
     verification.data.unknown.length === 0;
   const hasTickerDraft = tickerDraft.trim().length > 0;
+  const customWeights =
+    weightMode === 'custom' ? parseWeightPercents(weightPercents, universe) : null;
 
   const activePreset =
     window && covered?.start && covered.end
@@ -229,6 +241,8 @@ export function RunBacktestForm({
     cancelTickerCheck();
     setTickerDraft('');
     setParamValues({});
+    setWeightMode('default');
+    setWeightPercents({});
     setError(null);
   }
 
@@ -269,6 +283,7 @@ export function RunBacktestForm({
       slippageBps,
       commission,
       barInterval,
+      weights: { mode: weightMode, percents: { ...weightPercents } },
       paramValues: { ...paramValues },
       gateEnabled,
       gateThreshold,
@@ -307,6 +322,9 @@ export function RunBacktestForm({
     // Presets saved before the choice existed were daily runs.
     setBarInterval(preset.config.barInterval ?? DEFAULT_BAR_INTERVAL);
     setParamValues({ ...preset.config.paramValues });
+    // Presets saved before custom weights existed used the default.
+    setWeightMode(preset.config.weights?.mode ?? 'default');
+    setWeightPercents({ ...(preset.config.weights?.percents ?? {}) });
     setGateEnabled(preset.config.gateEnabled);
     setGateThreshold(preset.config.gateThreshold);
     setTickerDraft('');
@@ -408,6 +426,9 @@ export function RunBacktestForm({
       commissionPerShare: Number(commission),
       barIntervalSeconds: barIntervalSeconds(barInterval),
       sentimentGate: { enabled: gateEnabled, threshold: gateThreshold },
+      // Sent only when custom: leaving the key out keeps the backend's own
+      // default (the strategy's weights, or equal for a changed universe).
+      ...(customWeights?.ok ? { weights: customWeights.weights } : {}),
       ...strategyParams,
     };
   }
@@ -421,6 +442,10 @@ export function RunBacktestForm({
     }
     if (!universeVerified || !hasWindow) {
       setError('Verify every ticker and its available dates before running.');
+      return;
+    }
+    if (customWeights && !customWeights.ok) {
+      setError(customWeights.message);
       return;
     }
     log.info('run requested; validating form', {
@@ -639,6 +664,30 @@ export function RunBacktestForm({
               is clamped to it.
             </p>
           ) : null}
+        </Row>
+
+        <Row label="Weights" tip={RUN_FORM_TIPS.weights}>
+          <WeightsField
+            universe={universe}
+            universeChanged={universeOverride !== null}
+            mode={weightMode}
+            percents={weightPercents}
+            onModeChange={(mode) => {
+              log.info('weight mode selected', { strategyKey, mode });
+              setWeightMode(mode);
+              // Custom starts from an even split rather than from zeros.
+              if (mode === 'custom' && Object.keys(weightPercents).length === 0) {
+                setWeightPercents(equalWeightPercents(universe));
+              }
+            }}
+            onPercentChange={(ticker, value) => {
+              setWeightPercents((current) => ({ ...current, [ticker]: value }));
+            }}
+            onSplitEqually={() => {
+              setWeightPercents(equalWeightPercents(universe));
+            }}
+            problem={customWeights && !customWeights.ok ? customWeights.message : null}
+          />
         </Row>
 
         <Row label="Window" tip={RUN_FORM_TIPS.window}>

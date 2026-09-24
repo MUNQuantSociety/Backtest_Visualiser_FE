@@ -208,6 +208,10 @@ async function pickStrategy(id: string) {
   await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Strategy' }), id);
 }
 
+function weightModes() {
+  return screen.getByRole('radiogroup', { name: 'Weights' });
+}
+
 function CurrentPath() {
   return <output aria-label="Current path">{useLocation().pathname}</output>;
 }
@@ -399,6 +403,82 @@ describe('RunBacktestForm', () => {
       expect(post).toHaveBeenCalledTimes(1);
     });
     expect(post.mock.calls[0]?.[1]).toMatchObject({ params: { universe: ['AAPL', 'MSFT'] } });
+  });
+
+  it('sends no weights while the default allocation is chosen', async () => {
+    post.mockResolvedValue(queuedRun('bt-11'));
+    renderWithProviders(<RunBacktestForm />);
+    await pickStrategy('portfolio_1');
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /run backtest/i })).toBeEnabled();
+    });
+
+    expect(within(weightModes()).getByRole('radio', { name: 'Default' })).toBeChecked();
+    submitForm();
+
+    await waitFor(() => {
+      expect(post).toHaveBeenCalledTimes(1);
+    });
+    const body = post.mock.calls[0]?.[1] as { params: Record<string, unknown> };
+    expect(body.params).not.toHaveProperty('weights');
+  });
+
+  it('starts custom weights from an equal split', async () => {
+    renderWithProviders(<RunBacktestForm />);
+    await pickStrategy('portfolio_1');
+
+    await userEvent.click(within(weightModes()).getByRole('radio', { name: 'Custom' }));
+
+    expect(screen.getByLabelText('AAPL weight')).toHaveValue(100);
+    expect(screen.getByText(/Total 100\.00% · cash 0\.00%/)).toBeInTheDocument();
+  });
+
+  it('submits custom weights as fractions of the book', async () => {
+    post.mockResolvedValue(queuedRun('bt-11'));
+    renderWithProviders(<RunBacktestForm />);
+    await pickStrategy('portfolio_1');
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /run backtest/i })).toBeEnabled();
+    });
+    await userEvent.click(within(weightModes()).getByRole('radio', { name: 'Custom' }));
+
+    await userEvent.clear(screen.getByLabelText('AAPL weight'));
+    await userEvent.type(screen.getByLabelText('AAPL weight'), '60');
+    submitForm();
+
+    await waitFor(() => {
+      expect(post).toHaveBeenCalledTimes(1);
+    });
+    expect(post.mock.calls[0]?.[1]).toMatchObject({ params: { weights: { AAPL: 0.6 } } });
+  });
+
+  it('refuses weights over 100% before sending anything', async () => {
+    renderWithProviders(<RunBacktestForm />);
+    await pickStrategy('portfolio_1');
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /run backtest/i })).toBeEnabled();
+    });
+    await userEvent.click(within(weightModes()).getByRole('radio', { name: 'Custom' }));
+
+    await userEvent.clear(screen.getByLabelText('AAPL weight'));
+    await userEvent.type(screen.getByLabelText('AAPL weight'), '100.5');
+    submitForm();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'AAPL weight must be between 0% and 100%.',
+    );
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it('goes back to the default weights when the strategy changes', async () => {
+    renderWithProviders(<RunBacktestForm />);
+    await pickStrategy('portfolio_1');
+    await userEvent.click(within(weightModes()).getByRole('radio', { name: 'Custom' }));
+
+    await pickStrategy('portfolio_2');
+
+    expect(within(weightModes()).getByRole('radio', { name: 'Default' })).toBeChecked();
+    expect(screen.queryByLabelText('AAPL weight')).not.toBeInTheDocument();
   });
 
   it('runs on daily bars unless another timestep is chosen', async () => {
