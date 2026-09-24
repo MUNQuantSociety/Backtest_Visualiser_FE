@@ -33,6 +33,12 @@ interface WatchlistCardProps {
   isLoading: boolean;
   /** True when the strategy list failed and there is no universe to show. */
   isUnavailable: boolean;
+  /**
+   * Sizes the card from outside. The rows scroll within whatever height the
+   * card is given, so a page can match it to a neighbour instead of letting a
+   * long watchlist set the row's height.
+   */
+  className?: string | undefined;
 }
 
 /**
@@ -43,7 +49,13 @@ interface WatchlistCardProps {
  * of that a person can add any symbol FMP knows and remove ones they do not
  * care about; each row opens the ticker's own page.
  */
-export function WatchlistCard({ universe, palette, isLoading, isUnavailable }: WatchlistCardProps) {
+export function WatchlistCard({
+  universe,
+  palette,
+  isLoading,
+  isUnavailable,
+  className,
+}: WatchlistCardProps) {
   const universeTickers = universe.map((row) => row.ticker);
   const watchlist = useWatchlist(universeTickers);
   const indicators = useIndicators(watchlist.tickers);
@@ -52,7 +64,7 @@ export function WatchlistCard({ universe, palette, isLoading, isUnavailable }: W
   const widestUniverse = Math.max(1, ...universe.map((row) => row.strategyIndexes.length));
 
   return (
-    <Card>
+    <Card className={cn('flex flex-col', className)}>
       <CardHeader className="flex-row items-start justify-between gap-3 space-y-0 pb-3">
         <div className="space-y-1">
           <CardTitle className="text-[15px]">Watchlist</CardTitle>
@@ -73,7 +85,7 @@ export function WatchlistCard({ universe, palette, isLoading, isUnavailable }: W
           </Button>
         ) : null}
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="flex min-h-0 flex-1 flex-col gap-3">
         <AddTickerForm
           existing={watchlist.tickers}
           onAdd={(ticker) => {
@@ -81,46 +93,56 @@ export function WatchlistCard({ universe, palette, isLoading, isUnavailable }: W
           }}
         />
 
-        {watchlist.tickers.length > 0 ? (
-          // Visual only: each row's link is named for its ticker, and the
-          // remove button for what it removes.
-          <div
-            data-testid="watchlist-columns"
-            aria-hidden
-            className="flex items-center gap-1 border-b pb-1.5"
-          >
+        {/* Only the rows scroll: the field above stays put, and the column
+            headings stick to the top of the scrolled list. Focusable so a
+            keyboard user can scroll it. */}
+        <div
+          role="region"
+          aria-label="Watchlist rows"
+          tabIndex={0}
+          className="min-h-0 flex-1 [scrollbar-width:thin] [scrollbar-color:var(--muted-foreground)_transparent] overflow-y-auto overscroll-contain pr-1 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        >
+          {watchlist.tickers.length > 0 ? (
+            // Visual only: each row's link is named for its ticker, and the
+            // remove button for what it removes.
             <div
-              className="tabular grid min-w-0 flex-1 gap-2 px-1.5 text-[10px] font-medium tracking-[0.06em] text-muted-foreground uppercase"
-              style={{ gridTemplateColumns: ROW_COLUMNS }}
+              data-testid="watchlist-columns"
+              aria-hidden
+              className="sticky top-0 z-10 flex items-center gap-1 border-b bg-card pb-1.5"
             >
-              <span>Ticker</span>
-              <span>Strategies</span>
-              <span className="text-right">Last</span>
-              <span className="text-right" title="Change on the last session">
-                Day
-              </span>
+              <div
+                className="tabular grid min-w-0 flex-1 gap-2 px-1.5 text-[10px] font-medium tracking-[0.06em] text-muted-foreground uppercase"
+                style={{ gridTemplateColumns: ROW_COLUMNS }}
+              >
+                <span>Ticker</span>
+                <span>Strategies</span>
+                <span className="text-right">Last</span>
+                <span className="text-right" title="Change on the last session">
+                  Day
+                </span>
+              </div>
+              {/* Holds the remove button's column. */}
+              <span className="w-7 shrink-0" />
             </div>
-            {/* Holds the remove button's column. */}
-            <span className="w-7 shrink-0" />
-          </div>
-        ) : null}
+          ) : null}
 
-        <ul aria-label="Watchlist" className="space-y-0.5">
-          {watchlist.tickers.map((ticker) => (
-            <WatchlistRow
-              key={ticker}
-              ticker={ticker}
-              strategyIndexes={rowByTicker.get(ticker)?.strategyIndexes ?? []}
-              widestUniverse={widestUniverse}
-              palette={palette}
-              indicators={indicatorsByTicker.get(ticker)}
-              onRemove={() => {
-                log.info('ticker removed from watchlist', { ticker });
-                watchlist.remove(ticker);
-              }}
-            />
-          ))}
-        </ul>
+          <ul aria-label="Watchlist" className="space-y-0.5">
+            {watchlist.tickers.map((ticker) => (
+              <WatchlistRow
+                key={ticker}
+                ticker={ticker}
+                strategyIndexes={rowByTicker.get(ticker)?.strategyIndexes ?? []}
+                widestUniverse={widestUniverse}
+                palette={palette}
+                indicators={indicatorsByTicker.get(ticker)}
+                onRemove={() => {
+                  log.info('ticker removed from watchlist', { ticker });
+                  watchlist.remove(ticker);
+                }}
+              />
+            ))}
+          </ul>
+        </div>
 
         {!isLoading && watchlist.tickers.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted-foreground">

@@ -49,10 +49,11 @@ function CurrentPath() {
   return <output aria-label="Current path">{useLocation().pathname}</output>;
 }
 
-function renderCard() {
+function renderCard(className?: string) {
   renderWithProviders(
     <>
       <WatchlistCard
+        className={className}
         universe={UNIVERSE}
         palette={readChartPalette()}
         isLoading={false}
@@ -100,6 +101,29 @@ describe('WatchlistCard', () => {
     renderCard();
 
     expect(watchlistTickers()).toEqual(['Open AAPL', 'Open MSFT']);
+  });
+
+  it('scrolls its rows inside a focusable region, headings included', () => {
+    renderCard();
+
+    const region = screen.getByRole('region', { name: 'Watchlist rows' });
+    expect(region).toHaveAttribute('tabindex', '0');
+    expect(within(region).getByRole('list', { name: 'Watchlist' })).toBeInTheDocument();
+    expect(within(region).getByTestId('watchlist-columns')).toBeInTheDocument();
+  });
+
+  it('keeps the add-ticker field outside the scrolling rows', () => {
+    renderCard();
+
+    const region = screen.getByRole('region', { name: 'Watchlist rows' });
+    expect(region).not.toContainElement(screen.getByLabelText('Add ticker to watchlist'));
+  });
+
+  it('takes its size from the class the page gives it', () => {
+    renderCard('xl:h-0 xl:min-h-full');
+
+    const card = screen.getByRole('list', { name: 'Watchlist' }).closest('[data-slot="card"]');
+    expect(card).toHaveClass('xl:h-0', 'xl:min-h-full');
   });
 
   it('labels each column above the rows', () => {

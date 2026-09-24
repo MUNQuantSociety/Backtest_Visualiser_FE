@@ -458,6 +458,9 @@ export default function DashboardPage() {
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
         <WatchlistCard
+          // Side by side, the chart card sets the row's height and the
+          // watchlist fills it, scrolling its rows; stacked, it keeps its own.
+          className="xl:h-0 xl:min-h-full"
           universe={model.universe}
           palette={palette}
           isLoading={strategiesQuery.isPending}
