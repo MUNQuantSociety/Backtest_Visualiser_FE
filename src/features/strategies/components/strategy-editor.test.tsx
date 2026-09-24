@@ -159,7 +159,9 @@ describe('StrategyEditor compatibility check', () => {
       ok: true,
       className: 'MyStrategy',
       issues: [],
-      warnings: [{ line: 9, message: 'MyStrategy declares an indicator the engine does not ship.' }],
+      warnings: [
+        { line: 9, message: 'MyStrategy declares an indicator the engine does not ship.' },
+      ],
       message: 'MyStrategy is compatible with the engine. 1 warning worth reading.',
     });
 
@@ -297,7 +299,8 @@ describe('StrategyEditor fragment mode', () => {
       issues: [{ line: 3, message: "importing 'os' is not allowed." }],
       warnings: [],
       message: '1 problem to fix before this can run here.',
-      assembledSource: 'class MyStrategy(BasePortfolio):\n    def OnData(self, context):\n        import os\n',
+      assembledSource:
+        'class MyStrategy(BasePortfolio):\n    def OnData(self, context):\n        import os\n',
       bodyOffset: 13,
     });
 
@@ -375,7 +378,9 @@ describe('StrategyEditor fragment mode', () => {
       filename: 'strategy.py',
       source: 'class MyStrategy(BasePortfolio):\n    pass\n',
       body: 'pass',
-      indicators: [{ attribute: 'fast_sma', indicator: 'SimpleMovingAverage', params: { period: 20 } }],
+      indicators: [
+        { attribute: 'fast_sma', indicator: 'SimpleMovingAverage', params: { period: 20 } },
+      ],
       state: {},
     });
     post.mockResolvedValue({

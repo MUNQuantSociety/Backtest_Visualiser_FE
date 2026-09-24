@@ -51,7 +51,9 @@ beforeEach(() => {
 const ENTRY = { strategyKey: 'user-test-b0a184b1', name: 'test', validationRunId: 'run-1' };
 
 function remember(
-  overrides: Partial<Omit<typeof ENTRY, 'validationRunId'>> & { validationRunId?: string | null } = {},
+  overrides: Partial<Omit<typeof ENTRY, 'validationRunId'>> & {
+    validationRunId?: string | null;
+  } = {},
 ) {
   return rememberSubmission({
     ...ENTRY,

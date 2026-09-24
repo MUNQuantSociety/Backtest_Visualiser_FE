@@ -361,10 +361,7 @@ export function StrategyEditor({ editing }: { editing?: EditingStrategy | undefi
         );
         return;
       }
-      submitDraftMutation.mutate(
-        { ...draft.data, name: name.trim(), description },
-        { onSuccess },
-      );
+      submitDraftMutation.mutate({ ...draft.data, name: name.trim(), description }, { onSuccess });
       return;
     }
 
@@ -609,7 +606,9 @@ export function StrategyEditor({ editing }: { editing?: EditingStrategy | undefi
 
       <div className="flex items-center gap-2">
         <Button type="submit" disabled={activeSubmit.isPending}>
-          {activeSubmit.isPending ? <Loader2 className="mr-2 size-4 animate-spin" aria-hidden /> : null}
+          {activeSubmit.isPending ? (
+            <Loader2 className="mr-2 size-4 animate-spin" aria-hidden />
+          ) : null}
           Save strategy
         </Button>
         {/*

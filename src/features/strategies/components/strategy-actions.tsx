@@ -86,7 +86,9 @@ export function StrategyActions({
         icon={<Trash2 aria-hidden />}
         tone="danger"
         disabled={!uploaded || remove.isPending}
-        title={uploaded ? 'Remove this strategy and its stored source' : 'Built-ins cannot be removed'}
+        title={
+          uploaded ? 'Remove this strategy and its stored source' : 'Built-ins cannot be removed'
+        }
         onSelect={() => {
           // Confirmed before it happens: this deletes stored source that
           // exists nowhere else once it is gone. Its runs are kept.
