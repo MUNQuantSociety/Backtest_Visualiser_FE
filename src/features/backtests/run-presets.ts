@@ -27,6 +27,13 @@ const runPresetConfigSchema = z.object({
   commission: z.string(),
   // Optional so presets saved before the bar-size choice still load (as daily).
   barInterval: z.enum(BAR_INTERVAL_VALUES).optional(),
+  // Optional so presets saved before custom weights still load (as default).
+  weights: z
+    .object({
+      mode: z.enum(['default', 'custom']),
+      percents: z.record(z.string(), z.string()),
+    })
+    .optional(),
   paramValues: z.record(z.string(), z.union([z.string(), z.boolean()])),
   gateEnabled: z.boolean(),
   gateThreshold: z.number(),

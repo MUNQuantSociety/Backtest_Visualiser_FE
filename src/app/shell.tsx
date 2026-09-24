@@ -1,4 +1,5 @@
 import {
+  BookOpen,
   Calculator,
   ExternalLink,
   Eye,
@@ -29,7 +30,11 @@ import {
   RunFormQuickStartDialog,
   type QuickStartGuideHandle,
 } from '@/features/backtests';
-import { ValidationNotifications } from '@/features/strategies';
+import {
+  StrategyGuideDialog,
+  ValidationNotifications,
+  type StrategyGuideHandle,
+} from '@/features/strategies';
 import { authIsConfigured } from '@/lib/auth-session';
 import { useHideDemoPanels, useSetHideDemoPanels } from '@/lib/ui-store';
 import { cn } from '@/lib/utils';
@@ -345,6 +350,7 @@ function AppHeader({
  */
 function AppHelpMenu() {
   const runGuideRef = useRef<QuickStartGuideHandle>(null);
+  const strategyGuideRef = useRef<StrategyGuideHandle>(null);
   return (
     <>
       <HelpMenu>
@@ -356,8 +362,17 @@ function AppHelpMenu() {
         >
           Run form quick start
         </HelpMenuItem>
+        <HelpMenuItem
+          icon={<BookOpen aria-hidden />}
+          onSelect={() => {
+            strategyGuideRef.current?.open();
+          }}
+        >
+          Writing a strategy
+        </HelpMenuItem>
       </HelpMenu>
       <RunFormQuickStartDialog ref={runGuideRef} />
+      <StrategyGuideDialog ref={strategyGuideRef} />
     </>
   );
 }

@@ -18,6 +18,7 @@ vi.mock('@/app/providers/auth-provider.context', () => ({
 // is stubbed rather than given a QueryClient it would only use to fetch
 // nothing. Its own behaviour is covered by the strategies feature's tests.
 vi.mock('@/features/strategies', () => ({
+  StrategyGuideDialog: () => null,
   ValidationNotifications: () => null,
 }));
 vi.mock('@/features/backtests', () => ({
@@ -214,6 +215,14 @@ describe('help menu', () => {
 
     const menu = screen.getByRole('menu', { name: 'Help' });
     expect(within(menu).getByRole('menuitem', { name: 'Run form quick start' })).toBeVisible();
+  });
+
+  it('offers the strategy-writing guide from the ? icon', async () => {
+    renderShell();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Help' }));
+
+    expect(screen.getByRole('menuitem', { name: 'Writing a strategy' })).toBeVisible();
   });
 
   it('closes on Escape', async () => {

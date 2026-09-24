@@ -3,6 +3,7 @@
 export { EditStrategyDialog } from './components/edit-strategy-dialog';
 export { NewStrategyDialog } from './components/new-strategy-dialog';
 export { StrategyEditor } from './components/strategy-editor';
+export { StrategyGuideDialog, type StrategyGuideHandle } from './components/strategy-guide-dialog';
 export { StrategyPicker } from './components/strategy-picker';
 export { ValidationNotifications } from './components/validation-notifications';
 export {
