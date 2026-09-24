@@ -45,10 +45,11 @@ vi.mock('@/lib/api-client', async (importOriginal) => {
 const get = vi.mocked(apiClient.get);
 const post = vi.mocked(apiClient.post);
 
-function strategy(id: string, name: string, status = 'active') {
+function strategy(id: string, name: string, status = 'active', origin = 'builtin') {
   return {
     id,
     name,
+    origin,
     className: name,
     description: '',
     status,
@@ -94,8 +95,8 @@ beforeEach(() => {
         return Promise.resolve({
           items: [
             strategy('portfolio_1', 'Vol Momentum'),
-            strategy('portfolio_2', 'Mean Reversion'),
-            strategy('portfolio_3', 'Broken Universe'),
+            strategy('portfolio_2', 'Mean Reversion', 'active', 'own'),
+            strategy('portfolio_3', 'Broken Universe', 'active', 'community'),
             strategy('draft_one', 'Unvalidated Draft', 'draft'),
           ],
           total: 4,
@@ -201,11 +202,10 @@ function submitForm() {
   fireEvent.submit(form as HTMLFormElement);
 }
 
-/** Strategies are radio cards; the accessible name is the card's whole text. */
+/** Strategies are a grouped select; wait for the option to load, then choose it. */
 async function pickStrategy(id: string) {
-  const radio = await screen.findByRole('radio', { name: new RegExp(NAMES[id] ?? id) });
-  await userEvent.click(radio);
-  return radio;
+  await screen.findByRole('option', { name: NAMES[id] ?? id });
+  await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Strategy' }), id);
 }
 
 function CurrentPath() {
@@ -239,9 +239,32 @@ describe('RunBacktestForm', () => {
       await Promise.resolve();
     });
 
-    expect(await screen.findByRole('radio', { name: /Vol Momentum/ })).toBeInTheDocument();
+    expect(await screen.findByRole('option', { name: 'Vol Momentum' })).toBeInTheDocument();
     // A draft has not been proven to run; the backend would refuse it anyway.
-    expect(screen.queryByRole('radio', { name: /Unvalidated Draft/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Unvalidated Draft' })).not.toBeInTheDocument();
+  });
+
+  it('groups runnable strategies as mine, community, then built-in', async () => {
+    renderWithProviders(<RunBacktestForm />);
+    const select = await screen.findByRole('combobox', { name: 'Strategy' });
+    await within(select).findByRole('option', { name: 'Vol Momentum' });
+
+    const groups = within(select).getAllByRole('group');
+
+    expect(groups.map((group) => group.getAttribute('label'))).toEqual([
+      'My strategies',
+      'Community',
+      'Built-in',
+    ]);
+    expect(within(groups[0]!).getByRole('option', { name: 'Mean Reversion' })).toBeInTheDocument();
+  });
+
+  it('shows the chosen strategy universe under the select', async () => {
+    renderWithProviders(<RunBacktestForm />);
+
+    await pickStrategy('portfolio_1');
+
+    expect(screen.getByText(/AAPL · best Sharpe/)).toBeInTheDocument();
   });
 
   it('bounds the date inputs by the strategy coverage', async () => {
@@ -699,7 +722,7 @@ describe('RunBacktestForm', () => {
     expect(screen.getByLabelText('Slippage')).toHaveValue(8);
     expect(screen.getByLabelText('Commission')).toHaveValue(0.01);
     expect(screen.getByRole('radio', { name: '15m' })).toBeChecked();
-    expect(screen.getByRole('radio', { name: /Mean Reversion/ })).toBeChecked();
+    expect(screen.getByRole('combobox', { name: 'Strategy' })).toHaveDisplayValue('Mean Reversion');
     expect(screen.getByRole('button', { name: 'Remove AAPL' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Remove MSFT' })).toBeInTheDocument();
     expect(screen.queryByText('Saved presets')).not.toBeInTheDocument();

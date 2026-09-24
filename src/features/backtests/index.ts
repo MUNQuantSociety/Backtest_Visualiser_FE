@@ -56,6 +56,7 @@ export {
 } from './run-filters';
 export { RunsTable } from './runs-table';
 export { TradesTable } from './trades-table';
+export { TickerPnlTable } from './ticker-pnl-table';
 export { recordedFillCount } from './trade-report';
 export { RunBacktestDialog } from './run-backtest-dialog';
 export type { OpenRunRequest } from './run-backtest-dialog';

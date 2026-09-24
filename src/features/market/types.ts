@@ -12,6 +12,12 @@ export const tickerIndicatorsSchema = z.object({
   ticker: z.string(),
   /** Last close. */
   last: z.number(),
+  /**
+   * Last close against the session before, as a ratio, e.g. -0.012 for -1.2%.
+   * Optional because the backend and this app deploy separately: a backend
+   * that predates the field must not make the whole payload fail to parse.
+   */
+  change1d: z.number().optional(),
   rsi14: z.number().min(0).max(100),
   /** MACD histogram (12/26/9), in price units. */
   macdHistogram: z.number(),

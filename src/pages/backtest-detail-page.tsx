@@ -15,6 +15,7 @@ import {
   RunStatusBanner,
   runUniverse,
   SentimentGateSummary,
+  TickerPnlTable,
   TradesTable,
   useBacktest,
 } from '@/features/backtests';
@@ -292,6 +293,7 @@ export default function BacktestDetailPage() {
 
       {active === 'trades' ? (
         <>
+          <TickerPnlTable detail={data} isLoading={isPending} />
           <TradesTable detail={data} isLoading={isPending} />
           <ChartContainer
             title="Distribution of profit &amp; loss per trade"

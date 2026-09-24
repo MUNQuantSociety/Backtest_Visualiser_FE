@@ -34,6 +34,7 @@ function indicatorsFor(ticker: string) {
   return {
     ticker,
     last: 100,
+    change1d: -0.012,
     rsi14: 50,
     macdHistogram: 0,
     smaRegime: 'above',
@@ -101,12 +102,36 @@ describe('WatchlistCard', () => {
     expect(watchlistTickers()).toEqual(['Open AAPL', 'Open MSFT']);
   });
 
-  it('shows each ticker’s last close and 20-day change', async () => {
+  it('labels each column above the rows', () => {
+    renderCard();
+
+    const header = screen.getByTestId('watchlist-columns');
+    expect(
+      [...header.querySelectorAll('span')].map((cell) => cell.textContent).filter(Boolean),
+    ).toEqual(['Ticker', 'Strategies', 'Last', 'Day']);
+  });
+
+  it('shows each ticker’s last close and daily change', async () => {
     renderCard();
 
     const row = screen.getByRole('link', { name: 'Open AAPL' });
     await waitFor(() => expect(row).toHaveTextContent('100.00'));
-    expect(row).toHaveTextContent('+5.0%');
+    expect(row).toHaveTextContent('-1.2%');
+    expect(row).not.toHaveTextContent('+5.0%');
+  });
+
+  it('shows a dash for the daily change when the backend does not send it', async () => {
+    const initial = get.getMockImplementation()!;
+    get.mockImplementation(async (url, config) => {
+      const data = (await initial(url, config)) as { items?: Record<string, unknown>[] };
+      if (url !== '/indicators') return data;
+      return { items: (data.items ?? []).map(({ change1d: _dropped, ...row }) => row) };
+    });
+    renderCard();
+
+    const row = screen.getByRole('link', { name: 'Open AAPL' });
+    await waitFor(() => expect(row).toHaveTextContent('100.00'));
+    expect(row).toHaveTextContent(/100\.00\s*—$/);
   });
 
   it('opens the ticker page when a row is clicked', async () => {

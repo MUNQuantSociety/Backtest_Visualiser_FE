@@ -6,7 +6,7 @@ import { paths } from '@/app/paths';
 import { Button } from '@/components/ui/button';
 import { InfoTip } from '@/components/ui/info-tip';
 import { Segmented } from '@/components/ui/segmented';
-import { useEngineIndicators, useStrategies } from '@/features/strategies';
+import { groupByOrigin, useEngineIndicators, useStrategies } from '@/features/strategies';
 import { ApiError } from '@/lib/api-client';
 import { createLogger } from '@/lib/logger';
 import { cn } from '@/lib/utils';
@@ -507,67 +507,44 @@ export function RunBacktestForm({
     <form onSubmit={handleSubmit} noValidate>
       <div className={cn('space-y-[22px]', layout === 'dialog' ? 'px-6 py-5' : '')}>
         <Row label="Strategy" tip={RUN_FORM_TIPS.strategy}>
-          <div role="radiogroup" aria-label="Strategy" className="grid gap-2 sm:grid-cols-2">
-            {runnable.map((strategy) => {
-              const active = strategy.id === strategyKey;
-              return (
-                <label
-                  key={strategy.id}
-                  className={cn(
-                    'flex cursor-pointer items-center gap-3 rounded-md border px-3 py-2.5 transition-colors',
-                    // The chosen card takes the full row, per the spec: it is the one
-                    // whose name and universe must not be cut short.
-                    active
-                      ? 'border-primary bg-selected sm:col-span-2'
-                      : 'border-border hover:bg-muted/60',
-                  )}
-                >
-                  <input
-                    type="radio"
-                    name="strategy"
-                    value={strategy.id}
-                    checked={active}
-                    onChange={() => {
-                      chooseStrategy(strategy.id);
-                    }}
-                    className="sr-only"
-                  />
-                  <span
-                    aria-hidden
-                    className={cn(
-                      'flex size-3.5 shrink-0 items-center justify-center rounded-full border',
-                      active ? 'border-primary' : 'border-[var(--border-strong)]',
-                    )}
-                  >
-                    {active ? <span className="size-2 rounded-full bg-primary" /> : null}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span
-                      className={cn(
-                        'block truncate text-[13px] font-medium',
-                        active && 'text-selected-foreground',
-                      )}
-                    >
-                      {strategy.name}
-                    </span>
-                    <span className="tabular block truncate text-[11px] text-muted-foreground">
-                      {strategy.universe.join(', ')}
-                    </span>
-                  </span>
-                  <span className="tabular shrink-0 text-[11px] text-muted-foreground">
-                    best Sharpe{' '}
-                    {strategy.bestSharpe === null ? '—' : formatNumber(strategy.bestSharpe)}
-                  </span>
-                </label>
-              );
-            })}
-            {strategies.isPending ? (
-              <p className="text-xs text-muted-foreground">Loading strategies…</p>
-            ) : null}
-            {!strategies.isPending && runnable.length === 0 ? (
-              <p className="text-xs text-muted-foreground">No active strategies to run.</p>
-            ) : null}
-          </div>
+          {/*
+           * A grouped native select rather than one card per strategy: the
+           * catalogue grows with every member's uploads, and a card grid had
+           * no ceiling. The select is keyboard- and screen-reader-native and
+           * the optgroups carry the mine / community / built-in split.
+           */}
+          <select
+            aria-label="Strategy"
+            value={chosen?.id ?? ''}
+            disabled={runnable.length === 0}
+            onChange={(event) => {
+              chooseStrategy(event.target.value);
+            }}
+            className={cn(fieldClass, 'cursor-pointer disabled:cursor-not-allowed')}
+          >
+            <option value="" disabled>
+              {strategies.isPending
+                ? 'Loading strategies…'
+                : runnable.length === 0
+                  ? 'No active strategies to run'
+                  : 'Choose a strategy'}
+            </option>
+            {groupByOrigin(runnable).map((group) => (
+              <optgroup key={group.origin} label={group.label}>
+                {group.items.map((strategy) => (
+                  <option key={strategy.id} value={strategy.id}>
+                    {strategy.name}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+          {chosen ? (
+            <p className="tabular mt-1.5 truncate text-[11px] text-muted-foreground">
+              {chosen.universe.join(', ')} · best Sharpe{' '}
+              {chosen.bestSharpe === null ? '—' : formatNumber(chosen.bestSharpe)}
+            </p>
+          ) : null}
         </Row>
 
         <Row label="Universe" tip={RUN_FORM_TIPS.universe}>
@@ -1047,7 +1024,7 @@ export function RunBacktestForm({
                   Nothing saved yet. Use Save as preset to capture the current run.
                 </p>
               ) : (
-                <ul className="space-y-1.5">
+                <ul aria-label="Saved presets" className="list-scroll space-y-1.5 pr-1">
                   {savedPresets.map((preset) => {
                     const strategyName = runnable.find(
                       (strategy) => strategy.id === preset.config.strategyKey,

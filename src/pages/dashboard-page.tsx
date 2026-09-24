@@ -495,16 +495,23 @@ export default function DashboardPage() {
               <SentimentGauge label="Book sentiment" score={bookSentiment} />
             ) : null}
           </CardHeader>
-          <CardContent className="overflow-x-auto">
+          <CardContent>
             {strategiesUnavailable || indicators.error ? (
               <p className="py-6 text-center text-sm text-muted-foreground">
                 Universe indicators unavailable.
               </p>
             ) : (
-              <IndicatorsTable
-                rows={indicators.data ?? []}
-                isLoading={strategiesQuery.isPending || indicators.isLoading}
-              />
+              <div
+                className="report-table-scroll"
+                role="region"
+                aria-label="Universe indicator rows"
+                tabIndex={0}
+              >
+                <IndicatorsTable
+                  rows={indicators.data ?? []}
+                  isLoading={strategiesQuery.isPending || indicators.isLoading}
+                />
+              </div>
             )}
           </CardContent>
         </Card>
@@ -545,13 +552,20 @@ export default function DashboardPage() {
             View all backtests →
           </Link>
         </CardHeader>
-        <CardContent className="overflow-x-auto">
+        <CardContent>
           {runsUnavailable ? (
             <p className="py-6 text-center text-sm text-muted-foreground">
               Run history unavailable. Use Retry run history above to reload it.
             </p>
           ) : (
-            <RecentRunsTable runs={tableRuns} isLoading={runsQuery.isPending} />
+            <div
+              className="report-table-scroll"
+              role="region"
+              aria-label="Saved runs rows"
+              tabIndex={0}
+            >
+              <RecentRunsTable runs={tableRuns} isLoading={runsQuery.isPending} />
+            </div>
           )}
         </CardContent>
       </Card>

@@ -37,7 +37,12 @@ export function CorrelationMatrix({ portfolioId }: { portfolioId: string | undef
   }
 
   return (
-    <div className="overflow-x-auto">
+    <div
+      className="report-table-scroll"
+      role="region"
+      aria-label="Asset correlation matrix"
+      tabIndex={0}
+    >
       <table className="text-sm">
         <caption className="pb-3 text-left text-xs text-muted-foreground">
           Pairwise return correlation over {formatNumber(data.lookbackDays, 0)} days. Red is

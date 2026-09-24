@@ -5,7 +5,13 @@ export { NewStrategyDialog } from './components/new-strategy-dialog';
 export { StrategyEditor } from './components/strategy-editor';
 export { StrategyPicker } from './components/strategy-picker';
 export { ValidationNotifications } from './components/validation-notifications';
-export { isStrategyFilter, strategyColorIndex, type StrategyFilter } from './strategy-filter';
+export {
+  groupByOrigin,
+  isStrategyFilter,
+  strategyColorIndex,
+  type OriginGroup,
+  type StrategyFilter,
+} from './strategy-filter';
 export {
   checkStrategy,
   fetchStrategies,
@@ -31,6 +37,7 @@ export type {
   ParameterSpec,
   Strategy,
   StrategyCheckResult,
+  StrategyOrigin,
   StrategyStatus,
   StrategyTemplate,
   StrategySubmission,

@@ -40,7 +40,8 @@ export function RecentRunsTable({
   return (
     <div className="min-w-[760px]">
       <div
-        className="tabular grid gap-2 border-b pb-2 text-[10px] font-medium tracking-[0.06em] text-muted-foreground uppercase"
+        // Sticky so the columns stay labelled while the capped table scrolls.
+        className="tabular sticky top-0 z-10 grid gap-2 border-b bg-card pb-2 text-[10px] font-medium tracking-[0.06em] text-muted-foreground uppercase"
         style={{ gridTemplateColumns: COLUMNS }}
       >
         <span>Run</span>

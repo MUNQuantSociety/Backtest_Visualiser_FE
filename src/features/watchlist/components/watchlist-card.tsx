@@ -16,6 +16,9 @@ import { normaliseTicker, useWatchlist } from '../watchlist-store';
 
 const log = createLogger('watchlist');
 
+/** Shared by the heading row and every ticker row, so the labels sit over their columns. */
+const ROW_COLUMNS = '52px minmax(0,1fr) 64px 56px';
+
 const toneClass = {
   up: 'text-[var(--profit)]',
   down: 'text-[var(--loss)]',
@@ -78,6 +81,30 @@ export function WatchlistCard({ universe, palette, isLoading, isUnavailable }: W
           }}
         />
 
+        {watchlist.tickers.length > 0 ? (
+          // Visual only: each row's link is named for its ticker, and the
+          // remove button for what it removes.
+          <div
+            data-testid="watchlist-columns"
+            aria-hidden
+            className="flex items-center gap-1 border-b pb-1.5"
+          >
+            <div
+              className="tabular grid min-w-0 flex-1 gap-2 px-1.5 text-[10px] font-medium tracking-[0.06em] text-muted-foreground uppercase"
+              style={{ gridTemplateColumns: ROW_COLUMNS }}
+            >
+              <span>Ticker</span>
+              <span>Strategies</span>
+              <span className="text-right">Last</span>
+              <span className="text-right" title="Change on the last session">
+                Day
+              </span>
+            </div>
+            {/* Holds the remove button's column. */}
+            <span className="w-7 shrink-0" />
+          </div>
+        ) : null}
+
         <ul aria-label="Watchlist" className="space-y-0.5">
           {watchlist.tickers.map((ticker) => (
             <WatchlistRow
@@ -125,8 +152,8 @@ function WatchlistRow({
   indicators: TickerIndicators | undefined;
   onRemove: () => void;
 }) {
-  const momentum = indicators?.momentum20d;
-  const tone = momentum === undefined || momentum === 0 ? 'flat' : momentum > 0 ? 'up' : 'down';
+  const dayChange = indicators?.change1d;
+  const tone = dayChange === undefined || dayChange === 0 ? 'flat' : dayChange > 0 ? 'up' : 'down';
 
   return (
     <li className="flex items-center gap-1">
@@ -136,7 +163,7 @@ function WatchlistRow({
         to={paths.tickerDetail(ticker)}
         aria-label={`Open ${ticker}`}
         className="grid min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1 text-xs transition-colors hover:bg-accent/60 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-        style={{ gridTemplateColumns: '52px minmax(0,1fr) 64px 56px' }}
+        style={{ gridTemplateColumns: ROW_COLUMNS }}
       >
         <span className="tabular font-medium">{ticker}</span>
         <span
@@ -166,9 +193,9 @@ function WatchlistRow({
           {indicators ? formatNumber(indicators.last) : '—'}
         </span>
         <span className={cn('tabular text-right', toneClass[tone])}>
-          {momentum === undefined
+          {dayChange === undefined
             ? '—'
-            : formatSigned(momentum, (value) => formatPercent(value, 1))}
+            : formatSigned(dayChange, (value) => formatPercent(value, 1))}
         </span>
       </Link>
       <Button

@@ -13,6 +13,9 @@ export const paths = {
   portfolioDetail: (id: string) => `/live/portfolios/${id}`,
   log: '/live/log',
   settings: '/live/settings',
+  /* Tools */
+  stockScreener: '/tools/screener',
+  financialCalculator: '/tools/calculator',
 
   /* Auth */
   login: '/auth/login',

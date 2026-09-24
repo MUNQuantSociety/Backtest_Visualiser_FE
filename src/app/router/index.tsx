@@ -20,6 +20,9 @@ export const routePatterns = {
   portfolioDetail: '/live/portfolios/:portfolioId',
   log: '/live/log',
   settings: '/live/settings',
+
+  stockScreener: '/tools/screener',
+  financialCalculator: '/tools/calculator',
 } as const;
 
 export const router = createBrowserRouter([
@@ -100,6 +103,20 @@ export const router = createBrowserRouter([
         lazy: async () => {
           const SettingsPage = await import('@/pages/settings-page');
           return { Component: SettingsPage.default };
+        },
+      },
+      {
+        path: routePatterns.stockScreener,
+        lazy: async () => {
+          const StockScreenerPage = await import('@/pages/stock-screener-page');
+          return { Component: StockScreenerPage.default };
+        },
+      },
+      {
+        path: routePatterns.financialCalculator,
+        lazy: async () => {
+          const FinancialCalculatorPage = await import('@/pages/financial-calculator-page');
+          return { Component: FinancialCalculatorPage.default };
         },
       },
     ],

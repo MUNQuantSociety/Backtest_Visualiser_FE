@@ -64,6 +64,7 @@ describe('dashboard data prefetch', () => {
         lastRunAt: '2026-01-01',
         validationState: 'active',
         validationRunId: null,
+        origin: 'builtin' as const,
         indicators: [],
       },
     ];

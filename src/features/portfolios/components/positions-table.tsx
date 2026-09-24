@@ -25,12 +25,12 @@ export function PositionsTable({ positions, isLoading = false }: PositionsTableP
   }
 
   return (
-    // Wide tables scroll inside their own container; the page itself must never
-    // scroll sideways.
-    <div className="overflow-x-auto">
+    // Wide or long tables scroll inside their own capped container; the page
+    // itself must never scroll sideways.
+    <div className="report-table-scroll" role="region" aria-label="Open positions" tabIndex={0}>
       <table className="w-full text-sm">
         <caption className="sr-only">Open positions</caption>
-        <thead>
+        <thead className="sticky top-0 z-10 bg-card">
           <tr className="border-b text-xs text-muted-foreground">
             <th scope="col" className="py-2 pr-4 text-left font-medium">
               Ticker

@@ -42,11 +42,13 @@ export function fixtureIndicators(tickers: readonly string[]): TickerIndicators[
     const last = round(20 + random() * 480, 2);
     const rsi14 = round(22 + random() * 58, 1);
     const macdHistogram = round((random() - 0.45) * last * 0.012, 2);
+    const change1d = round((random() - 0.45) * 0.04, 4);
     const momentum20d = round((random() - 0.4) * 0.16, 4);
     const sentiment7d = round((random() - 0.45) * 1.2, 2);
     return {
       ticker,
       last,
+      change1d,
       rsi14,
       macdHistogram,
       smaRegime: random() < 0.62 ? 'above' : 'below',

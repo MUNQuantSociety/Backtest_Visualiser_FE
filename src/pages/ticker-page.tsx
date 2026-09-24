@@ -185,13 +185,20 @@ function TickerDetail({ ticker }: { ticker: string }) {
             Runs on {ticker} alone, and runs of the strategies that trade it.
           </CardDescription>
         </CardHeader>
-        <CardContent className="overflow-x-auto">
+        <CardContent>
           {runsQuery.isError && runsQuery.data === undefined ? (
             <p className="py-6 text-center text-sm text-muted-foreground">
               Run history unavailable.
             </p>
           ) : (
-            <RecentRunsTable runs={runs} isLoading={runsQuery.isPending} />
+            <div
+              className="report-table-scroll"
+              role="region"
+              aria-label={`Runs on ${ticker} rows`}
+              tabIndex={0}
+            >
+              <RecentRunsTable runs={runs} isLoading={runsQuery.isPending} />
+            </div>
           )}
         </CardContent>
       </Card>

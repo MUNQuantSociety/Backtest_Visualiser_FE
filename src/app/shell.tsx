@@ -1,15 +1,16 @@
 import {
-  Activity,
-  Briefcase,
+  Calculator,
+  ExternalLink,
   Eye,
   EyeOff,
+  Filter,
   FlaskConical,
   GitCompareArrows,
+  Globe,
   LayoutDashboard,
   ListChecks,
   LogOut,
   Menu,
-  ScrollText,
   Settings,
   type LucideIcon,
 } from 'lucide-react';
@@ -21,7 +22,7 @@ import { useAuthCtx } from '@/app/providers/auth-provider.context';
 import logo from '@/assets/logo_dark.svg';
 import { HelpMenu, HelpMenuItem } from '@/components/common/help-menu';
 import { Button } from '@/components/ui/button';
-import { APP_NAME, PRODUCT_NAMES } from '@/config/constants';
+import { APP_NAME, PRODUCT_NAMES, SOCIETY_WEBSITE_URL } from '@/config/constants';
 import { env } from '@/config/env';
 import {
   PendingRunWatcher,
@@ -33,7 +34,8 @@ import { authIsConfigured } from '@/lib/auth-session';
 import { useHideDemoPanels, useSetHideDemoPanels } from '@/lib/ui-store';
 import { cn } from '@/lib/utils';
 
-interface NavItem {
+interface RouteNavItem {
+  kind: 'route';
   to: string;
   label: string;
   icon: LucideIcon;
@@ -41,36 +43,101 @@ interface NavItem {
   end: boolean;
 }
 
+/** A site outside the app. Opens in a new tab and is never "active". */
+interface ExternalNavItem {
+  kind: 'external';
+  href: string;
+  label: string;
+  icon: LucideIcon;
+}
+
+type NavItem = RouteNavItem | ExternalNavItem;
+
 interface NavSection {
   heading: string;
   items: readonly NavItem[];
 }
 
 /**
- * One shell, two products. The section headings are the whole point: a member
- * looking at a drawdown chart must know instantly whether it came from a
- * simulation or from real fills, and grouped navigation is the cheapest place
- * to establish that.
+ * The backtest product, then general tools. The live-trading pages (Live
+ * Trading, Portfolios, Log) are off the menu for now; their routes still
+ * resolve, so a bookmarked URL keeps working.
  */
 const sections: readonly NavSection[] = [
   {
     heading: PRODUCT_NAMES.backtests,
     items: [
-      { to: paths.dashboard, label: 'Dashboard', icon: LayoutDashboard, end: true },
-      { to: paths.backtests, label: 'Backtests', icon: FlaskConical, end: false },
-      { to: paths.compare, label: 'Compare', icon: GitCompareArrows, end: false },
+      { kind: 'route', to: paths.dashboard, label: 'Dashboard', icon: LayoutDashboard, end: true },
+      { kind: 'route', to: paths.backtests, label: 'Backtests', icon: FlaskConical, end: false },
+      { kind: 'route', to: paths.compare, label: 'Compare', icon: GitCompareArrows, end: false },
     ],
   },
   {
-    heading: PRODUCT_NAMES.live,
+    heading: 'Tools',
     items: [
-      { to: paths.live, label: 'Live Trading', icon: Activity, end: true },
-      { to: paths.portfolios, label: 'Portfolios', icon: Briefcase, end: false },
-      { to: paths.log, label: 'Log', icon: ScrollText, end: false },
-      { to: paths.settings, label: 'Settings', icon: Settings, end: false },
+      { kind: 'route', to: paths.stockScreener, label: 'Stock Screener', icon: Filter, end: false },
+      {
+        kind: 'route',
+        to: paths.financialCalculator,
+        label: 'Financial Calculator',
+        icon: Calculator,
+        end: false,
+      },
+      { kind: 'external', href: SOCIETY_WEBSITE_URL, label: 'munquantsociety.com', icon: Globe },
+      { kind: 'route', to: paths.settings, label: 'Settings', icon: Settings, end: false },
     ],
   },
 ];
+
+interface NavEntryProps {
+  item: NavItem;
+  /** Classes for the link; external items are always passed `false`. */
+  className: (isActive: boolean) => string;
+  title?: string | undefined;
+  /** Whether to show the trailing "opens elsewhere" glyph on external items. */
+  showExternalGlyph: boolean;
+}
+
+/**
+ * One nav link, shared by `Sidebar` and `TopNav` so a route and an external
+ * site render the same way in both.
+ */
+function NavEntry({ item, className, title, showExternalGlyph }: NavEntryProps) {
+  // The label is always rendered, merely clipped by a collapsed rail, so
+  // screen readers and the accessibility tree always have it.
+  const { label, icon: Icon } = item;
+  if (item.kind === 'external') {
+    return (
+      <a
+        href={item.href}
+        target="_blank"
+        // The new tab must not get `window.opener`, and the society site has
+        // no need of this app's URL as a referrer.
+        rel="noopener noreferrer"
+        title={title}
+        className={className(false)}
+      >
+        <Icon className="size-4 shrink-0" aria-hidden />
+        {label}
+        {showExternalGlyph ? (
+          <ExternalLink className="ml-auto size-3 shrink-0 opacity-60" aria-hidden />
+        ) : null}
+        <span className="sr-only"> (opens in a new tab)</span>
+      </a>
+    );
+  }
+  return (
+    <NavLink
+      to={item.to}
+      end={item.end}
+      title={title}
+      className={({ isActive }) => className(isActive)}
+    >
+      <Icon className="size-4 shrink-0" aria-hidden />
+      {label}
+    </NavLink>
+  );
+}
 
 /**
  * The rail's open state, remembered between visits.
@@ -327,12 +394,12 @@ function TopNav() {
       <nav aria-label="Main" className="overflow-x-auto">
         <ul className="flex w-max items-center gap-1 px-2 py-2">
           {sections.flatMap((section) =>
-            section.items.map(({ to, label, icon: Icon, end }) => (
-              <li key={to}>
-                <NavLink
-                  to={to}
-                  end={end}
-                  className={({ isActive }) =>
+            section.items.map((item) => (
+              <li key={item.label}>
+                <NavEntry
+                  item={item}
+                  showExternalGlyph
+                  className={(isActive) =>
                     cn(
                       'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm whitespace-nowrap transition-colors',
                       isActive
@@ -340,10 +407,7 @@ function TopNav() {
                         : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground',
                     )
                   }
-                >
-                  <Icon className="size-4" aria-hidden />
-                  {label}
-                </NavLink>
+                />
               </li>
             )),
           )}
@@ -401,8 +465,7 @@ function Sidebar({ expanded }: SidebarProps) {
              * shift every link down the instant the pointer arrived, so the
              * item under the cursor would not be the one that got clicked.
              * Collapsed, the blank row it leaves is what separates the two
-             * groups — and the grouping matters here, since it is the line
-             * between simulated and real money.
+             * groups.
              */}
             <p
               className={cn(
@@ -413,11 +476,13 @@ function Sidebar({ expanded }: SidebarProps) {
               {section.heading}
             </p>
             <ul className="space-y-1">
-              {section.items.map(({ to, label, icon: Icon, end }) => (
-                <li key={to}>
-                  <NavLink
-                    to={to}
-                    end={end}
+              {section.items.map((item) => (
+                <li key={item.label}>
+                  <NavEntry
+                    item={item}
+                    // Collapsed, a trailing glyph would push the icon off the
+                    // rail's centre line.
+                    showExternalGlyph={expanded}
                     /*
                      * Only while collapsed, and only as a hint. Hovering used
                      * to widen the rail, which is how you learned what an icon
@@ -426,8 +491,8 @@ function Sidebar({ expanded }: SidebarProps) {
                      * the link text below, which stays in the accessibility
                      * tree at both widths.
                      */
-                    title={expanded ? undefined : label}
-                    className={({ isActive }) =>
+                    title={expanded ? undefined : item.label}
+                    className={(isActive) =>
                       cn(
                         // `whitespace-nowrap` stops labels wrapping to two
                         // lines while the rail is mid-transition.
@@ -441,12 +506,7 @@ function Sidebar({ expanded }: SidebarProps) {
                           : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground',
                       )
                     }
-                  >
-                    <Icon className="size-4 shrink-0" aria-hidden />
-                    {/* Always rendered, merely clipped — so screen readers
-                          and the accessibility tree always have the label. */}
-                    {label}
-                  </NavLink>
+                  />
                 </li>
               ))}
             </ul>

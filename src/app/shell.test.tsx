@@ -86,6 +86,50 @@ describe('Backtests navigation', () => {
   });
 });
 
+describe('Tools navigation', () => {
+  function renderShell() {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <AppShell>Overview</AppShell>
+      </MemoryRouter>,
+    );
+  }
+
+  it.each([
+    ['Stock Screener', '/tools/screener'],
+    ['Financial Calculator', '/tools/calculator'],
+    ['Settings', '/live/settings'],
+  ])('links %s on desktop and mobile', (label, href) => {
+    renderShell();
+    for (const nav of screen.getAllByRole('navigation', { name: 'Main' })) {
+      expect(within(nav).getByRole('link', { name: label })).toHaveAttribute('href', href);
+    }
+  });
+
+  it.each(['Live Trading', 'Portfolios', 'Log'])('hides %s from the menu', (label) => {
+    renderShell();
+    for (const nav of screen.getAllByRole('navigation', { name: 'Main' })) {
+      expect(within(nav).queryByRole('link', { name: label })).not.toBeInTheDocument();
+    }
+  });
+
+  it('opens the society website in a new tab without handing it the opener', () => {
+    renderShell();
+    for (const nav of screen.getAllByRole('navigation', { name: 'Main' })) {
+      const link = within(nav).getByRole('link', { name: /munquantsociety\.com/ });
+      expect(link).toHaveAttribute('href', 'https://munquantsociety.com');
+      expect(link).toHaveAttribute('target', '_blank');
+      expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+    }
+  });
+
+  it('heads the section Tools rather than MQS Master', () => {
+    renderShell();
+    expect(screen.getByText('Tools')).toBeInTheDocument();
+    expect(screen.queryByText('MQS Master')).not.toBeInTheDocument();
+  });
+});
+
 describe('Demo data panels', () => {
   beforeEach(() => {
     useUiStore.setState({ hideDemoPanels: false });

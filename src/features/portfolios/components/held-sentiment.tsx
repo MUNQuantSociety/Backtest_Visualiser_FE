@@ -28,7 +28,8 @@ export function HeldSentiment({ rows, isLoading = false }: HeldSentimentProps) {
   }
 
   return (
-    <div>
+    // One row per held name, so it grows with the book; capped and scrolled.
+    <div className="list-scroll pr-1" role="region" aria-label="Held names rows" tabIndex={0}>
       {rows.map((row) => {
         const against = row.side === 'long' ? row.sentiment7d < -0.2 : row.sentiment7d > 0.2;
         return (
