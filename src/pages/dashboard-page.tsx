@@ -15,6 +15,7 @@ import {
   benchmarkCurve,
   bookCurve,
   dashboardEndDate,
+  mergeRunRows,
   RecentRunsTable,
   returnCorrelation,
   RunBacktestDialog,
@@ -22,6 +23,7 @@ import {
   universeRows,
   useBacktestEquities,
   useAllBacktests,
+  usePendingRunRows,
   type BookStrategy,
 } from '@/features/backtests';
 import {
@@ -78,6 +80,10 @@ export default function DashboardPage() {
   const strategiesQuery = useStrategies();
   const runsQuery = useAllBacktests();
   const runs = useMemo(() => runsQuery.data?.items ?? [], [runsQuery.data]);
+  // Only the table shows runs still in flight; every figure on the book is
+  // built from saved reports, and an unfinished run has none yet.
+  const pendingRows = usePendingRunRows();
+  const tableRuns = useMemo(() => mergeRunRows(runs, pendingRows), [runs, pendingRows]);
 
   const strategies = useMemo<BookStrategy[]>(
     () =>
@@ -596,7 +602,7 @@ export default function DashboardPage() {
               Run history unavailable. Use Retry run history above to reload it.
             </p>
           ) : (
-            <RecentRunsTable runs={runs} isLoading={runsQuery.isPending} />
+            <RecentRunsTable runs={tableRuns} isLoading={runsQuery.isPending} />
           )}
         </CardContent>
       </Card>

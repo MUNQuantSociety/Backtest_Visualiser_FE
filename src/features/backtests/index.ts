@@ -62,6 +62,8 @@ export type { OpenRunRequest } from './run-backtest-dialog';
 export { RunBacktestForm } from './run-backtest-form';
 export { backtestDetailSchema } from './types';
 export { RunStatusBanner } from './run-status';
+export { mergeRunRows } from './pending-runs';
+export { PendingRunWatcher, usePendingRunRows, usePendingRuns } from './use-pending-runs';
 export { NoTradesExplanation } from './no-trades-explanation';
 export {
   fetchBacktests,

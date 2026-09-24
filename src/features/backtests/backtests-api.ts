@@ -5,15 +5,14 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
-import { useEffect, useRef } from 'react';
 
 import { env } from '@/config/env';
-import { strategyKeys } from '@/features/strategies/keys';
 import { ApiError, apiClient } from '@/lib/api-client';
 import { saveBlob } from '@/lib/download';
 import { createLogger } from '@/lib/logger';
 
 import { fixtureBacktest, fixtureBacktests } from './fixtures';
+import { rememberPendingRun } from './pending-runs';
 import {
   backtestDetailSchema,
   backtestListResponseSchema,
@@ -362,7 +361,7 @@ export const backtestKeys = {
  * honest, not about catching the finish instantly. Anything much faster would
  * be polling a database for no added information.
  */
-const IN_FLIGHT_POLL_MS = 3_000;
+export const IN_FLIGHT_POLL_MS = 3_000;
 
 export function useAllBacktests() {
   return useQuery({
@@ -385,6 +384,9 @@ export function useBacktests(filters: BacktestFilters = {}) {
     refetchOnMount: 'always',
     // Only while something on this page can still change. A list of finished
     // runs is static, and polling it would be a request per interval forever.
+    // Today this never arms: the backend lists a run only once it has finished,
+    // so a page never holds one in flight. Runs started here are followed by
+    // `usePendingRuns` instead; this stays for a backend that lists them all.
     refetchInterval: (query) =>
       !env.useFixtures &&
       query.state.status !== 'error' &&
@@ -396,8 +398,7 @@ export function useBacktests(filters: BacktestFilters = {}) {
 }
 
 export function useBacktest(id: string | undefined) {
-  const queryClient = useQueryClient();
-  const query = useQuery({
+  return useQuery({
     queryKey: backtestKeys.detail(id ?? ''),
     queryFn: ({ signal }) => fetchBacktest(id ?? '', signal),
     enabled: Boolean(id),
@@ -423,31 +424,6 @@ export function useBacktest(id: string | undefined) {
         : false,
     refetchIntervalInBackground: false,
   });
-
-  /*
-   * The detail poll is what notices a run finishing while its page is open.
-   * The lists only poll themselves while they hold an unfinished run, so a
-   * page that never saw this one start would keep it out (or show it running)
-   * until it went stale. Only the in-flight → finished transition of the
-   * *same* run counts: opening an old completed run must not refetch every
-   * run history there is, and neither must switching this hook from a running
-   * run to a cached finished one.
-   */
-  const status = query.data?.status;
-  const previous = useRef({ id, status });
-  useEffect(() => {
-    const before = previous.current;
-    previous.current = { id, status };
-    if (before.id !== id || before.status === undefined || status === undefined) return;
-    if (isInFlight(before.status) && !isInFlight(status)) {
-      void queryClient.invalidateQueries({ queryKey: backtestKeys.lists() });
-      // The catalogue carries each strategy's run count, best Sharpe and last
-      // run; a finished run moves all three.
-      void queryClient.invalidateQueries({ queryKey: strategyKeys.lists() });
-    }
-  }, [queryClient, id, status]);
-
-  return query;
 }
 
 /** Coverage for one strategy. Disabled until a strategy is actually chosen. */
@@ -473,6 +449,9 @@ export function useSubmitBacktest() {
       // already worth fetching: the user is about to watch it run.
       queryClient.setQueryData(backtestKeys.detail(summary.id), undefined);
       void queryClient.invalidateQueries({ queryKey: backtestKeys.lists() });
+      // The list will not show it until it finishes; `usePendingRuns` shows
+      // it as queued now and follows it there from wherever the person goes.
+      rememberPendingRun(summary);
     },
   });
 }

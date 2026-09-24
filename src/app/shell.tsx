@@ -21,6 +21,7 @@ import logo from '@/assets/logo_dark.svg';
 import { Button } from '@/components/ui/button';
 import { APP_NAME, PRODUCT_NAMES } from '@/config/constants';
 import { env } from '@/config/env';
+import { PendingRunWatcher } from '@/features/backtests';
 import { ValidationNotifications } from '@/features/strategies';
 import { authIsConfigured } from '@/lib/auth-session';
 import { useHideDemoPanels, useSetHideDemoPanels } from '@/lib/ui-store';
@@ -143,6 +144,10 @@ export function AppShell({ children }: { children: ReactNode }) {
                   editor that started it, and a failure has to be visible
                   wherever the author happens to be when it lands. */}
               <ValidationNotifications />
+              {/* Likewise a backtest: the run history lists a run only once
+                  it has finished, so someone has to keep watching the ones
+                  started here after the person has left its page. */}
+              <PendingRunWatcher />
               {children}
             </main>
           </div>

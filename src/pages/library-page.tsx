@@ -14,6 +14,7 @@ import {
   isPageSize,
   isRunSort,
   isStatusFilter,
+  mergeRunRows,
   PAGE_SIZES,
   RUN_SORTS,
   RunBacktestDialog,
@@ -21,6 +22,7 @@ import {
   useBacktest,
   useBacktests,
   useDeleteBacktest,
+  usePendingRunRows,
   viewRuns,
   type OpenRunRequest,
   type PageSize,
@@ -100,13 +102,18 @@ export default function LibraryPage() {
   // own trigger, on the strategy the menu belongs to.
   const [runRequest, setRunRequest] = useState<OpenRunRequest>({ id: 0 });
   const runsQuery = useBacktests();
-  const allRuns = useMemo(() => runsQuery.data?.items ?? [], [runsQuery.data]);
+  const savedRuns = useMemo(() => runsQuery.data?.items ?? [], [runsQuery.data]);
+  // The backend lists a run only once its report is saved; runs started here
+  // show as queued, then running, until it does.
+  const pendingRows = usePendingRunRows();
+  const allRuns = useMemo(() => mergeRunRows(savedRuns, pendingRows), [savedRuns, pendingRows]);
   // Catalogue totals can include other accounts. This hub describes only the
   // runs returned for the current user, including the strategy picker stats.
+  // Saved runs only, like the header: a run still in flight has not been run.
   const strategies = useMemo(
     () =>
       mergeDrafts(strategiesQuery.data ?? [], draftStrategies).map((strategy) => {
-        const runs = allRuns.filter((run) => run.strategyId === strategy.id);
+        const runs = savedRuns.filter((run) => run.strategyId === strategy.id);
         const finished = runs.filter((run) => run.status === 'completed');
         return {
           ...strategy,
@@ -119,7 +126,7 @@ export default function LibraryPage() {
           ),
         };
       }),
-    [strategiesQuery.data, draftStrategies, allRuns],
+    [strategiesQuery.data, draftStrategies, savedRuns],
   );
 
   const filterParam = searchParams.get('filter');
@@ -166,7 +173,10 @@ export default function LibraryPage() {
   const strategyRuns =
     selectedId === null ? allRuns : allRuns.filter((run) => run.strategyId === selectedId);
   const bestRun = bestRunByStrategy(strategyRuns).get(selectedId ?? '');
-  const latestRun = [...strategyRuns].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+  // A run still in flight has no tearsheet to feature yet.
+  const latestRun = strategyRuns
+    .filter((run) => run.status === 'completed')
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
   const featured = strategy ? (view === 'latest' ? latestRun : bestRun) : undefined;
   const detail = useBacktest(featured?.id);
 
@@ -176,8 +186,10 @@ export default function LibraryPage() {
   const toggleComparison = useUiStore((state) => state.toggleComparison);
   const clearComparison = useUiStore((state) => state.clearComparison);
   const remove = useDeleteBacktest();
+  // Compare and delete act on saved runs; the table does not let an in-flight
+  // one be ticked, and this keeps a stale id from reaching either.
   const selectedRuns = selectedIds.flatMap((id) => {
-    const run = allRuns.find((r) => r.id === id);
+    const run = savedRuns.find((r) => r.id === id);
     return run ? [run] : [];
   });
 
@@ -235,7 +247,7 @@ export default function LibraryPage() {
     <>
       <PageHeader
         title="Backtests"
-        description={`${String(strategies.length)} strategies · ${String(allRuns.length)} saved runs. Open a result, run a backtest, or create and upload a strategy.`}
+        description={`${String(strategies.length)} strategies · ${String(savedRuns.length)} saved runs. Open a result, run a backtest, or create and upload a strategy.`}
         actions={
           <>
             <label className="relative">

@@ -88,9 +88,12 @@ export function RunsTable({ runs, isLoading, selectedIds, onToggle }: RunsTableP
                 event.stopPropagation();
               }}
             >
+              {/* Selection feeds compare and delete. A run in flight has no
+                  report to compare, and deleting one cancels it instead. */}
               <input
                 type="checkbox"
                 checked={checked}
+                disabled={inFlight}
                 aria-label={`Select ${run.name}`}
                 onChange={() => {
                   onToggle(run.id);
@@ -104,6 +107,7 @@ export function RunsTable({ runs, isLoading, selectedIds, onToggle }: RunsTableP
                   checked
                     ? 'border-primary bg-primary text-primary-foreground'
                     : 'border-[var(--border-strong)]',
+                  inFlight && 'opacity-40',
                 )}
               >
                 {checked ? <Check className="size-2.5" strokeWidth={3} /> : null}

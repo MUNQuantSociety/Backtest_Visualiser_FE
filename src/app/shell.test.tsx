@@ -20,6 +20,9 @@ vi.mock('@/app/providers/auth-provider.context', () => ({
 vi.mock('@/features/strategies', () => ({
   ValidationNotifications: () => null,
 }));
+vi.mock('@/features/backtests', () => ({
+  PendingRunWatcher: () => null,
+}));
 
 // Mutable so a single test can stand in for a production build. Hoisted above
 // the vi.mock factory it feeds. The real env module is exercised by
