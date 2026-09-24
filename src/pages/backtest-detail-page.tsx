@@ -13,6 +13,7 @@ import {
   ReportExports,
   RunBacktestDialog,
   RunStatusBanner,
+  SentimentGateSummary,
   TradesTable,
   useBacktest,
 } from '@/features/backtests';
@@ -147,6 +148,7 @@ export default function BacktestDetailPage() {
           before readers interpret empty panels or unavailable metrics. */}
       {data ? <RunStatusBanner run={data} /> : null}
       {data ? <NoTradesExplanation run={data} /> : null}
+      {data ? <SentimentGateSummary run={data} /> : null}
       {data?.status === 'completed' && data.reportMetadata?.execution?.fillCount === 0 ? (
         <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
           Explore another strategy or run a different date window.

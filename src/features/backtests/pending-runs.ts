@@ -9,23 +9,26 @@ import { backtestSummarySchema, type BacktestSummary } from './types';
  * `GET /backtests/{id}` and nowhere else until it completes. So the run
  * history cannot poll itself into showing a new run — it never holds anything
  * in flight — and the detail page, which does poll, is gone the moment the
- * person navigates away. Someone has to keep watching, and the only party that
- * knows which runs to watch is the browser that submitted them.
+ * person navigates away. Someone has to keep watching: the browser that
+ * submitted a run records it here, and runs started in another browser are
+ * added when `GET /backtests/active` reports them.
  *
  * Each entry keeps the summary the backend accepted the run with, so the run
  * history can show a `queued` row before the first poll answers.
  *
  * `localStorage`, like the strategy submissions store, so a reload mid-run
  * resumes the watch instead of losing the row until the next reload.
+ *
+ * Entries do not expire by age. A backtest has no run-time limit, and the
+ * backend already answers 404 for any run it has lost — jobs do not survive an
+ * API restart — which ends the watch. An age cutoff could only drop a run that
+ * is still going.
  */
 
 const STORAGE_KEY = 'mqs.pending-runs';
 
 /** Fired on `window` after every write, so same-tab subscribers hear about it. */
 export const PENDING_RUNS_CHANGED_EVENT = 'mqs.pending-runs-changed';
-
-/** A run older than this has long finished or failed; not worth re-checking. */
-const MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 export const pendingRunSchema = z.object({
   id: z.string().min(1),
@@ -54,8 +57,7 @@ export function readPendingRuns(): PendingRun[] {
     return [];
   }
 
-  const cutoff = Date.now() - MAX_AGE_MS;
-  return storedSchema.parse(parsed).filter((entry) => Date.parse(entry.submittedAt) > cutoff);
+  return storedSchema.parse(parsed);
 }
 
 function write(entries: PendingRun[]): void {
@@ -65,8 +67,8 @@ function write(entries: PendingRun[]): void {
     // Same as reading: not worth breaking a submission over.
   }
   // `storage` fires only in other documents, so the tab that wrote never hears
-  // about its own change. Deferring keeps the dispatch out of render, where
-  // `forgetPendingRun` is called from `useQueries.combine`.
+  // about its own change. Deferred so a write made during render (a mutation's
+  // callback, say) never updates another component mid-render.
   queueMicrotask(() => {
     window.dispatchEvent(new CustomEvent(PENDING_RUNS_CHANGED_EVENT));
   });

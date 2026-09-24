@@ -60,11 +60,13 @@ export { recordedFillCount } from './trade-report';
 export { RunBacktestDialog } from './run-backtest-dialog';
 export type { OpenRunRequest } from './run-backtest-dialog';
 export { RunBacktestForm } from './run-backtest-form';
+export { RunFormQuickStartDialog, type QuickStartGuideHandle } from './run-form-quick-start';
 export { backtestDetailSchema } from './types';
 export { RunStatusBanner } from './run-status';
 export { mergeRunRows } from './pending-runs';
 export { PendingRunWatcher, usePendingRunRows, usePendingRuns } from './use-pending-runs';
 export { NoTradesExplanation } from './no-trades-explanation';
+export { SentimentGateSummary } from './sentiment-gate-summary';
 export {
   fetchBacktests,
   fetchAllBacktests,

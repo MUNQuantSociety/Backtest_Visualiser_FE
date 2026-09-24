@@ -5,6 +5,7 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
+import { z } from 'zod';
 
 import { env } from '@/config/env';
 import { ApiError, apiClient } from '@/lib/api-client';
@@ -91,6 +92,19 @@ export async function fetchBacktests(filters: BacktestFilters = {}, signal?: Abo
     ...(signal ? { signal } : {}),
   });
   return backtestListResponseSchema.parse(data);
+}
+
+const liveBacktestsSchema = z.array(backtestSummarySchema);
+
+/**
+ * This user's runs still queued or running, from any browser. History lists
+ * saved reports only, so this is how a run started elsewhere shows up before
+ * it finishes. Fixtures have nothing in flight.
+ */
+export async function fetchLiveBacktests(signal?: AbortSignal): Promise<BacktestSummary[]> {
+  if (env.useFixtures) return [];
+  const data = await apiClient.get<unknown>('/backtests/active', signal ? { signal } : {});
+  return liveBacktestsSchema.parse(data);
 }
 
 /** Complete saved history for the dashboard; ordinary lists remain paginated. */
@@ -348,6 +362,9 @@ export const backtestKeys = {
   lists: () => [...backtestKeys.all, 'list'] as const,
   completeList: () => [...backtestKeys.lists(), 'all'] as const,
   list: (filters: BacktestFilters) => [...backtestKeys.lists(), filters] as const,
+  // Not under `lists()`: settling a run refetches the history, and this has
+  // its own cadence.
+  live: () => [...backtestKeys.all, 'live'] as const,
   details: () => [...backtestKeys.all, 'detail'] as const,
   detail: (id: string) => [...backtestKeys.details(), id] as const,
   trades: (id: string) => [...backtestKeys.detail(id), 'trades'] as const,

@@ -3,14 +3,12 @@ import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type React
 import { useNavigate } from 'react-router';
 
 import { paths } from '@/app/paths';
-import { DemoBadge } from '@/components/common/demo-badge';
 import { Button } from '@/components/ui/button';
 import { InfoTip } from '@/components/ui/info-tip';
 import { Segmented } from '@/components/ui/segmented';
 import { useEngineIndicators, useStrategies } from '@/features/strategies';
 import { ApiError } from '@/lib/api-client';
 import { createLogger } from '@/lib/logger';
-import { useHideDemoPanels } from '@/lib/ui-store';
 import { cn } from '@/lib/utils';
 import { formatNumber } from '@/utils/format';
 
@@ -54,7 +52,9 @@ const log = createLogger('backtest-form');
  *
  * Universe, costs and the sentiment gate travel inside `params`: the
  * backend separates these reserved execution controls from strategy specs.
- * Indicators belong to strategy code; sentiment gating stays disabled.
+ * Indicators belong to strategy code. The sentiment gate is enforced by the
+ * engine against live news scores, and only in event mode, which is the only
+ * mode this form submits.
  */
 
 const DEFAULT_CAPITAL = 100_000;
@@ -102,9 +102,6 @@ export function RunBacktestForm({
   const strategies = useStrategies();
   const submit = useSubmitBacktest();
   const navigate = useNavigate();
-  // The sentiment gate reads the news score, and news is still fixture data,
-  // so the row follows the demo panels: hidden in production, toggleable in dev.
-  const hideDemoPanels = useHideDemoPanels();
 
   const [strategyKey, setStrategyKey] = useState(initialStrategyKey ?? '');
   const [name, setName] = useState('');
@@ -783,57 +780,53 @@ export function RunBacktestForm({
               );
             })}
           </ul>
-          {!hideDemoPanels && (
-            <div className="mt-2 flex flex-wrap items-center gap-3 rounded-md bg-background px-3 py-2 text-[13px]">
-              <label htmlFor={gateId} className="flex cursor-pointer items-center gap-2">
-                <input
-                  id={gateId}
-                  type="checkbox"
-                  role="switch"
-                  disabled
-                  aria-checked={gateEnabled}
-                  checked={gateEnabled}
-                  onChange={(event) => {
-                    setGateEnabled(event.target.checked);
-                  }}
-                  className="sr-only"
-                />
-                <span
-                  aria-hidden
-                  className={cn(
-                    'relative h-4 w-7 rounded-full transition-colors',
-                    gateEnabled ? 'bg-primary' : 'bg-[var(--border-strong)]',
-                  )}
-                >
-                  <span
-                    className={cn(
-                      'absolute top-0.5 size-3 rounded-full bg-background transition-transform',
-                      gateEnabled ? 'translate-x-3.5' : 'translate-x-0.5',
-                    )}
-                  />
-                </span>
-                <span className="font-medium">Sentiment gate</span>
-                <DemoBadge reason="news scoring is not built yet" />
-              </label>
-              <span className="text-muted-foreground">
-                — skip long entries when the 7d article score is below
-              </span>
+          <div className="mt-2 flex flex-wrap items-center gap-3 rounded-md bg-background px-3 py-2 text-[13px]">
+            <label htmlFor={gateId} className="flex cursor-pointer items-center gap-2">
               <input
-                type="range"
-                aria-label="Sentiment gate threshold"
-                min={-1}
-                max={0}
-                step={0.05}
-                value={gateThreshold}
-                disabled={!gateEnabled}
+                id={gateId}
+                type="checkbox"
+                role="switch"
+                aria-checked={gateEnabled}
+                checked={gateEnabled}
                 onChange={(event) => {
-                  setGateThreshold(Number(event.target.value));
+                  setGateEnabled(event.target.checked);
                 }}
-                className="h-1.5 w-[120px] accent-primary disabled:opacity-40"
+                className="sr-only"
               />
-              <span className="tabular w-12 text-right">{gateThreshold.toFixed(2)}</span>
-            </div>
-          )}
+              <span
+                aria-hidden
+                className={cn(
+                  'relative h-4 w-7 rounded-full transition-colors',
+                  gateEnabled ? 'bg-primary' : 'bg-[var(--border-strong)]',
+                )}
+              >
+                <span
+                  className={cn(
+                    'absolute top-0.5 size-3 rounded-full bg-background transition-transform',
+                    gateEnabled ? 'translate-x-3.5' : 'translate-x-0.5',
+                  )}
+                />
+              </span>
+              <span className="font-medium">Sentiment gate</span>
+            </label>
+            <span className="text-muted-foreground">
+              — skip long entries when the 7d article score is below
+            </span>
+            <input
+              type="range"
+              aria-label="Sentiment gate threshold"
+              min={-1}
+              max={0}
+              step={0.05}
+              value={gateThreshold}
+              disabled={!gateEnabled}
+              onChange={(event) => {
+                setGateThreshold(Number(event.target.value));
+              }}
+              className="h-1.5 w-[120px] accent-primary disabled:opacity-40"
+            />
+            <span className="tabular w-12 text-right">{gateThreshold.toFixed(2)}</span>
+          </div>
         </Row>
 
         {chosen && chosen.parameters.length > 0 ? (

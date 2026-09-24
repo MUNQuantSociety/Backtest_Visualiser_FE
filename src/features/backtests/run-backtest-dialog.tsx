@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { createLogger } from '@/lib/logger';
 
 import { RunBacktestForm } from './run-backtest-form';
+import { RunFormHelpMenu } from './run-form-quick-start';
 
 const log = createLogger('backtest-dialog');
 
@@ -170,9 +171,12 @@ export function RunBacktestDialog({
               Event-driven by default. Dates are bounded by what the data actually covers.
             </p>
           </div>
-          <Button variant="ghost" size="icon" aria-label="Close" onClick={closeDialog}>
-            <X className="size-4" aria-hidden />
-          </Button>
+          <div className="flex shrink-0 items-center gap-1">
+            <RunFormHelpMenu />
+            <Button variant="ghost" size="icon" aria-label="Close" onClick={closeDialog}>
+              <X className="size-4" aria-hidden />
+            </Button>
+          </div>
         </div>
 
         {/* Mounted only while open: the form fetches the strategy list and then

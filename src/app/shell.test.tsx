@@ -22,6 +22,7 @@ vi.mock('@/features/strategies', () => ({
 }));
 vi.mock('@/features/backtests', () => ({
   PendingRunWatcher: () => null,
+  RunFormQuickStartDialog: () => null,
 }));
 
 // Mutable so a single test can stand in for a production build. Hoisted above
@@ -150,5 +151,34 @@ describe('Demo data panels', () => {
 
     expect(screen.queryByRole('button', { name: 'Hide demo' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Show demo' })).not.toBeInTheDocument();
+  });
+});
+
+describe('help menu', () => {
+  function renderShell() {
+    render(
+      <MemoryRouter>
+        <AppShell>Results</AppShell>
+      </MemoryRouter>,
+    );
+  }
+
+  it('offers the run form quick start from the ? icon', async () => {
+    renderShell();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Help' }));
+
+    const menu = screen.getByRole('menu', { name: 'Help' });
+    expect(within(menu).getByRole('menuitem', { name: 'Run form quick start' })).toBeVisible();
+  });
+
+  it('closes on Escape', async () => {
+    renderShell();
+    await userEvent.click(screen.getByRole('button', { name: 'Help' }));
+
+    await userEvent.keyboard('{Escape}');
+
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Help' })).toHaveAttribute('aria-expanded', 'false');
   });
 });

@@ -1,10 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { env } from '@/config/env';
-import { ApiError, apiClient } from '@/lib/api-client';
-import { createLogger } from '@/lib/logger';
+import { apiClient } from '@/lib/api-client';
 
-import { fixtureIndicators, fixtureNews } from './fixtures';
+import { fixtureIndicators } from './fixtures';
 import {
   indicatorsResponseSchema,
   newsResponseSchema,
@@ -13,41 +12,30 @@ import {
   type TickerIndicators,
 } from './types';
 
-const log = createLogger('market');
-
 /**
- * `GET /indicators` and `GET /news` do not exist on the backend yet. The panels
- * that need them were built ahead of the endpoints, so in dev a 404 — the
- * endpoint is missing, not broken — is served from fixtures as well as the
- * usual "nothing listening" cases. Every such panel carries a DemoBadge;
- * production never falls back and shows the error instead.
+ * Both endpoints are live and never fall back to fixtures on failure, in dev or
+ * production: a failed request shows as an error, not as plausible fake RSI
+ * values or headlines.
+ *
+ * News reads the scored-article table even in fixture mode (`VITE_USE_FIXTURES`):
+ * it is real data with no fixture stand-in worth showing. Indicators still
+ * follow fixture mode, because their prices come from the same market data the
+ * rest of a fixture session fakes.
  *
  * Sentiment is folded into the indicators payload rather than a separate
  * request: the dashboard always wants both for the same tickers, and one
  * round trip per ticker set is cheaper than two.
  */
-const FALLBACK_STATUSES = new Set([0, 404, 502, 503, 504]);
-
-function canFallBack(error: unknown): boolean {
-  return env.isDev && error instanceof ApiError && FALLBACK_STATUSES.has(error.status);
-}
-
 const sortedKey = (tickers: readonly string[]) => [...tickers].sort().join(',');
 
 export async function fetchIndicators(tickers: readonly string[]): Promise<TickerIndicators[]> {
   if (tickers.length === 0) return [];
   if (env.useFixtures) return fixtureIndicators(tickers);
 
-  try {
-    const data = await apiClient.get<unknown>('/indicators', {
-      params: { tickers: sortedKey(tickers), window: '7d' },
-    });
-    return indicatorsResponseSchema.parse(data).items;
-  } catch (error) {
-    if (!canFallBack(error)) throw error;
-    log.warn('indicators endpoint unavailable, serving fixtures', { tickers: tickers.length });
-    return fixtureIndicators(tickers);
-  }
+  const data = await apiClient.get<unknown>('/indicators', {
+    params: { tickers: sortedKey(tickers), window: '7d' },
+  });
+  return indicatorsResponseSchema.parse(data).items;
 }
 
 export async function fetchNews(
@@ -55,18 +43,10 @@ export async function fetchNews(
   scope: NewsScope,
   limit: number,
 ): Promise<NewsArticle[]> {
-  if (env.useFixtures) return fixtureNews(tickers, limit);
-
-  try {
-    const data = await apiClient.get<unknown>('/news', {
-      params: { ...(scope === 'universe' ? { tickers: sortedKey(tickers) } : {}), limit },
-    });
-    return newsResponseSchema.parse(data).items;
-  } catch (error) {
-    if (!canFallBack(error)) throw error;
-    log.warn('news endpoint unavailable, serving fixtures', { scope, limit });
-    return fixtureNews(tickers, limit);
-  }
+  const data = await apiClient.get<unknown>('/news', {
+    params: { ...(scope === 'universe' ? { tickers: sortedKey(tickers) } : {}), limit },
+  });
+  return newsResponseSchema.parse(data).items;
 }
 
 export const marketKeys = {

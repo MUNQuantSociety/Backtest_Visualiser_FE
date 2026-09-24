@@ -6,22 +6,28 @@ import {
   FlaskConical,
   GitCompareArrows,
   LayoutDashboard,
+  ListChecks,
   LogOut,
   Menu,
   ScrollText,
   Settings,
   type LucideIcon,
 } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { NavLink } from 'react-router';
 
 import { paths } from '@/app/paths';
 import { useAuthCtx } from '@/app/providers/auth-provider.context';
 import logo from '@/assets/logo_dark.svg';
+import { HelpMenu, HelpMenuItem } from '@/components/common/help-menu';
 import { Button } from '@/components/ui/button';
 import { APP_NAME, PRODUCT_NAMES } from '@/config/constants';
 import { env } from '@/config/env';
-import { PendingRunWatcher } from '@/features/backtests';
+import {
+  PendingRunWatcher,
+  RunFormQuickStartDialog,
+  type QuickStartGuideHandle,
+} from '@/features/backtests';
 import { ValidationNotifications } from '@/features/strategies';
 import { authIsConfigured } from '@/lib/auth-session';
 import { useHideDemoPanels, useSetHideDemoPanels } from '@/lib/ui-store';
@@ -158,7 +164,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 }
 
 /**
- * Top bar: wordmark centred, account on the right.
+ * Top bar: wordmark centred, help and account on the right.
  *
  * The wordmark is absolutely positioned rather than laid out between the two
  * side slots. Centring it with flex would measure it against whatever happens
@@ -258,9 +264,34 @@ function AppHeader({
             {hideDemoPanels ? 'Show demo' : 'Hide demo'}
           </Button>
         ) : null}
+
+        <AppHelpMenu />
       </div>
       <LogoutBtn />
     </header>
+  );
+}
+
+/**
+ * The app-wide `?` menu. New help entries — guides for other pages, links to
+ * docs — are added here as `HelpMenuItem`s.
+ */
+function AppHelpMenu() {
+  const runGuideRef = useRef<QuickStartGuideHandle>(null);
+  return (
+    <>
+      <HelpMenu>
+        <HelpMenuItem
+          icon={<ListChecks aria-hidden />}
+          onSelect={() => {
+            runGuideRef.current?.open();
+          }}
+        >
+          Run form quick start
+        </HelpMenuItem>
+      </HelpMenu>
+      <RunFormQuickStartDialog ref={runGuideRef} />
+    </>
   );
 }
 

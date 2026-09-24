@@ -1,16 +1,22 @@
-import { useQueries, useQueryClient } from '@tanstack/react-query';
+import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { strategyKeys } from '@/features/strategies/keys';
 import { ApiError } from '@/lib/api-client';
 import { createLogger } from '@/lib/logger';
 
-import { backtestKeys, fetchBacktest, IN_FLIGHT_POLL_MS } from './backtests-api';
+import {
+  backtestKeys,
+  fetchBacktest,
+  fetchLiveBacktests,
+  IN_FLIGHT_POLL_MS,
+} from './backtests-api';
 import {
   forgetPendingRun,
   PENDING_RUNS_CHANGED_EVENT,
   PENDING_RUNS_STORAGE_KEY,
   readPendingRuns,
+  rememberPendingRun,
   type PendingRun,
 } from './pending-runs';
 import {
@@ -22,30 +28,82 @@ import {
 
 const log = createLogger('pending-runs');
 
+/**
+ * How often to ask for runs started in other browsers. Slower than the 3s run
+ * poll: this only has to notice a run exists, and each one found is then
+ * followed at the run poll's pace. Window focus asks again straight away.
+ */
+const LIVE_RUNS_POLL_MS = 15_000;
+
 /** What a page needs from one pending run's detail query. */
 interface RunPoll {
   data: BacktestDetail | undefined;
   error: Error | null;
 }
 
+/**
+ * Refetches everything that lists runs: the run becomes a row in the history,
+ * and its strategy's run count, best Sharpe and last run all move with it.
+ * Resolves once the active lists have answered.
+ */
+function useRefreshLists(): () => Promise<void> {
+  const queryClient = useQueryClient();
+  return useCallback(async () => {
+    // Every mounted pending hook may ask at once; `cancelRefetch: false` lets
+    // one fetch per list serve them all instead of each cancelling the last.
+    const options = { cancelRefetch: false };
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: backtestKeys.lists() }, options),
+      queryClient.invalidateQueries({ queryKey: strategyKeys.lists() }, options),
+    ]);
+  }, [queryClient]);
+}
+
 /** The pending runs in storage, kept current across this tab and others. */
 function usePendingStore(): PendingRun[] {
   const [pending, setPending] = useState(() => readPendingRuns());
+  const refreshLists = useRefreshLists();
+  const shown = useRef(pending);
+  useEffect(() => {
+    shown.current = pending;
+  }, [pending]);
 
   useEffect(() => {
+    let mounted = true;
     function sync() {
       setPending(readPendingRuns());
     }
-    function onStorage(event: StorageEvent) {
-      if (event.key === PENDING_RUNS_STORAGE_KEY) sync();
+
+    // Another tab polling the same run may see it finish first and forget it.
+    // That tab refreshed its own lists; this one has to refresh its own before
+    // letting the row go, or the run is briefly in neither.
+    async function syncFromOtherTab() {
+      const remaining = new Set(readPendingRuns().map((run) => run.id));
+      const departed = shown.current.filter((run) => !remaining.has(run.id));
+      if (departed.length > 0) {
+        log.info('pending runs settled in another tab', { ids: departed.map((run) => run.id) });
+        try {
+          await refreshLists();
+        } catch (error) {
+          log.warn('could not refresh the run history after another tab settled a run', {
+            error,
+          });
+        }
+      }
+      if (mounted) sync();
     }
+    function onStorage(event: StorageEvent) {
+      if (event.key === PENDING_RUNS_STORAGE_KEY) void syncFromOtherTab();
+    }
+
     window.addEventListener('storage', onStorage);
     window.addEventListener(PENDING_RUNS_CHANGED_EVENT, sync);
     return () => {
+      mounted = false;
       window.removeEventListener('storage', onStorage);
       window.removeEventListener(PENDING_RUNS_CHANGED_EVENT, sync);
     };
-  }, []);
+  }, [refreshLists]);
 
   return pending;
 }
@@ -114,18 +172,9 @@ export function usePendingRunRows(): BacktestSummary[] {
  */
 export function usePendingRuns(): BacktestSummary[] {
   const pending = usePendingStore();
-  const queryClient = useQueryClient();
+  const refreshLists = useRefreshLists();
   // Effects re-run on every poll; one settle per run.
   const settled = useRef(new Set<string>());
-
-  // The run becomes a row in the history, and its strategy's run count, best
-  // Sharpe and last run all move with it. Resolves once active lists refetched.
-  const refreshLists = useCallback(async () => {
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: backtestKeys.lists() }),
-      queryClient.invalidateQueries({ queryKey: strategyKeys.lists() }),
-    ]);
-  }, [queryClient]);
 
   const finish = useCallback(
     async (id: string, status: string) => {
@@ -154,6 +203,27 @@ export function usePendingRuns(): BacktestSummary[] {
     combine: toPolls,
   });
 
+  // Runs this user started in another browser or device. Each one not already
+  // followed is remembered, and from then on it is watched like one started
+  // here. A backend without the endpoint just leaves this empty.
+  const live = useQuery({
+    queryKey: backtestKeys.live(),
+    queryFn: ({ signal }) => fetchLiveBacktests(signal),
+    refetchInterval: LIVE_RUNS_POLL_MS,
+    refetchOnWindowFocus: true,
+    retry: false,
+  });
+  useEffect(() => {
+    const followed = new Set(pending.map((run) => run.id));
+    for (const summary of live.data ?? []) {
+      // A run that just settled here can still be in a list fetched before it
+      // finished; watching it again would only settle it twice.
+      if (followed.has(summary.id) || settled.current.has(summary.id)) continue;
+      log.info('following a run started elsewhere', { id: summary.id });
+      rememberPendingRun(summary);
+    }
+  }, [live.data, pending]);
+
   useEffect(() => {
     pending.forEach((run, index) => {
       const poll = polls[index];
@@ -162,23 +232,6 @@ export function usePendingRuns(): BacktestSummary[] {
       void finish(run.id, poll.data?.status ?? 'missing');
     });
   }, [pending, polls, finish]);
-
-  // Another tab polling the same run may see it finish first and forget it.
-  // That tab refreshed its own lists; this one still has to, and it no longer
-  // gets a poll of its own to notice from.
-  const watched = useRef(new Set(pending.map((run) => run.id)));
-  useEffect(() => {
-    const remaining = new Set(pending.map((run) => run.id));
-    for (const id of watched.current) {
-      if (remaining.has(id) || settled.current.has(id)) continue;
-      settled.current.add(id);
-      log.info('pending run settled', { id, status: 'settled elsewhere' });
-      refreshLists().catch((error: unknown) => {
-        log.warn('could not refresh the run history after a run settled', { id, error });
-      });
-    }
-    watched.current = remaining;
-  }, [pending, refreshLists]);
 
   return useRows(pending, polls);
 }

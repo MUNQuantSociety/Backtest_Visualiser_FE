@@ -100,6 +100,30 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+/** Every row list the page rendered, as `id:status`, in render order. */
+function renderHistory() {
+  const seen: string[][] = [];
+  const view = renderHook(
+    () => {
+      const list = useBacktests();
+      const pending = usePendingRuns();
+      const rows = mergeRunRows(list.data?.items ?? [], pending);
+      seen.push(rows.map((row) => `${row.id}:${row.status}`));
+      return rows;
+    },
+    { wrapper: Wrapper },
+  );
+  return { ...view, seen };
+}
+
+/** Another tab saw the run finish and forgot it; only `storage` reaches here. */
+function forgetInAnotherTab() {
+  localStorage.setItem('mqs.pending-runs', '[]');
+  act(() => {
+    window.dispatchEvent(new StorageEvent('storage', { key: 'mqs.pending-runs' }));
+  });
+}
+
 describe('usePendingRuns', () => {
   it('puts a run started here into the run history the moment it finishes', async () => {
     rememberPendingRun(accepted);
@@ -182,6 +206,71 @@ describe('usePendingRuns', () => {
     unmount();
   });
 
+  it('refreshes the strategy catalogue when another tab saw the run finish first', async () => {
+    rememberPendingRun(accepted);
+    get.mockImplementation(() => Promise.resolve(running));
+    const strategies = vi.fn(() => Promise.resolve([]));
+    const { unmount } = renderHook(
+      () => ({
+        catalogue: useQuery({ queryKey: strategyKeys.lists(), queryFn: strategies }),
+        pending: usePendingRuns(),
+      }),
+      { wrapper: Wrapper },
+    );
+    await advance(50);
+    expect(strategies).toHaveBeenCalledTimes(1);
+
+    forgetInAnotherTab();
+    await advance(50);
+
+    expect(strategies).toHaveBeenCalledTimes(2);
+    unmount();
+  });
+
+  it('keeps the row when another tab saw the run finish first, until this tab lists it', async () => {
+    rememberPendingRun(accepted);
+    get.mockImplementation((url) => Promise.resolve(url === '/backtests' ? emptyPage : running));
+    const { result, seen, unmount } = renderHistory();
+    await advance(50);
+
+    get.mockImplementation((url) =>
+      Promise.resolve(url === '/backtests' ? finishedPage : completed),
+    );
+    forgetInAnotherTab();
+    await advance(50);
+
+    expect(seen.every((rows) => rows.length === 1)).toBe(true);
+    expect(result.current.map((row) => `${row.id}:${row.status}`)).toEqual(['run-1:completed']);
+    unmount();
+  });
+
+  it('starts watching a run another browser submitted', async () => {
+    get.mockImplementation((url) =>
+      Promise.resolve(url === '/backtests/active' ? [accepted] : running),
+    );
+    const { result, unmount } = renderHook(() => usePendingRuns(), { wrapper: Wrapper });
+    await advance(50);
+    await advance(50);
+
+    expect(readPendingRuns().map((run) => run.id)).toEqual(['run-1']);
+    expect(result.current.map((row) => `${row.id}:${row.status}`)).toEqual(['run-1:running']);
+    unmount();
+  });
+
+  it('carries on without runs from other browsers when the backend cannot list them', async () => {
+    rememberPendingRun(accepted);
+    get.mockImplementation((url) =>
+      url === '/backtests/active'
+        ? Promise.reject(new ApiError('Not found', 404, 'NOT_FOUND'))
+        : Promise.resolve(running),
+    );
+    const { result, unmount } = renderHook(() => usePendingRuns(), { wrapper: Wrapper });
+    await advance(50);
+
+    expect(result.current.map((row) => `${row.id}:${row.status}`)).toEqual(['run-1:running']);
+    unmount();
+  });
+
   it('stops watching a run the backend no longer knows about', async () => {
     rememberPendingRun(accepted);
     get.mockRejectedValue(new ApiError('Not found', 404, 'NOT_FOUND'));
@@ -208,22 +297,6 @@ describe('usePendingRuns', () => {
 });
 
 describe('the run history row for a run started here', () => {
-  /** Every row list the page rendered, as `id:status`, in render order. */
-  function renderHistory() {
-    const seen: string[][] = [];
-    const view = renderHook(
-      () => {
-        const list = useBacktests();
-        const pending = usePendingRuns();
-        const rows = mergeRunRows(list.data?.items ?? [], pending);
-        seen.push(rows.map((row) => `${row.id}:${row.status}`));
-        return rows;
-      },
-      { wrapper: Wrapper },
-    );
-    return { ...view, seen };
-  }
-
   it('shows the run as queued before the first poll answers', () => {
     rememberPendingRun(accepted);
     get.mockImplementation((url) => Promise.resolve(url === '/backtests' ? emptyPage : running));

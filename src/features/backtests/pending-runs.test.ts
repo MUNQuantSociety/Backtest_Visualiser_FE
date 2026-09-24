@@ -1,6 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import '@/test/storage-global';
 
-import { mergeRunRows } from './pending-runs';
+import { beforeEach, describe, expect, it } from 'vitest';
+
+import { mergeRunRows, readPendingRuns, rememberPendingRun } from './pending-runs';
 import type { BacktestSummary } from './types';
 
 function row(id: string, status: BacktestSummary['status']): BacktestSummary {
@@ -48,5 +50,24 @@ describe('mergeRunRows', () => {
     const pending = [row('new', 'queued')];
 
     expect(mergeRunRows([], pending)).toEqual(pending);
+  });
+});
+
+describe('readPendingRuns', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('keeps a run submitted days ago, since only the backend knows it has ended', () => {
+    const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+    rememberPendingRun(row('long-run', 'queued'), threeDaysAgo);
+
+    expect(readPendingRuns().map((run) => run.id)).toEqual(['long-run']);
+  });
+
+  it('reads nothing from a stored value that is not JSON', () => {
+    localStorage.setItem('mqs.pending-runs', '{not json');
+
+    expect(readPendingRuns()).toEqual([]);
   });
 });

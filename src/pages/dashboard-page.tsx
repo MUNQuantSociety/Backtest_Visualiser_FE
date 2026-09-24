@@ -4,7 +4,6 @@ import { Link } from 'react-router';
 import { paths } from '@/app/paths';
 import { ChartContainer } from '@/components/charts/chart-container';
 import { Sparkline } from '@/components/charts/sparkline';
-import { DemoBadge } from '@/components/common/demo-badge';
 import { PageHeader } from '@/components/common/page-header';
 import { StatTile } from '@/components/common/stat-tile';
 import { Button } from '@/components/ui/button';
@@ -37,12 +36,7 @@ import {
 import { ComparisonChart, RiskReturnScatter, type ComparisonSeries } from '@/features/performance';
 import { useStrategies } from '@/features/strategies';
 import { seriesColor } from '@/lib/chart-theme';
-import {
-  useDashboardPeriod,
-  useHideDemoPanels,
-  useSetDashboardPeriod,
-  type DashboardPeriod,
-} from '@/lib/ui-store';
+import { useDashboardPeriod, useSetDashboardPeriod, type DashboardPeriod } from '@/lib/ui-store';
 import { cn } from '@/lib/utils';
 import { formatNumber, formatPercent, formatSigned } from '@/utils/format';
 import { toneFromValue } from '@/utils/tone';
@@ -74,7 +68,6 @@ const toneClass = {
 export default function DashboardPage() {
   const period = useDashboardPeriod();
   const setPeriod = useSetDashboardPeriod();
-  const hideDemoPanels = useHideDemoPanels();
   const palette = useChartPalette();
 
   const strategiesQuery = useStrategies();
@@ -521,70 +514,66 @@ export default function DashboardPage() {
         </ChartContainer>
       </div>
 
-      {!hideDemoPanels && (
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
-          <Card>
-            <CardHeader className="flex-row items-start justify-between gap-4 space-y-0 pb-3">
-              <div className="space-y-1">
-                <CardTitle className="flex items-center gap-2 text-[15px]">
-                  Indicators &amp; sentiment — universe <DemoBadge />
-                </CardTitle>
-                <CardDescription>
-                  Close of last session. RSI marks overbought/oversold; sentiment is the
-                  article-weighted score over 7 days, −1 to +1.
-                </CardDescription>
-              </div>
-              {indicators.data?.length ? (
-                <SentimentGauge label="Book sentiment" score={bookSentiment} />
-              ) : null}
-            </CardHeader>
-            <CardContent className="overflow-x-auto">
-              {strategiesUnavailable || indicators.error ? (
-                <p className="py-6 text-center text-sm text-muted-foreground">
-                  Universe indicators unavailable.
-                </p>
-              ) : (
-                <IndicatorsTable
-                  rows={indicators.data ?? []}
-                  isLoading={strategiesQuery.isPending || indicators.isLoading}
-                />
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex-row items-start justify-between gap-4 space-y-0 pb-3">
-              <div className="space-y-1">
-                <CardTitle className="flex items-center gap-2 text-[15px]">
-                  News — scored <DemoBadge />
-                </CardTitle>
-                <CardDescription>
-                  Only articles tagged to a ticker in the universe. The bar is the model’s sentiment
-                  for that article.
-                </CardDescription>
-              </div>
-              <Segmented
-                value={newsScope}
-                options={NEWS_SCOPES}
-                onChange={setNewsScope}
-                ariaLabel="News scope"
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+        <Card>
+          <CardHeader className="flex-row items-start justify-between gap-4 space-y-0 pb-3">
+            <div className="space-y-1">
+              <CardTitle className="flex items-center gap-2 text-[15px]">
+                Indicators &amp; sentiment — universe
+              </CardTitle>
+              <CardDescription>
+                Close of last session. RSI marks overbought/oversold; sentiment is the
+                article-weighted score over 7 days, −1 to +1.
+              </CardDescription>
+            </div>
+            {indicators.data?.length ? (
+              <SentimentGauge label="Book sentiment" score={bookSentiment} />
+            ) : null}
+          </CardHeader>
+          <CardContent className="overflow-x-auto">
+            {strategiesUnavailable || indicators.error ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                Universe indicators unavailable.
+              </p>
+            ) : (
+              <IndicatorsTable
+                rows={indicators.data ?? []}
+                isLoading={strategiesQuery.isPending || indicators.isLoading}
               />
-            </CardHeader>
-            <CardContent>
-              {(newsScope === 'universe' && strategiesUnavailable) || news.error ? (
-                <p className="py-6 text-center text-sm text-muted-foreground">News unavailable.</p>
-              ) : (
-                <NewsList
-                  articles={news.data ?? []}
-                  isLoading={
-                    (newsScope === 'universe' && strategiesQuery.isPending) || news.isLoading
-                  }
-                />
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      )}
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex-row items-start justify-between gap-4 space-y-0 pb-3">
+            <div className="space-y-1">
+              <CardTitle className="flex items-center gap-2 text-[15px]">News — scored</CardTitle>
+              <CardDescription>
+                Only articles tagged to a ticker in the universe. The bar is the model’s sentiment
+                for that article.
+              </CardDescription>
+            </div>
+            <Segmented
+              value={newsScope}
+              options={NEWS_SCOPES}
+              onChange={setNewsScope}
+              ariaLabel="News scope"
+            />
+          </CardHeader>
+          <CardContent>
+            {(newsScope === 'universe' && strategiesUnavailable) || news.error ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">News unavailable.</p>
+            ) : (
+              <NewsList
+                articles={news.data ?? []}
+                isLoading={
+                  (newsScope === 'universe' && strategiesQuery.isPending) || news.isLoading
+                }
+              />
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       <Card>
         <CardHeader className="flex-row items-start justify-between gap-4 space-y-0 pb-3">

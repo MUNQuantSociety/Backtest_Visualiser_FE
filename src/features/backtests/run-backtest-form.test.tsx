@@ -953,25 +953,126 @@ describe('section info bubbles', () => {
   });
 });
 
-describe('sentiment gate demo panel', () => {
-  beforeEach(() => {
-    useUiStore.setState({ hideDemoPanels: false });
+describe('quick start guide', () => {
+  /** Both dialogs need the stand-ins: the guide is a dialog inside the run dialog. */
+  function mockEveryNativeDialog() {
+    const [runDialog, guideDialog] = [...document.querySelectorAll('dialog')].map((dialog) => {
+      dialog.showModal = () => {
+        dialog.open = true;
+      };
+      dialog.close = () => {
+        dialog.open = false;
+        dialog.dispatchEvent(new Event('close'));
+      };
+      return dialog;
+    });
+    return { runDialog: runDialog!, guideDialog: guideDialog! };
+  }
+
+  async function openRunDialog() {
+    renderWithProviders(<RunBacktestDialog initialStrategyKey="portfolio_1" />);
+    const dialogs = mockEveryNativeDialog();
+    fireEvent.click(screen.getByRole('button', { name: /run backtest/i }));
+    await waitFor(() => expect(screen.getByLabelText('End')).toHaveValue('2026-07-15'));
+    return dialogs;
+  }
+
+  async function openGuideFromMenu() {
+    await userEvent.click(screen.getByRole('button', { name: 'Run form help' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Run form quick start' }));
+  }
+
+  it('lists the steps of the form in order when chosen from the help menu', async () => {
+    const { guideDialog } = await openRunDialog();
+
+    await openGuideFromMenu();
+
+    expect(guideDialog.open).toBe(true);
+    const steps = within(guideDialog)
+      .getAllByRole('listitem')
+      .filter((item) => item.closest('ol'));
+    expect(steps.map((step) => step.querySelector('p')?.textContent)).toEqual([
+      'Pick a strategy',
+      'Check the universe',
+      'Set the window',
+      'Set capital and costs',
+      'Tune the parameters',
+      'Name it and run',
+    ]);
   });
 
-  it('shows the sentiment gate while demo panels are visible', () => {
-    renderWithProviders(<RunBacktestForm />);
-    expect(screen.getByRole('switch', { name: /Sentiment gate/ })).toBeInTheDocument();
-    expect(screen.getByLabelText('Sentiment gate threshold')).toBeInTheDocument();
+  it('closes the help menu once an entry is chosen', async () => {
+    await openRunDialog();
+
+    await openGuideFromMenu();
+
+    expect(screen.queryByRole('menu', { name: 'Run form help' })).not.toBeInTheDocument();
   });
 
-  it('hides the sentiment gate when demo panels are hidden', () => {
+  it('closing the guide keeps the run form mounted', async () => {
+    const { runDialog, guideDialog } = await openRunDialog();
+    await openGuideFromMenu();
+
+    await userEvent.click(within(guideDialog).getByRole('button', { name: 'Got it' }));
+
+    expect(guideDialog.open).toBe(false);
+    expect(runDialog.open).toBe(true);
+    expect(screen.getByLabelText('End')).toHaveValue('2026-07-15');
+  });
+});
+
+describe('sentiment gate', () => {
+  it('stays available when demo panels are hidden', () => {
+    useUiStore.setState({ hideDemoPanels: true });
+
     renderWithProviders(<RunBacktestForm />);
 
-    act(() => {
-      useUiStore.setState({ hideDemoPanels: true });
+    expect(screen.getByRole('switch', { name: /Sentiment gate/ })).toBeEnabled();
+  });
+
+  it('enables the threshold once the gate is switched on', async () => {
+    renderWithProviders(<RunBacktestForm />);
+    expect(screen.getByLabelText('Sentiment gate threshold')).toBeDisabled();
+
+    await userEvent.click(screen.getByRole('switch', { name: /Sentiment gate/ }));
+
+    expect(screen.getByLabelText('Sentiment gate threshold')).toBeEnabled();
+  });
+
+  it('submits the gate enabled with its threshold', async () => {
+    post.mockResolvedValue({
+      id: 'bt-11',
+      name: 'x',
+      strategyId: 'portfolio_1',
+      strategyName: 'Vol Momentum',
+      symbol: 'MULTI',
+      timeframe: '1d',
+      status: 'queued',
+      startDate: '2025-07-15',
+      endDate: '2026-07-15',
+      createdAt: '2026-09-01T10:00:00Z',
+      initialCapital: 100_000,
+      finalEquity: 100_000,
+      totalReturn: 0,
+      sharpe: 0,
+      maxDrawdown: 0,
+    });
+    renderWithProviders(<RunBacktestForm />);
+    await pickStrategy('portfolio_1');
+    await waitFor(() => {
+      expect(screen.getByLabelText('End')).toHaveValue('2026-07-15');
     });
 
-    expect(screen.queryByRole('switch', { name: /Sentiment gate/ })).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('Sentiment gate threshold')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('switch', { name: /Sentiment gate/ }));
+    submitForm();
+
+    await waitFor(() => {
+      expect(post).toHaveBeenCalledTimes(1);
+    });
+    const [, body] = post.mock.calls[0] ?? [];
+    expect((body as { params: Record<string, unknown> }).params['sentimentGate']).toEqual({
+      enabled: true,
+      threshold: -0.25,
+    });
   });
 });

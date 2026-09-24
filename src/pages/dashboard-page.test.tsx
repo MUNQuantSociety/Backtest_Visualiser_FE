@@ -340,21 +340,20 @@ describe('Dashboard saved run comparison', () => {
   });
 });
 
-describe('Dashboard demo data panels', () => {
+describe('Dashboard market cards', () => {
   beforeEach(() => {
-    useUiStore.setState({ hideDemoPanels: false });
+    useUiStore.setState({ hideDemoPanels: true });
   });
 
-  it('hides the demo-marked market cards when the preference is on', async () => {
+  it('keeps the live indicators card when demo panels are hidden', async () => {
     renderWithProviders(<DashboardPage />);
+
     expect(await screen.findByText('Indicators & sentiment — universe')).toBeInTheDocument();
-    expect(screen.getByText('News — scored')).toBeInTheDocument();
+  });
 
-    act(() => {
-      useUiStore.setState({ hideDemoPanels: true });
-    });
+  it('keeps the live news card when demo panels are hidden', async () => {
+    renderWithProviders(<DashboardPage />);
 
-    expect(screen.queryByText('Indicators & sentiment — universe')).not.toBeInTheDocument();
-    expect(screen.queryByText('News — scored')).not.toBeInTheDocument();
+    expect(await screen.findByText('News — scored')).toBeInTheDocument();
   });
 });
