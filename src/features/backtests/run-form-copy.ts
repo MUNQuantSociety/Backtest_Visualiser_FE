@@ -12,6 +12,8 @@ export const RUN_FORM_TIPS = {
     "The tickers this run trades. It starts as the strategy's own set; add or remove symbols to override it for this run only. Every addition is checked with FMP before it joins, and the dot on each ticker shows whether it has bars across the chosen window.",
   window:
     'The dates to simulate, bounded by the days every ticker in the universe has data for. Start defaults to one year before the last available bar. A ticker whose history begins late clamps the earliest start.',
+  barInterval:
+    'The length of one simulated bar, from one minute to one trading day. Indicators, fills and every strategy decision move one bar at a time, so an indicator period counts bars of this size. Intraday bars cover regular hours only (09:30–16:00 New York) and are labelled at their close.',
   capital:
     'Initial capital is the cash the run starts with. Slippage, in basis points, moves every fill against you; commission is charged per share. Both apply to each fill and shape the reported P&L.',
   indicators:

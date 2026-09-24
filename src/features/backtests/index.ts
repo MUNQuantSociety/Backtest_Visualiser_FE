@@ -67,6 +67,8 @@ export { mergeRunRows } from './pending-runs';
 export { PendingRunWatcher, usePendingRunRows, usePendingRuns } from './use-pending-runs';
 export { NoTradesExplanation } from './no-trades-explanation';
 export { SentimentGateSummary } from './sentiment-gate-summary';
+export { runUniverse } from './run-universe';
+export { dashboardNewsWindow } from './dashboard-news-window';
 export {
   fetchBacktests,
   fetchAllBacktests,
@@ -81,6 +83,7 @@ export {
   useDeleteBacktest,
   useDownloadExport,
   useSubmitBacktest,
+  validateTickers,
 } from './backtests-api';
 export { backtestKeys } from './backtests-api';
 export { isInFlight } from './types';

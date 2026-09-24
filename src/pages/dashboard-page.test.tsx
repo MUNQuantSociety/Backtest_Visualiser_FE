@@ -188,7 +188,6 @@ describe('Dashboard request isolation', () => {
     );
     const { container } = renderWithProviders(<DashboardPage />);
     expect(await screen.findByText('No runs yet.')).toBeInTheDocument();
-    expect(screen.getByText('No scored articles.')).toBeInTheDocument();
     expect(container.querySelector('.animate-pulse')).not.toBeInTheDocument();
     expect(vi.mocked(apiClient.get).mock.calls.map(([url]) => url)).not.toContain('/indicators');
   });
@@ -351,9 +350,20 @@ describe('Dashboard market cards', () => {
     expect(await screen.findByText('Indicators & sentiment — universe')).toBeInTheDocument();
   });
 
-  it('keeps the live news card when demo panels are hidden', async () => {
+  it('asks for news from the backtest window, not the latest', async () => {
     renderWithProviders(<DashboardPage />);
 
     expect(await screen.findByText('News — scored')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(apiClient.get).toHaveBeenCalledWith('/news', {
+        params: { tickers: 'AAPL', start: '2025-01-01', end: '2025-12-31', limit: 8 },
+      });
+    });
+  });
+
+  it('names the backtest window its news covers', async () => {
+    renderWithProviders(<DashboardPage />);
+
+    expect(await screen.findByText(/2025-01-01 to 2025-12-31/)).toBeInTheDocument();
   });
 });

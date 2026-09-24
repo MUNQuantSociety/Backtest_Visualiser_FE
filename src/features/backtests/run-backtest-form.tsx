@@ -18,6 +18,13 @@ import {
   useTickerValidation,
   validateTickers,
 } from './backtests-api';
+import {
+  BAR_INTERVALS,
+  barIntervalSeconds,
+  DEFAULT_BAR_INTERVAL,
+  isIntradayBar,
+  type BarInterval,
+} from './bar-interval';
 import { RUN_FORM_TIPS } from './run-form-copy';
 import { deleteRunPreset, listRunPresets, saveRunPreset, type RunPreset } from './run-presets';
 import {
@@ -108,6 +115,7 @@ export function RunBacktestForm({
   const [capital, setCapital] = useState(String(DEFAULT_CAPITAL));
   const [slippageBps, setSlippageBps] = useState(String(DEFAULT_SLIPPAGE_BPS));
   const [commission, setCommission] = useState(String(DEFAULT_COMMISSION));
+  const [barInterval, setBarInterval] = useState<BarInterval>(DEFAULT_BAR_INTERVAL);
   const [gateEnabled, setGateEnabled] = useState(false);
   const [gateThreshold, setGateThreshold] = useState(DEFAULT_SENTIMENT_THRESHOLD);
   const [paramValues, setParamValues] = useState<Record<string, string | boolean>>({});
@@ -260,6 +268,7 @@ export function RunBacktestForm({
       capital,
       slippageBps,
       commission,
+      barInterval,
       paramValues: { ...paramValues },
       gateEnabled,
       gateThreshold,
@@ -295,6 +304,8 @@ export function RunBacktestForm({
     setCapital(preset.config.capital);
     setSlippageBps(preset.config.slippageBps);
     setCommission(preset.config.commission);
+    // Presets saved before the choice existed were daily runs.
+    setBarInterval(preset.config.barInterval ?? DEFAULT_BAR_INTERVAL);
     setParamValues({ ...preset.config.paramValues });
     setGateEnabled(preset.config.gateEnabled);
     setGateThreshold(preset.config.gateThreshold);
@@ -395,6 +406,7 @@ export function RunBacktestForm({
       universe,
       slippageBps: Number(slippageBps),
       commissionPerShare: Number(commission),
+      barIntervalSeconds: barIntervalSeconds(barInterval),
       sentimentGate: { enabled: gateEnabled, threshold: gateThreshold },
       ...strategyParams,
     };
@@ -711,6 +723,22 @@ export function RunBacktestForm({
             end={covered?.end ?? null}
             missing={covered?.missing ?? []}
           />
+        </Row>
+
+        <Row label="Bar timestep" tip={RUN_FORM_TIPS.barInterval}>
+          <Segmented
+            value={barInterval}
+            options={BAR_INTERVALS}
+            onChange={setBarInterval}
+            ariaLabel="Bar timestep"
+          />
+          {isIntradayBar(barInterval) ? (
+            <p className="mt-1.5 text-[11px] text-muted-foreground">
+              Intraday runs load many more bars: a long window, many tickers or a long strategy
+              lookback can be refused as too large, and a source that stores only hourly bars
+              refuses anything finer.
+            </p>
+          ) : null}
         </Row>
 
         <Row label="Capital & costs" tip={RUN_FORM_TIPS.capital}>

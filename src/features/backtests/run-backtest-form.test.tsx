@@ -135,6 +135,27 @@ beforeEach(() => {
   );
 });
 
+/** A queued run as `POST /backtests` returns it. */
+function queuedRun(id: string) {
+  return {
+    id,
+    name: 'x',
+    strategyId: 'portfolio_1',
+    strategyName: 'Vol Momentum',
+    symbol: 'AAPL',
+    timeframe: '1d',
+    status: 'queued',
+    startDate: '2025-07-15',
+    endDate: '2026-07-15',
+    createdAt: '2026-09-01T10:00:00Z',
+    initialCapital: 100_000,
+    finalEquity: 100_000,
+    totalReturn: 0,
+    sharpe: 0,
+    maxDrawdown: 0,
+  };
+}
+
 function interceptSymbolSearch(query: string, response: () => Promise<unknown>) {
   const fallback = get.getMockImplementation()!;
   get.mockImplementation((url, config) => {
@@ -357,6 +378,50 @@ describe('RunBacktestForm', () => {
     expect(post.mock.calls[0]?.[1]).toMatchObject({ params: { universe: ['AAPL', 'MSFT'] } });
   });
 
+  it('runs on daily bars unless another timestep is chosen', async () => {
+    post.mockResolvedValue(queuedRun('bt-11'));
+    renderWithProviders(<RunBacktestForm />);
+    await pickStrategy('portfolio_1');
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /run backtest/i })).toBeEnabled();
+    });
+
+    expect(screen.getByRole('radio', { name: '1D' })).toBeChecked();
+    submitForm();
+
+    await waitFor(() => {
+      expect(post).toHaveBeenCalledTimes(1);
+    });
+    expect(post.mock.calls[0]?.[1]).toMatchObject({ params: { barIntervalSeconds: 86_400 } });
+  });
+
+  it('sends the chosen bar timestep in seconds', async () => {
+    post.mockResolvedValue(queuedRun('bt-12'));
+    renderWithProviders(<RunBacktestForm />);
+    await pickStrategy('portfolio_1');
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /run backtest/i })).toBeEnabled();
+    });
+
+    await userEvent.click(screen.getByRole('radio', { name: '1h' }));
+    submitForm();
+
+    await waitFor(() => {
+      expect(post).toHaveBeenCalledTimes(1);
+    });
+    expect(post.mock.calls[0]?.[1]).toMatchObject({ params: { barIntervalSeconds: 3_600 } });
+  });
+
+  it('warns that intraday runs can be refused as too large', async () => {
+    renderWithProviders(<RunBacktestForm />);
+    await pickStrategy('portfolio_1');
+    expect(screen.queryByText(/Intraday runs load many more bars/)).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('radio', { name: '1m' }));
+
+    expect(screen.getByText(/Intraday runs load many more bars/)).toBeInTheDocument();
+  });
+
   it('refuses to submit when the universe has no data, and says which ticker', async () => {
     renderWithProviders(<RunBacktestForm />);
     await pickStrategy('portfolio_3');
@@ -566,7 +631,38 @@ describe('RunBacktestForm', () => {
         capital: '100000',
         slippageBps: '5',
         commission: '0.005',
+        barInterval: '86400',
       },
+    });
+  });
+
+  it('restores a preset saved without a bar timestep as daily bars', async () => {
+    saveRunPreset('Before timesteps', {
+      strategyKey: 'portfolio_1',
+      runName: '',
+      universe: ['AAPL'],
+      startDate: '2025-07-15',
+      endDate: '2026-07-15',
+      capital: '100000',
+      slippageBps: '5',
+      commission: '0.005',
+      paramValues: {},
+      gateEnabled: false,
+      gateThreshold: -0.25,
+    });
+    renderWithProviders(<RunBacktestForm />);
+    await pickStrategy('portfolio_1');
+    await userEvent.click(screen.getByRole('radio', { name: '5m' }));
+
+    await userEvent.click(screen.getByRole('button', { name: /^Presets/ }));
+    const loadButton = await screen.findByRole('button', { name: 'Load' });
+    await waitFor(() => {
+      expect(loadButton).toBeEnabled();
+    });
+    await userEvent.click(loadButton);
+
+    await waitFor(() => {
+      expect(screen.getByRole('radio', { name: '1D' })).toBeChecked();
     });
   });
 
@@ -580,6 +676,7 @@ describe('RunBacktestForm', () => {
       capital: '50000',
       slippageBps: '8',
       commission: '0.01',
+      barInterval: '900',
       paramValues: {},
       gateEnabled: false,
       gateThreshold: -0.25,
@@ -601,6 +698,7 @@ describe('RunBacktestForm', () => {
     expect(screen.getByLabelText('Initial capital')).toHaveValue(50000);
     expect(screen.getByLabelText('Slippage')).toHaveValue(8);
     expect(screen.getByLabelText('Commission')).toHaveValue(0.01);
+    expect(screen.getByRole('radio', { name: '15m' })).toBeChecked();
     expect(screen.getByRole('radio', { name: /Mean Reversion/ })).toBeChecked();
     expect(screen.getByRole('button', { name: 'Remove AAPL' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Remove MSFT' })).toBeInTheDocument();

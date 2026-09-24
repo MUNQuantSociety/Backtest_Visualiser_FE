@@ -168,6 +168,12 @@ function createApiClient(): AxiosInstance {
       const validateTickersPath = `${backend.pathname.replace(/\/$/, '')}/market-data/validate-tickers`;
       const searchSymbolsPath = `${backend.pathname.replace(/\/$/, '')}/market-data/search-symbols`;
       const authMePath = `${backend.pathname.replace(/\/$/, '')}/auth/me`;
+      // Signed-in market reads: a run's scored news and the dashboard indicators.
+      const marketPaths = ['news', 'indicators'].map(
+        (path) => `${backend.pathname.replace(/\/$/, '')}/${path}`,
+      );
+      // One story's card: /news/{numeric id}/story.
+      const newsStoryPath = new RegExp(`^${backend.pathname.replace(/\/$/, '')}/news/\\d+/story$`);
       const method = config.method?.toLowerCase();
       const isStrategyUpload =
         method === 'post' &&
@@ -183,8 +189,8 @@ function createApiClient(): AxiosInstance {
         ((method === 'delete' && !url.pathname.endsWith('/source')) ||
           (method === 'get' && url.pathname.endsWith('/source')));
       // The explicit local account owns backtests, strategy submissions and
-      // their source, the ticker-symbol check those runs depend on, and the
-      // identity check that signs dev sessions in. Absolute third-party URLs
+      // their source, the ticker-symbol check those runs depend on, the
+      // signed-in market reads, and the identity check that signs dev sessions in. Absolute third-party URLs
       // and unrelated endpoints must not receive it.
       if (
         url.origin === backend.origin &&
@@ -193,6 +199,8 @@ function createApiClient(): AxiosInstance {
           url.pathname === validateTickersPath ||
           url.pathname === searchSymbolsPath ||
           url.pathname === authMePath ||
+          marketPaths.includes(url.pathname) ||
+          newsStoryPath.test(url.pathname) ||
           isStrategyUpload ||
           isStrategyOwnerAction)
       ) {

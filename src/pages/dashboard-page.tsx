@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Link } from 'react-router';
 
 import { paths } from '@/app/paths';
@@ -14,6 +14,7 @@ import {
   benchmarkCurve,
   bookCurve,
   dashboardEndDate,
+  dashboardNewsWindow,
   mergeRunRows,
   RecentRunsTable,
   returnCorrelation,
@@ -30,11 +31,11 @@ import {
   NewsList,
   SentimentGauge,
   useIndicators,
-  useNews,
-  type NewsScope,
+  useRunNews,
 } from '@/features/market';
 import { ComparisonChart, RiskReturnScatter, type ComparisonSeries } from '@/features/performance';
 import { useStrategies } from '@/features/strategies';
+import { WatchlistCard } from '@/features/watchlist';
 import { seriesColor } from '@/lib/chart-theme';
 import { useDashboardPeriod, useSetDashboardPeriod, type DashboardPeriod } from '@/lib/ui-store';
 import { cn } from '@/lib/utils';
@@ -42,17 +43,14 @@ import { formatNumber, formatPercent, formatSigned } from '@/utils/format';
 import { toneFromValue } from '@/utils/tone';
 import { useChartPalette } from '@/utils/use-chart-palette';
 
+const DASHBOARD_NEWS_LIMIT = 8;
+
 const PERIODS = [
   { value: '1y', label: '1Y' },
   { value: '2y', label: '2Y' },
   { value: '5y', label: '5Y' },
   { value: 'max', label: 'Max' },
 ] as const satisfies readonly { value: DashboardPeriod; label: string }[];
-
-const NEWS_SCOPES = [
-  { value: 'universe', label: 'Universe' },
-  { value: 'all', label: 'All' },
-] as const satisfies readonly { value: NewsScope; label: string }[];
 
 const toneClass = {
   profit: 'text-[var(--profit)]',
@@ -155,8 +153,12 @@ export default function DashboardPage() {
 
   const universeTickers = useMemo(() => model.universe.map((row) => row.ticker), [model.universe]);
   const indicators = useIndicators(universeTickers);
-  const [newsScope, setNewsScope] = useState<NewsScope>('universe');
-  const news = useNews(universeTickers, newsScope);
+  // News is historical, not a feed: it covers the same backtest window as the charts.
+  const newsWindow = dashboardNewsWindow(selectedRuns, period);
+  const news = useRunNews(
+    { tickers: universeTickers, start: newsWindow?.start ?? '', end: newsWindow?.end ?? '' },
+    DASHBOARD_NEWS_LIMIT,
+  );
 
   const bookSentiment = useMemo(() => {
     const rows = indicators.data ?? [];
@@ -180,7 +182,6 @@ export default function DashboardPage() {
     .sort()
     .at(-1);
   const strategyIndex = new Map(strategies.map((strategy) => [strategy.id, strategy.colorIndex]));
-  const widestUniverse = model.universe[0]?.strategyIndexes.length ?? 1;
 
   return (
     <>
@@ -442,48 +443,12 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-[15px]">Universe</CardTitle>
-            <CardDescription>
-              Tickers by how many strategies trade them. Segments are the strategies.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-1.5">
-            {model.universe.slice(0, 12).map((row) => (
-              <div
-                key={row.ticker}
-                className="grid items-center gap-2 text-xs"
-                style={{ gridTemplateColumns: '44px 1fr 16px 64px' }}
-              >
-                <span className="tabular font-medium">{row.ticker}</span>
-                <div className="flex h-2.5 gap-px overflow-hidden rounded-sm">
-                  {row.strategyIndexes.map((index) => (
-                    <span
-                      key={index}
-                      className="h-full"
-                      style={{
-                        width: `${String(100 / widestUniverse)}%`,
-                        background: seriesColor(palette, index),
-                      }}
-                    />
-                  ))}
-                </div>
-                <span className="tabular text-right">{row.strategyIndexes.length}</span>
-                <span className="tabular text-[10px] text-muted-foreground">
-                  {row.coverageStart ?? '—'}
-                </span>
-              </div>
-            ))}
-            {!strategiesQuery.isPending && model.universe.length === 0 ? (
-              <p className="py-6 text-center text-sm text-muted-foreground">
-                {strategiesUnavailable
-                  ? 'Strategy universe unavailable.'
-                  : 'No active strategy declares a universe.'}
-              </p>
-            ) : null}
-          </CardContent>
-        </Card>
+        <WatchlistCard
+          universe={model.universe}
+          palette={palette}
+          isLoading={strategiesQuery.isPending}
+          isUnavailable={strategiesUnavailable}
+        />
 
         <ChartContainer
           title="Return vs. drawdown — all runs"
@@ -545,31 +510,26 @@ export default function DashboardPage() {
         </Card>
 
         <Card>
-          <CardHeader className="flex-row items-start justify-between gap-4 space-y-0 pb-3">
-            <div className="space-y-1">
-              <CardTitle className="flex items-center gap-2 text-[15px]">News — scored</CardTitle>
-              <CardDescription>
-                Only articles tagged to a ticker in the universe. The bar is the model’s sentiment
-                for that article.
-              </CardDescription>
-            </div>
-            <Segmented
-              value={newsScope}
-              options={NEWS_SCOPES}
-              onChange={setNewsScope}
-              ariaLabel="News scope"
-            />
+          <CardHeader className="space-y-1 pb-3">
+            <CardTitle className="text-[15px]">News — scored</CardTitle>
+            <CardDescription>
+              {newsWindow
+                ? `Universe articles from the backtest window, ${newsWindow.start} to ${newsWindow.end}, newest first. The bar is the model’s sentiment for each.`
+                : 'Articles appear for the window of your completed backtests.'}
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            {(newsScope === 'universe' && strategiesUnavailable) || news.error ? (
+            {strategiesUnavailable || news.error ? (
               <p className="py-6 text-center text-sm text-muted-foreground">News unavailable.</p>
-            ) : (
+            ) : newsWindow ? (
               <NewsList
                 articles={news.data ?? []}
-                isLoading={
-                  (newsScope === 'universe' && strategiesQuery.isPending) || news.isLoading
-                }
+                isLoading={strategiesQuery.isPending || news.isLoading}
               />
+            ) : (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                No completed backtests yet.
+              </p>
             )}
           </CardContent>
         </Card>

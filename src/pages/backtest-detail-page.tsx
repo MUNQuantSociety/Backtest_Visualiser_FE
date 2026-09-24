@@ -13,10 +13,12 @@ import {
   ReportExports,
   RunBacktestDialog,
   RunStatusBanner,
+  runUniverse,
   SentimentGateSummary,
   TradesTable,
   useBacktest,
 } from '@/features/backtests';
+import { RunNewsPanel } from '@/features/market';
 import {
   BetaScatter,
   DailyPnlBars,
@@ -49,6 +51,7 @@ const TABS = [
   { id: 'performance', label: 'Performance' },
   { id: 'risk', label: 'Risk' },
   { id: 'trades', label: 'Trades' },
+  { id: 'news', label: 'News' },
   { id: 'tearsheet', label: 'Tearsheet' },
 ] as const;
 
@@ -308,6 +311,12 @@ export default function BacktestDetailPage() {
             <TradeDurationScatter trades={trades} />
           </ChartContainer>
         </>
+      ) : null}
+
+      {active === 'news' && data ? (
+        <RunNewsPanel
+          window={{ tickers: runUniverse(data), start: data.startDate, end: data.endDate }}
+        />
       ) : null}
 
       {active === 'tearsheet' ? (

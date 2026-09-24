@@ -4,7 +4,7 @@ import { apiClient, ApiError } from '@/lib/api-client';
 import type * as ApiClientModule from '@/lib/api-client';
 
 import { fixtureIndicators } from './fixtures';
-import { fetchIndicators, fetchNews } from './market-api';
+import { fetchIndicators, fetchRunNews } from './market-api';
 import type { TickerIndicators } from './types';
 
 const config = vi.hoisted(() => ({
@@ -26,6 +26,8 @@ const article = {
   source: 'reuters.com',
   publishedAt: '2026-07-15T18:00:00+00:00',
   headline: 'Apple beats on revenue',
+  summary: 'Apple beats on revenue. Guidance raised.',
+  url: 'https://www.reuters.com/markets/apple-beats',
   tickers: ['AAPL'],
   score: 0.4,
 };
@@ -42,7 +44,9 @@ const indicatorRow: TickerIndicators = {
   asOf: '2026-07-15',
 };
 
-describe('fetchNews', () => {
+const run = { tickers: ['MSFT', 'AAPL'], start: '2026-05-01', end: '2026-05-29' };
+
+describe('fetchRunNews', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     config.useFixtures = false;
@@ -51,38 +55,30 @@ describe('fetchNews', () => {
   it('returns the articles the API sends', async () => {
     vi.mocked(apiClient.get).mockResolvedValue({ items: [article] });
 
-    await expect(fetchNews(['AAPL'], 'universe', 8)).resolves.toEqual([article]);
+    await expect(fetchRunNews(run, 8)).resolves.toEqual([article]);
   });
 
-  it('sends the universe tickers sorted for the universe scope', async () => {
+  it('asks for the run’s sorted tickers and its own dates', async () => {
     vi.mocked(apiClient.get).mockResolvedValue({ items: [] });
 
-    await fetchNews(['MSFT', 'AAPL'], 'universe', 8);
+    await fetchRunNews(run, 8);
 
     expect(apiClient.get).toHaveBeenCalledWith('/news', {
-      params: { tickers: 'AAPL,MSFT', limit: 8 },
+      params: { tickers: 'AAPL,MSFT', start: '2026-05-01', end: '2026-05-29', limit: 8 },
     });
-  });
-
-  it('sends no tickers for the all scope', async () => {
-    vi.mocked(apiClient.get).mockResolvedValue({ items: [] });
-
-    await fetchNews(['AAPL'], 'all', 5);
-
-    expect(apiClient.get).toHaveBeenCalledWith('/news', { params: { limit: 5 } });
   });
 
   it('calls the API even in fixture mode', async () => {
     config.useFixtures = true;
     vi.mocked(apiClient.get).mockResolvedValue({ items: [article] });
 
-    await expect(fetchNews(['AAPL'], 'universe', 8)).resolves.toEqual([article]);
+    await expect(fetchRunNews(run, 8)).resolves.toEqual([article]);
   });
 
   it.each([0, 404, 503])('surfaces a %i in dev', async (status) => {
     vi.mocked(apiClient.get).mockRejectedValue(new ApiError('unavailable', status, 'error'));
 
-    await expect(fetchNews(['AAPL'], 'universe', 8)).rejects.toBeInstanceOf(ApiError);
+    await expect(fetchRunNews(run, 8)).rejects.toBeInstanceOf(ApiError);
   });
 });
 

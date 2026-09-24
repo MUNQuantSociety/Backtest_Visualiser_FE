@@ -129,6 +129,22 @@ describe('temporary development backtest ownership', () => {
     expect(requests[0]!.headers.get('X-User-Id')).toBe(config.devUserId);
   });
 
+  it.each(['/news', '/indicators', '/news/42/story'])(
+    'includes the owner on the signed-in market request %s',
+    async (url) => {
+      await apiClient.get(url, { params: { tickers: 'AAPL' } });
+      expect(requests[0]!.headers.get('X-User-Id')).toBe(config.devUserId);
+    },
+  );
+
+  it.each(['/news-archive', '/indicators/other', '/news/42/story/extra', '/news/abc/story'])(
+    'does not send the temporary identity on the look-alike %s',
+    async (url) => {
+      await apiClient.get(url);
+      expect(requests[0]!.headers.has('X-User-Id')).toBe(false);
+    },
+  );
+
   it.each([
     '/strategies/check',
     '/strategies/upload/check',
