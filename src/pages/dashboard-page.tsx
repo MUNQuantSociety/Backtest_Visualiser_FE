@@ -22,7 +22,7 @@ import {
   RunBacktestDialog,
   RunPointerCard,
   summariseBook,
-  topRunsByReturn,
+  topStrategiesByReturn,
   universeRows,
   useBacktestEquities,
   useBenchmarkCloses,
@@ -30,6 +30,7 @@ import {
   usePendingRunRows,
   valuesAt,
   withBenchmarkCloses,
+  type BacktestSummary,
   type BookStrategy,
 } from '@/features/backtests';
 import {
@@ -62,8 +63,8 @@ import { toneFromValue } from '@/utils/tone';
 import { useChartPalette } from '@/utils/use-chart-palette';
 
 const DASHBOARD_NEWS_LIMIT = 8;
-/** How many runs the comparison chart and alpha table show. */
-const TOP_RUN_COUNT = 5;
+/** How many strategies the comparison chart and alpha table show, one line each. */
+const TOP_STRATEGY_COUNT = 5;
 
 const BENCHMARKS = [
   { value: 'spy', label: 'SPY' },
@@ -94,6 +95,24 @@ const toneClass = {
   loss: 'text-[var(--loss)]',
   neutral: 'text-foreground',
 } as const;
+
+/**
+ * A run in its strategy's dropdown. Reruns often share a name, so each option
+ * also carries its return over the window and the day it was saved.
+ */
+function runOptionLabel(
+  detail: { id: string; equityCurve: readonly { equity: number }[] },
+  summary: BacktestSummary | undefined,
+): string {
+  const first = detail.equityCurve[0]?.equity;
+  const last = detail.equityCurve.at(-1)?.equity;
+  const parts = [summary?.name ?? detail.id];
+  if (first && last !== undefined) {
+    parts.push(formatSigned(last / first - 1, (n) => formatPercent(n, 1)));
+  }
+  if (summary) parts.push(summary.createdAt.slice(0, 10));
+  return parts.join(' · ');
+}
 
 /**
  * Every saved run remains a separate comparison series, including reruns of
@@ -178,34 +197,61 @@ export default function DashboardPage() {
     };
   }, [detailsQuery.data, strategies, runSeries, runs]);
 
-  const [hiddenRunIds, setHiddenRunIds] = useState<ReadonlySet<string>>(() => new Set());
-  const toggleRunSeries = (runId: string) => {
-    setHiddenRunIds((current) => {
+  // Keyed by strategy, not run, so a strategy stays hidden when its row's
+  // dropdown swaps which of its runs is drawn.
+  const [hiddenStrategyIds, setHiddenStrategyIds] = useState<ReadonlySet<string>>(() => new Set());
+  const toggleStrategySeries = (strategyId: string) => {
+    setHiddenStrategyIds((current) => {
       const next = new Set(current);
-      if (next.has(runId)) next.delete(runId);
-      else next.add(runId);
+      if (next.has(strategyId)) next.delete(strategyId);
+      else next.add(strategyId);
       return next;
     });
   };
+  // A pick that later drops out of the window falls back to the best run.
+  const [chosenRunByStrategy, setChosenRunByStrategy] = useState<ReadonlyMap<string, string>>(
+    () => new Map(),
+  );
+  const chooseRun = (strategyId: string, runId: string) => {
+    setChosenRunByStrategy((current) => new Map(current).set(strategyId, runId));
+  };
 
-  // The comparison chart and alpha table: the top runs by total return over
-  // the dashboard window, measured against the chosen benchmark.
+  // The comparison chart and alpha table: the top strategies by their best
+  // run's total return over the dashboard window, one line each, measured
+  // against the chosen benchmark. Reruns stack under their strategy's row.
   const benchmarkMode = useDashboardBenchmark();
   const setBenchmarkMode = useSetDashboardBenchmark();
-  const topDetails = useMemo(
+  const topGroups = useMemo(
     () =>
-      topRunsByReturn(
+      topStrategiesByReturn(
         detailsQuery.data.filter((detail) => detail.equityCurve.length > 1),
-        TOP_RUN_COUNT,
+        TOP_STRATEGY_COUNT,
       ),
     [detailsQuery.data],
   );
-  const topStart = topDetails.map((detail) => detail.equityCurve[0]?.date ?? '').sort()[0] ?? '';
-  const topEnd =
+  const topDetails = useMemo(
+    () =>
+      topGroups.flatMap((group) => {
+        const chosen = chosenRunByStrategy.get(group.strategyId);
+        const shown = group.runs.find((detail) => detail.id === chosen) ?? group.runs[0];
+        return shown ? [shown] : [];
+      }),
+    [topGroups, chosenRunByStrategy],
+  );
+  const hiddenRunIds = new Set(
     topDetails
-      .map((detail) => detail.equityCurve.at(-1)?.date ?? '')
-      .sort()
-      .at(-1) ?? '';
+      .filter((detail) => hiddenStrategyIds.has(detail.strategyId))
+      .map((detail) => detail.id),
+  );
+  // Spans every stacked run, not just the ones drawn, so picking another run
+  // does not refetch SPY's closes.
+  const topDates = topGroups
+    .flatMap((group) => group.runs)
+    .flatMap((detail) => [detail.equityCurve[0]?.date ?? '', detail.equityCurve.at(-1)?.date ?? ''])
+    .filter(Boolean)
+    .sort();
+  const topStart = topDates[0] ?? '';
+  const topEnd = topDates.at(-1) ?? '';
   // Every run's window, not only the top runs': the book's alpha uses it too.
   const withHistory = detailsQuery.data.filter((detail) => detail.equityCurve.length > 1);
   const allStart = withHistory.map((detail) => detail.equityCurve[0]?.date ?? '').sort()[0] ?? '';
@@ -221,7 +267,6 @@ export default function DashboardPage() {
   );
   const comparison = useMemo(() => {
     const closes = spyCloses.data ?? [];
-    const colorById = new Map(runSeries.map((run) => [run.id, run.colorIndex]));
     const measured = topDetails.map((detail) => ({
       ...detail,
       name: runIndex.get(detail.id)?.name ?? detail.id,
@@ -230,12 +275,14 @@ export default function DashboardPage() {
           ? withBenchmarkCloses(detail.equityCurve, closes)
           : detail.equityCurve,
     }));
-    const strategiesTop: BookStrategy[] = measured.map((detail) => ({
+    // Colour follows the strategy's rank, so the five lines never share one
+    // and a strategy keeps its colour whichever of its runs is drawn.
+    const strategiesTop: BookStrategy[] = measured.map((detail, rank) => ({
       id: detail.id,
       name: detail.name,
       shortName: detail.name,
       universe: detail.symbol === 'MULTI' ? [] : [detail.symbol],
-      colorIndex: colorById.get(detail.id) ?? 0,
+      colorIndex: rank,
     }));
     const byRun = new Map(measured.map((detail) => [detail.id, detail] as const));
     const lines: ComparisonSeries[] = strategiesTop.map((strategy) => ({
@@ -258,10 +305,10 @@ export default function DashboardPage() {
     };
     // runIndex is rebuilt each render from `runs`; its content follows `runs`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [topDetails, spyCloses.data, benchmarkMode, runSeries, runs, topStart, topEnd]);
-  const visibleComparison = useMemo(
-    () => comparison.lines.filter((line) => !hiddenRunIds.has(line.id)),
-    [comparison.lines, hiddenRunIds],
+  }, [topDetails, spyCloses.data, benchmarkMode, runs, topStart, topEnd]);
+  const visibleComparison = comparison.lines.filter((line) => !hiddenRunIds.has(line.id));
+  const groupByRun = new Map(
+    topGroups.flatMap((group) => group.runs.map((detail) => [detail.id, group] as const)),
   );
 
   // The pointer card: follows the crosshair, pins on click so its links work.
@@ -299,8 +346,8 @@ export default function DashboardPage() {
     : 0;
   const colorByRun = new Map(comparison.lines.map((line) => [line.id, line.colorIndex ?? 0]));
   const spyUnavailable = benchmarkMode === 'spy' && spyCloses.isError;
-  const shownCount = topDetails.length || TOP_RUN_COUNT;
-  const topRunsLabel = `${String(shownCount)} ${shownCount === 1 ? 'run' : 'runs'}`;
+  const shownCount = topDetails.length || TOP_STRATEGY_COUNT;
+  const topStrategiesLabel = `${String(shownCount)} ${shownCount === 1 ? 'strategy' : 'strategies'}`;
 
   const universeTickers = useMemo(() => model.universe.map((row) => row.ticker), [model.universe]);
   const indicators = useIndicators(universeTickers);
@@ -516,7 +563,7 @@ export default function DashboardPage() {
           run names and scrolls; stacked, each half gets the full width. */}
       <div className="grid gap-5 min-[1400px]:grid-cols-2">
         <ChartContainer
-          title={`Top ${topRunsLabel} vs. ${comparison.benchmark.title} — rebased to 100`}
+          title={`Top ${topStrategiesLabel} vs. ${comparison.benchmark.title} — rebased to 100`}
           height={300}
           isLoading={loadingBook}
         >
@@ -561,8 +608,9 @@ export default function DashboardPage() {
           <CardHeader className="pb-3">
             <CardTitle className="text-[15px]">Run alpha table</CardTitle>
             <CardDescription>
-              The top {topRunsLabel} by total return over the period, against{' '}
-              {comparison.benchmark.title}. α is annualised. Runs that never traded are left out.
+              The top {topStrategiesLabel} by their best run’s total return over the period, against{' '}
+              {comparison.benchmark.title}. Pick which run each line shows from its row. α is
+              annualised. Runs that never traded are left out.
             </CardDescription>
           </CardHeader>
           <CardContent
@@ -613,7 +661,10 @@ export default function DashboardPage() {
               </thead>
               <tbody>
                 {comparison.rows.map((row, rank) => {
-                  const isVisible = !hiddenRunIds.has(row.run.id);
+                  const group = groupByRun.get(row.run.id);
+                  const strategyId = group?.strategyId ?? row.run.id;
+                  const strategyName = runIndex.get(row.run.id)?.strategyName ?? row.strategy.name;
+                  const isVisible = !hiddenStrategyIds.has(strategyId);
                   const color = seriesColor(palette, row.strategy.colorIndex);
                   const curve = row.run.equityCurve;
                   const first = curve[0]?.equity;
@@ -622,7 +673,7 @@ export default function DashboardPage() {
                     first && lastEquity !== undefined ? lastEquity / first - 1 : null;
                   return (
                     <tr
-                      key={row.strategy.id}
+                      key={strategyId}
                       className="border-b align-middle last:border-b-0 [&>td]:px-2 [&>td]:py-2.5 [&>td:first-child]:pl-0 [&>td:last-child]:pr-0 [&>td:not(:first-child)]:whitespace-nowrap"
                     >
                       <td>
@@ -633,9 +684,9 @@ export default function DashboardPage() {
                           <input
                             type="checkbox"
                             checked={isVisible}
-                            onChange={() => toggleRunSeries(row.run.id)}
-                            aria-label={`Show ${row.strategy.name} on comparison chart`}
-                            title={`${isVisible ? 'Hide' : 'Show'} ${row.strategy.name} on chart`}
+                            onChange={() => toggleStrategySeries(strategyId)}
+                            aria-label={`Show ${strategyName} on comparison chart`}
+                            title={`${isVisible ? 'Hide' : 'Show'} ${strategyName} on chart`}
                             className="size-3.5 shrink-0 cursor-pointer rounded-[3px] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:outline-none"
                             style={{ accentColor: color }}
                           />
@@ -648,8 +699,22 @@ export default function DashboardPage() {
                               {row.strategy.name}
                             </Link>
                             <p className="tabular truncate text-[10px] text-muted-foreground">
-                              {runIndex.get(row.run.id)?.strategyName} · {row.run.symbol}
+                              {strategyName} · {row.run.symbol}
                             </p>
+                            {group && group.runs.length > 1 ? (
+                              <select
+                                aria-label={`Run shown for ${strategyName}`}
+                                value={row.run.id}
+                                onChange={(event) => chooseRun(strategyId, event.target.value)}
+                                className="tabular mt-1 h-6 w-full max-w-full cursor-pointer truncate rounded-md border border-input bg-background px-1 text-[10px] outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                              >
+                                {group.runs.map((detail) => (
+                                  <option key={detail.id} value={detail.id}>
+                                    {runOptionLabel(detail, runIndex.get(detail.id))}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : null}
                           </div>
                         </div>
                       </td>

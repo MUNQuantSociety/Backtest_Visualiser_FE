@@ -4,6 +4,7 @@ import {
   buyHoldCurve,
   closesCurve,
   topRunsByReturn,
+  topStrategiesByReturn,
   valuesAt,
   withBenchmarkCloses,
   type BenchmarkClose,
@@ -65,6 +66,72 @@ describe('topRunsByReturn', () => {
   it('is empty for no runs or a count of zero', () => {
     expect(topRunsByReturn([], 5)).toEqual([]);
     expect(topRunsByReturn([run('a', [100, 110])], 0)).toEqual([]);
+  });
+});
+
+describe('topStrategiesByReturn', () => {
+  function strategyRun(id: string, strategyId: string, equities: number[]) {
+    return { ...run(id, equities), strategyId };
+  }
+  function summarise(groups: ReturnType<typeof topStrategiesByReturn>) {
+    return groups.map((group) => [group.strategyId, group.runs.map((entry) => entry.id)]);
+  }
+
+  it('stacks every run of a strategy into one group', () => {
+    const runs = [strategyRun('a1', 'a', [100, 110]), strategyRun('a2', 'a', [100, 105])];
+
+    expect(summarise(topStrategiesByReturn(runs, 5))).toEqual([['a', ['a1', 'a2']]]);
+  });
+
+  it('ranks strategies by their best run', () => {
+    const runs = [
+      strategyRun('a1', 'a', [100, 110]),
+      strategyRun('a2', 'a', [100, 101]),
+      strategyRun('b1', 'b', [100, 120]),
+    ];
+
+    expect(topStrategiesByReturn(runs, 5).map((group) => group.strategyId)).toEqual(['b', 'a']);
+  });
+
+  it('orders a strategy’s runs best first', () => {
+    const runs = [strategyRun('low', 'a', [100, 101]), strategyRun('high', 'a', [100, 150])];
+
+    expect(topStrategiesByReturn(runs, 5)[0]?.runs.map((entry) => entry.id)).toEqual([
+      'high',
+      'low',
+    ]);
+  });
+
+  it('keeps only the asked-for number of strategies', () => {
+    const runs = [
+      strategyRun('a1', 'a', [100, 130]),
+      strategyRun('b1', 'b', [100, 120]),
+      strategyRun('c1', 'c', [100, 110]),
+    ];
+
+    expect(topStrategiesByReturn(runs, 2).map((group) => group.strategyId)).toEqual(['a', 'b']);
+  });
+
+  it('returns nothing when asked for no strategies', () => {
+    expect(topStrategiesByReturn([strategyRun('a1', 'a', [100, 110])], 0)).toEqual([]);
+  });
+
+  it('leaves a null run out of its strategy’s group', () => {
+    const runs = [strategyRun('moved', 'a', [100, 110]), strategyRun('flat', 'a', [100, 100])];
+
+    expect(summarise(topStrategiesByReturn(runs, 5))).toEqual([['a', ['moved']]]);
+  });
+
+  it('leaves out a strategy whose runs never moved', () => {
+    const runs = [strategyRun('flat', 'a', [100, 100]), strategyRun('b1', 'b', [100, 101])];
+
+    expect(topStrategiesByReturn(runs, 5).map((group) => group.strategyId)).toEqual(['b']);
+  });
+
+  it('breaks a tie between strategies by their best run’s id', () => {
+    const runs = [strategyRun('b1', 'b', [100, 120]), strategyRun('a1', 'a', [100, 120])];
+
+    expect(topStrategiesByReturn(runs, 5).map((group) => group.strategyId)).toEqual(['a', 'b']);
   });
 });
 

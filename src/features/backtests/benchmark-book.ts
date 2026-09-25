@@ -57,6 +57,32 @@ export function topRunsByReturn<T extends Pick<BacktestDetail, 'id' | 'equityCur
     .map((entry) => entry.run);
 }
 
+/** One strategy's runs, best total return first. */
+export interface StrategyRunGroup<T> {
+  strategyId: string;
+  runs: T[];
+}
+
+/**
+ * The `count` strategies whose best run returned most, each holding its runs
+ * that moved, best first. Stacking reruns this way gives the comparison one
+ * line per strategy instead of five reruns of the same one. Ranking and
+ * null-run rules are `topRunsByReturn`'s.
+ */
+export function topStrategiesByReturn<
+  T extends Pick<BacktestDetail, 'id' | 'strategyId' | 'equityCurve'>,
+>(runs: readonly T[], count: number): StrategyRunGroup<T>[] {
+  const groups = new Map<string, T[]>();
+  for (const run of topRunsByReturn(runs, runs.length)) {
+    const group = groups.get(run.strategyId);
+    if (group) group.push(run);
+    else groups.set(run.strategyId, [run]);
+  }
+  return [...groups]
+    .slice(0, Math.max(0, count))
+    .map(([strategyId, grouped]) => ({ strategyId, runs: grouped }));
+}
+
 /**
  * The curve with its benchmark swapped for SPY's close on each date, so the
  * existing alpha and beta maths regress against SPY. A date SPY has no close

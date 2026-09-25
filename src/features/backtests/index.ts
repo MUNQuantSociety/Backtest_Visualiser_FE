@@ -29,11 +29,13 @@ export {
   buyHoldCurve,
   closesCurve,
   topRunsByReturn,
+  topStrategiesByReturn,
   valuesAt,
   withBenchmarkCloses,
   type BenchmarkClose,
   type BenchmarkMode,
   type RunValueAt,
+  type StrategyRunGroup,
 } from './benchmark-book';
 export { SPY_TICKER, useBenchmarkCloses } from './benchmark-api';
 export { RunPointerCard } from './run-pointer-card';

@@ -280,15 +280,17 @@ describe('Dashboard request isolation', () => {
 });
 
 describe('Dashboard saved run comparison', () => {
-  it('charts only the top five runs by return, from every page of history', async () => {
+  it('charts one line per strategy among the top five, from every page of history', async () => {
     const savedRuns = Array.from({ length: 26 }, (_, index) => ({
       ...run,
       id: `run-${index}`,
       name: index === 0 ? 'temp' : index === 1 ? 'neo' : `Run ${index}`,
       strategyId: index === 25 ? 'archived-strategy' : 'current',
+      strategyName: index === 25 ? 'Archived strategy' : 'Current strategy',
       sharpe: index,
     }));
     // temp and neo return most, then Run 25, 24, 23; every other run less.
+    // Only Run 25 is another strategy's, so the rest stack under temp's.
     const finalEquity = (index: number) => (index === 0 ? 200 : index === 1 ? 190 : 100 + index);
     const initial = vi.mocked(apiClient.get).getMockImplementation()!;
     vi.mocked(apiClient.get).mockImplementation((url, config) => {
@@ -337,23 +339,23 @@ describe('Dashboard saved run comparison', () => {
     });
     renderWithProviders(<DashboardPage />);
     const chart = await screen.findByTestId('comparison-chart');
-    await waitFor(() => expect(chart.querySelectorAll('[data-series-id]')).toHaveLength(5));
+    await waitFor(() => expect(chart.querySelectorAll('[data-series-id]')).toHaveLength(2));
     expect([...chart.querySelectorAll('[data-series-id]')].map((line) => line.textContent)).toEqual(
-      ['temp', 'neo', 'Run 25', 'Run 24', 'Run 23'],
+      ['temp', 'Run 25'],
     );
     expect(chart).toHaveAttribute('data-show-labels', 'false');
     await waitFor(() => expect(chart).toHaveAttribute('data-benchmark-points', '3'));
     expect(chart).toHaveAttribute('data-benchmark', 'SPY');
 
     const alpha = within(screen.getByRole('table', { name: 'Run alpha metrics' }));
-    expect(alpha.getAllByRole('row')).toHaveLength(6); // header and five runs
+    expect(alpha.getAllByRole('row')).toHaveLength(3); // header and two strategies
     expect(alpha.getByRole('link', { name: 'temp' })).toHaveAttribute('href', '/backtests/run-0');
-    expect(alpha.queryByRole('link', { name: 'Run 2' })).not.toBeInTheDocument();
-
-    const tempToggle = alpha.getByRole('checkbox', { name: 'Show temp on comparison chart' });
-    await userEvent.click(tempToggle);
-    expect(within(chart).queryByText('temp')).not.toBeInTheDocument();
-    expect(within(chart).getByText('neo')).toBeInTheDocument();
+    expect(alpha.queryByRole('link', { name: 'neo' })).not.toBeInTheDocument();
+    const runPicker = alpha.getByRole('combobox', { name: 'Run shown for Current strategy' });
+    expect(within(runPicker).getAllByRole('option')).toHaveLength(25);
+    expect(
+      alpha.queryByRole('combobox', { name: 'Run shown for Archived strategy' }),
+    ).not.toBeInTheDocument();
 
     // Every run still counts elsewhere: the scatter and the run history.
     expect(screen.getByTestId('run-scatter')).toHaveTextContent('Run 2,');
@@ -362,6 +364,79 @@ describe('Dashboard saved run comparison', () => {
     expect(
       vi.mocked(apiClient.get).mock.calls.filter(([url]) => url === '/backtests'),
     ).toHaveLength(2);
+  });
+
+  /** Two runs of one strategy: `best` returns 20%, `other` 10%. */
+  function mockTwoReruns() {
+    const savedRuns = [
+      { ...run, id: 'best', name: 'Best rerun' },
+      { ...run, id: 'other', name: 'Other rerun' },
+    ];
+    const initial = vi.mocked(apiClient.get).getMockImplementation()!;
+    vi.mocked(apiClient.get).mockImplementation((url, config) => {
+      if (url === '/backtests') {
+        return Promise.resolve({ items: savedRuns, total: 2, page: 1, pageSize: 25 });
+      }
+      if (url === '/market-data/closes') return Promise.resolve({ ticker: 'SPY', points: [] });
+      if (url.endsWith('/equity')) {
+        const id = url.split('/')[2]!;
+        return Promise.resolve({
+          id,
+          strategyId: run.strategyId,
+          symbol: run.symbol,
+          equityCurve: [
+            { date: '2025-12-30', equity: 100, benchmark: 100 },
+            { date: '2025-12-31', equity: id === 'best' ? 120 : 110, benchmark: 102 },
+          ],
+          window: {
+            period: '1y',
+            requestedStart: '2024-12-31',
+            requestedEnd: '2025-12-31',
+            availableStart: '2025-12-30',
+            availableEnd: '2025-12-31',
+          },
+        });
+      }
+      return initial(url, config);
+    });
+  }
+
+  it('swaps a strategy’s chart line to the run picked in its row', async () => {
+    mockTwoReruns();
+    renderWithProviders(<DashboardPage />);
+    const chart = await screen.findByTestId('comparison-chart');
+    await waitFor(() => expect(within(chart).getByText('Best rerun')).toBeInTheDocument());
+    const alpha = within(screen.getByRole('table', { name: 'Run alpha metrics' }));
+
+    await userEvent.selectOptions(
+      alpha.getByRole('combobox', { name: 'Run shown for Current strategy' }),
+      'other',
+    );
+
+    expect(within(chart).getByText('Other rerun')).toBeInTheDocument();
+    expect(within(chart).queryByText('Best rerun')).not.toBeInTheDocument();
+    expect(alpha.getByRole('link', { name: 'Other rerun' })).toHaveAttribute(
+      'href',
+      '/backtests/other',
+    );
+  });
+
+  it('keeps a hidden strategy hidden when another of its runs is picked', async () => {
+    mockTwoReruns();
+    renderWithProviders(<DashboardPage />);
+    const chart = await screen.findByTestId('comparison-chart');
+    await waitFor(() => expect(within(chart).getByText('Best rerun')).toBeInTheDocument());
+    const alpha = within(screen.getByRole('table', { name: 'Run alpha metrics' }));
+    await userEvent.click(
+      alpha.getByRole('checkbox', { name: 'Show Current strategy on comparison chart' }),
+    );
+
+    await userEvent.selectOptions(
+      alpha.getByRole('combobox', { name: 'Run shown for Current strategy' }),
+      'other',
+    );
+
+    expect(chart.querySelectorAll('[data-series-id]')).toHaveLength(0);
   });
 
   it('switches the comparison between SPY and each run’s own buy-and-hold', async () => {
@@ -398,7 +473,7 @@ describe('Dashboard saved run comparison', () => {
     );
 
     expect(chart).toHaveAttribute('data-benchmark', 'Buy & hold');
-    expect(screen.getByText(/Top 1 run vs\. Buy & hold/)).toBeInTheDocument();
+    expect(screen.getByText(/Top 1 strategy vs\. Buy & hold/)).toBeInTheDocument();
     // The KPI tile measures the book against the same choice.
     expect(screen.getByText('Alpha vs Buy & hold')).toBeInTheDocument();
     expect(screen.queryByText('Alpha vs SPY')).not.toBeInTheDocument();
