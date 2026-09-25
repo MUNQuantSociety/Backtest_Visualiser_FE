@@ -1,6 +1,7 @@
-import { X } from 'lucide-react';
+import { BookOpen, X } from 'lucide-react';
 import { useId, useImperativeHandle, useRef, useState, type Ref } from 'react';
 
+import { HelpMenu, HelpMenuItem } from '@/components/common/help-menu';
 import { Button } from '@/components/ui/button';
 import { createLogger } from '@/lib/logger';
 
@@ -89,5 +90,31 @@ function GuideBody() {
   const template = useStrategyTemplate();
   return (
     <StrategyGuideContent starterSource={template.data?.source ?? STARTER_TEMPLATE_FALLBACK} />
+  );
+}
+
+/**
+ * The `?` help menu with the strategy guide as its entry.
+ *
+ * Used where the guide is the only help on offer — the New strategy dialog's
+ * header, mirroring the run form's `RunFormHelpMenu`. The app header builds
+ * its own `HelpMenu` so app-wide entries can join it.
+ */
+export function StrategyFormHelpMenu() {
+  const guideRef = useRef<StrategyGuideHandle>(null);
+  return (
+    <>
+      <HelpMenu label="Strategy form help">
+        <HelpMenuItem
+          icon={<BookOpen aria-hidden />}
+          onSelect={() => {
+            guideRef.current?.open();
+          }}
+        >
+          Writing a strategy
+        </HelpMenuItem>
+      </HelpMenu>
+      <StrategyGuideDialog ref={guideRef} />
+    </>
   );
 }

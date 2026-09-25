@@ -11,7 +11,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Segmented } from '@/components/ui/segmented';
 import {
   alphaRows,
-  benchmarkCurve,
   bookCurve,
   buyHoldCurve,
   closesCurve,
@@ -166,24 +165,14 @@ export default function DashboardPage() {
         : [];
     });
     const book = bookCurve(lines.map((line) => line.points));
-    const benchmark = benchmarkCurve([...byRun.values()]);
     // The backend has already applied the shared calendar window.
     const rows = alphaRows(runSeries, byRun, 'max');
     const corr = returnCorrelation(runSeries, byRun, 'max');
-    const summary = summariseBook(
-      book,
-      benchmark.points,
-      rows,
-      corr.averagePairwise,
-      strategies,
-      runs,
-    );
     return {
       lines,
-      benchmark,
+      book,
       rows,
       corr,
-      summary,
       hasBook: book.length > 2,
       universe: universeRows(strategies, runs),
     };
@@ -217,10 +206,18 @@ export default function DashboardPage() {
       .map((detail) => detail.equityCurve.at(-1)?.date ?? '')
       .sort()
       .at(-1) ?? '';
+  // Every run's window, not only the top runs': the book's alpha uses it too.
+  const withHistory = detailsQuery.data.filter((detail) => detail.equityCurve.length > 1);
+  const allStart = withHistory.map((detail) => detail.equityCurve[0]?.date ?? '').sort()[0] ?? '';
+  const allEnd =
+    withHistory
+      .map((detail) => detail.equityCurve.at(-1)?.date ?? '')
+      .sort()
+      .at(-1) ?? '';
   const spyCloses = useBenchmarkCloses(
-    topStart,
-    topEnd,
-    benchmarkMode === 'spy' && topDetails.length > 0,
+    allStart,
+    allEnd,
+    benchmarkMode === 'spy' && withHistory.length > 0,
   );
   const comparison = useMemo(() => {
     const closes = spyCloses.data ?? [];
@@ -329,7 +326,21 @@ export default function DashboardPage() {
     (!detailsQuery.isPending && detailsQuery.failed.length > 0 && detailsQuery.data.length === 0);
   const loadingBook =
     !bookUnavailable && (runsQuery.isPending || (runIds.length > 0 && detailsQuery.isPending));
-  const { summary } = model;
+  // The book (every run, equal weight) against the chosen benchmark.
+  const summary = useMemo(() => {
+    const benchmarkPoints =
+      benchmarkMode === 'spy'
+        ? closesCurve(spyCloses.data ?? [], allStart, allEnd)
+        : buyHoldCurve(detailsQuery.data);
+    return summariseBook(
+      model.book,
+      benchmarkPoints,
+      model.rows,
+      model.corr.averagePairwise,
+      strategies,
+      runs,
+    );
+  }, [model, benchmarkMode, spyCloses.data, allStart, allEnd, detailsQuery.data, strategies, runs]);
   const periodLabel = PERIODS.find((option) => option.value === period)?.label ?? '';
   const last = model.lines
     .flatMap((line) => line.points.at(-1)?.date ?? [])
@@ -428,7 +439,7 @@ export default function DashboardPage() {
           size="dense"
         />
         <StatTile
-          label={`Alpha vs ${model.benchmark.title}`}
+          label={`Alpha vs ${BENCHMARK_TITLES[benchmarkMode]}`}
           value={
             !bookUnavailable && model.hasBook
               ? formatSigned(summary.alpha, (n) => formatPercent(n, 1))
@@ -501,7 +512,9 @@ export default function DashboardPage() {
         ) : null}
       </Card>
 
-      <div className="grid gap-5 xl:grid-cols-2">
+      {/* Side by side only from 1400px: narrower, the alpha table squeezes its
+          run names and scrolls; stacked, each half gets the full width. */}
+      <div className="grid gap-5 min-[1400px]:grid-cols-2">
         <ChartContainer
           title={`Top ${topRunsLabel} vs. ${comparison.benchmark.title} — rebased to 100`}
           height={300}
@@ -729,7 +742,8 @@ export default function DashboardPage() {
         </ChartContainer>
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+      {/* Same breakpoint: the indicators table needs ~610px beside the news. */}
+      <div className="grid gap-5 min-[1400px]:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
         <Card>
           <CardHeader className="flex-row items-start justify-between gap-4 space-y-0 pb-3">
             <div className="space-y-1">

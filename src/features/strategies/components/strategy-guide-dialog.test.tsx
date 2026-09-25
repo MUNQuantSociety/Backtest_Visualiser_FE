@@ -7,7 +7,11 @@ import { act, renderWithProviders, screen, userEvent, waitFor, within } from '@/
 
 import { STARTER_TEMPLATE_FALLBACK } from '../starter-template';
 
-import { StrategyGuideDialog, type StrategyGuideHandle } from './strategy-guide-dialog';
+import {
+  StrategyFormHelpMenu,
+  StrategyGuideDialog,
+  type StrategyGuideHandle,
+} from './strategy-guide-dialog';
 
 vi.mock('@/config/env', () => ({
   env: { apiBaseUrl: '/api', apiTimeout: 30_000, useFixtures: false, isDev: false, isProd: true },
@@ -114,5 +118,21 @@ describe('StrategyGuideDialog', () => {
 
     expect(dialog.open).toBe(false);
     expect(screen.queryByRole('navigation', { name: 'Guide contents' })).not.toBeInTheDocument();
+  });
+});
+
+describe('StrategyFormHelpMenu', () => {
+  it('opens the strategy guide from its help entry', async () => {
+    renderWithProviders(<StrategyFormHelpMenu />);
+    const dialog = document.querySelector('dialog')!;
+    dialog.showModal = () => {
+      dialog.open = true;
+    };
+
+    await userEvent.click(screen.getByRole('button', { name: 'Strategy form help' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Writing a strategy' }));
+
+    expect(dialog.open).toBe(true);
+    expect(screen.getByRole('navigation', { name: 'Guide contents' })).toBeInTheDocument();
   });
 });

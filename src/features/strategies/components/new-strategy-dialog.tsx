@@ -4,6 +4,7 @@ import { useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 
 import { StrategyEditor } from './strategy-editor';
+import { StrategyFormHelpMenu } from './strategy-guide-dialog';
 
 /**
  * "New strategy" as a header action, opening the existing editor in a modal.
@@ -66,9 +67,12 @@ export function NewStrategyDialog() {
               , or upload an existing <code className="tabular">.py</code> file.
             </p>
           </div>
-          <Button variant="ghost" size="icon" aria-label="Close" onClick={closeDialog}>
-            <X className="size-4" aria-hidden />
-          </Button>
+          <div className="flex shrink-0 items-center gap-1">
+            <StrategyFormHelpMenu />
+            <Button variant="ghost" size="icon" aria-label="Close" onClick={closeDialog}>
+              <X className="size-4" aria-hidden />
+            </Button>
+          </div>
         </div>
         <div className="px-6 py-5">{open ? <StrategyEditor /> : null}</div>
       </dialog>

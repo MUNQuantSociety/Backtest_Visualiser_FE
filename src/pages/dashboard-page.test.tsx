@@ -391,6 +391,7 @@ describe('Dashboard saved run comparison', () => {
     renderWithProviders(<DashboardPage />);
     const chart = await screen.findByTestId('comparison-chart');
     expect(chart).toHaveAttribute('data-benchmark', 'SPY');
+    expect(screen.getByText('Alpha vs SPY')).toBeInTheDocument();
 
     await userEvent.click(
       within(screen.getByRole('radiogroup', { name: 'Benchmark' })).getByText('Buy & hold'),
@@ -398,6 +399,9 @@ describe('Dashboard saved run comparison', () => {
 
     expect(chart).toHaveAttribute('data-benchmark', 'Buy & hold');
     expect(screen.getByText(/Top 1 run vs\. Buy & hold/)).toBeInTheDocument();
+    // The KPI tile measures the book against the same choice.
+    expect(screen.getByText('Alpha vs Buy & hold')).toBeInTheDocument();
+    expect(screen.queryByText('Alpha vs SPY')).not.toBeInTheDocument();
   });
 });
 
