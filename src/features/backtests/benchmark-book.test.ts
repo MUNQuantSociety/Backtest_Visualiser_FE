@@ -98,7 +98,54 @@ describe('buyHoldCurve', () => {
     const runs = [run('a', [1, 1], [100, 110]), run('b', [1, 1], [50, 60])];
 
     // a: 100 → 110 (+10%); b: 100 → 120 (+20%); equal weight: 115.
-    expect(buyHoldCurve(runs).map((point) => point.equity)).toEqual([100, 115]);
+    const [first, second] = buyHoldCurve(runs).map((point) => point.equity);
+    expect(first).toBe(100);
+    expect(second).toBeCloseTo(115);
+  });
+
+  it('spans every run’s window, not only the dates they share', () => {
+    const early = {
+      equityCurve: [
+        { date: '2026-03-01', equity: 1, benchmark: 100 },
+        { date: '2026-03-02', equity: 1, benchmark: 110 },
+      ],
+    };
+    const late = {
+      equityCurve: [
+        { date: '2026-03-03', equity: 1, benchmark: 50 },
+        { date: '2026-03-04', equity: 1, benchmark: 55 },
+      ],
+    };
+
+    expect(buyHoldCurve([early, late]).map((point) => point.date)).toEqual([
+      '2026-03-01',
+      '2026-03-02',
+      '2026-03-03',
+      '2026-03-04',
+    ]);
+  });
+
+  it('averages each day’s return over the runs active that day, with no jump when one joins', () => {
+    const first = {
+      equityCurve: [
+        { date: '2026-03-01', equity: 1, benchmark: 100 },
+        { date: '2026-03-02', equity: 1, benchmark: 110 }, // +10%
+        { date: '2026-03-03', equity: 1, benchmark: 121 }, // +10%
+      ],
+    };
+    const joiner = {
+      equityCurve: [
+        { date: '2026-03-02', equity: 1, benchmark: 40 }, // joins: no return yet
+        { date: '2026-03-03', equity: 1, benchmark: 48 }, // +20%
+      ],
+    };
+
+    const curve = buyHoldCurve([first, joiner]).map((point) => point.equity);
+
+    // 100 → 110 (first alone) → 110 × (1 + (10% + 20%) / 2) = 126.5
+    expect(curve[0]).toBe(100);
+    expect(curve[1]).toBeCloseTo(110);
+    expect(curve[2]).toBeCloseTo(126.5);
   });
 
   it('is empty when no run carries a benchmark', () => {

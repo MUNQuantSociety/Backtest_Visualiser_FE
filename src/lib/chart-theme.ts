@@ -114,7 +114,7 @@ export interface ChartPalette {
       so the curve the page exists for never competes with the profit / loss /
       drawdown signals drawn around it. */
   ink: string;
-  /** The benchmark line: high-contrast grey, drawn heavy and long-dashed. */
+  /** The benchmark line: a high-contrast grey, dotted, beside the coloured runs. */
   benchmark: string;
   series: [string, string, string, string, string];
 }

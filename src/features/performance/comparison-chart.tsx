@@ -60,7 +60,7 @@ interface ComparisonChartProps {
   /** Or arbitrary series — a book of strategies, say — with their own titles. */
   series?: readonly ComparisonSeries[] | undefined;
   /**
-   * A reference line drawn dashed in the benchmark grey. Rebased with the
+   * A reference line drawn dotted in the benchmark grey. Rebased with the
    * rest, so the gap to it is what doing nothing would have earned.
    */
   benchmark?: { title: string; points: readonly EquityPoint[] } | undefined;
@@ -227,10 +227,10 @@ export function ComparisonChart({
       if (points.length > 0) {
         const series = chart.addSeries(LineSeries, {
           color: palette.benchmark,
-          // Heavier than a run's line and long-dashed, so the benchmark reads
-          // as the reference the runs are measured against, not one more run.
-          lineWidth: 3,
-          lineStyle: LineStyle.LargeDashed,
+          // Dotted at the runs' width: the dots and the neutral grey mark it as
+          // the reference rather than one more run, without a dash's visual noise.
+          lineWidth: 2,
+          lineStyle: LineStyle.Dotted,
           priceLineVisible: false,
           lastValueVisible: showSeriesLabels,
           title: showSeriesLabels ? benchmark.title : '',

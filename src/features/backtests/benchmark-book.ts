@@ -1,4 +1,3 @@
-import { bookCurve } from './book';
 import type { BacktestDetail, EquityPoint } from './types';
 
 /**
@@ -86,19 +85,35 @@ export function closesCurve(
 }
 
 /**
- * The runs' own buy-and-hold curves, each rebased to 100 and held equal-weight
- * on the dates they share. Unlike `benchmarkCurve` it never swaps in a run
- * that traded SPY: this option is always the runs' own universes.
+ * The runs' own buy-and-hold as one index from 100, spanning every run's
+ * window rather than only the dates they share.
+ *
+ * Built like an index whose members change: each date's move is the mean of
+ * that day's return for the runs that have both the day and the one before,
+ * compounded. A run joining or leaving shifts the weights, not the level, so
+ * the line has no jump where one run's window starts or ends.
  */
 export function buyHoldCurve(runs: readonly Pick<BacktestDetail, 'equityCurve'>[]): EquityPoint[] {
-  const curves = runs
-    .map((run) =>
-      run.equityCurve.flatMap((point) =>
-        typeof point.benchmark === 'number' ? [{ date: point.date, equity: point.benchmark }] : [],
-      ),
-    )
-    .filter((curve) => curve.length > 0);
-  return curves.length > 0 ? bookCurve(curves) : [];
+  const returnsByDate = new Map<string, number[]>();
+  for (const run of runs) {
+    const held = run.equityCurve.flatMap((point) =>
+      typeof point.benchmark === 'number' ? [{ date: point.date, value: point.benchmark }] : [],
+    );
+    held.forEach((point, index) => {
+      const returns = returnsByDate.get(point.date) ?? [];
+      const previous = held[index - 1]?.value;
+      if (previous) returns.push(point.value / previous - 1);
+      returnsByDate.set(point.date, returns);
+    });
+  }
+  let level = 100;
+  return [...returnsByDate.keys()].sort().map((date) => {
+    const returns = returnsByDate.get(date) ?? [];
+    if (returns.length > 0) {
+      level *= 1 + returns.reduce((sum, value) => sum + value, 0) / returns.length;
+    }
+    return { date, equity: level };
+  });
 }
 
 /** One run's standing at the pointer's date, for the chart's info card. */
