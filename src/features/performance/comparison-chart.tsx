@@ -227,8 +227,10 @@ export function ComparisonChart({
       if (points.length > 0) {
         const series = chart.addSeries(LineSeries, {
           color: palette.benchmark,
-          lineWidth: 1,
-          lineStyle: LineStyle.Dashed,
+          // Heavier than a run's line and long-dashed, so the benchmark reads
+          // as the reference the runs are measured against, not one more run.
+          lineWidth: 3,
+          lineStyle: LineStyle.LargeDashed,
           priceLineVisible: false,
           lastValueVisible: showSeriesLabels,
           title: showSeriesLabels ? benchmark.title : '',

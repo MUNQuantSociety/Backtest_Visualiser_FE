@@ -104,7 +104,7 @@
   --warning: oklch(0.66 0.14 75);
 
   --series-ink: oklch(0.18 0.01 255);
-  --series-benchmark: oklch(0.62 0.012 255);
+  --series-benchmark: oklch(0.42 0.012 255);
 
   --chart-1: oklch(0.55 0.12 245);
   --chart-2: oklch(0.6 0.13 75);
@@ -146,7 +146,7 @@
   --warning: oklch(0.8 0.13 80);
 
   --series-ink: oklch(0.93 0.005 255);
-  --series-benchmark: oklch(0.55 0.012 255);
+  --series-benchmark: oklch(0.8 0.01 255);
 
   --chart-1: oklch(0.78 0.08 240);
   --chart-2: oklch(0.8 0.12 80);
