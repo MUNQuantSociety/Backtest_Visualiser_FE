@@ -492,6 +492,7 @@ export function useBacktestDetails(ids: readonly string[]) {
       data: results.flatMap((result) => (result.data ? [result.data] : [])),
       isPending: results.some((result) => result.isPending),
       isError: results.some((result) => result.isError),
+      refetch: () => Promise.all(results.map((result) => result.refetch())),
     }),
   });
 }

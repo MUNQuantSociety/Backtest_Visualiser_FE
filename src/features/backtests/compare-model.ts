@@ -2,6 +2,7 @@ import { formatCompact, formatNumber, formatPercent, formatSigned } from '@/util
 import { toReturns } from '@/utils/metrics';
 
 import { regressOnBenchmark } from './book';
+import { runUniverse } from './run-universe';
 import type { BacktestDetail, BacktestSummary } from './types';
 
 /**
@@ -244,7 +245,10 @@ export function compareContext(runs: readonly BacktestDetail[]): CompareContext 
   return {
     sameStrategy: same((run) => run.strategyId),
     sameWindow: same((run) => `${run.startDate}/${run.endDate}`),
-    sameUniverse: same((run) => run.symbol),
+    sameUniverse: same((run) => {
+      const tickers = [...new Set(runUniverse(run))].sort();
+      return tickers.length ? JSON.stringify(tickers) : run.symbol;
+    }),
     differingKeys: parameterRows(runs)
       .filter((row) => row.differs)
       .map((row) => row.key),

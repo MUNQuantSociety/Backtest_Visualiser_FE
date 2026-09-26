@@ -1,0 +1,50 @@
+name: Frontend CI
+
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frontend-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Frontend quality gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CI: 'true'
+      # Public, synthetic config. No credentials, fixture-mode flag or dev-auth
+      # bypass; browser tests intercept the API outside the production bundle.
+      VITE_USE_FIXTURES: 'false'
+      VITE_API_BASE_URL: https://api.example.test/api
+      VITE_AUTH_AUTHORITY: https://issuer.example.test
+      VITE_AUTH_DOMAIN: https://login.example.test
+      VITE_AUTH_CLIENT_ID: browser-ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Install Chromium and Linux dependencies
+        run: npx playwright install --with-deps chromium
+      - name: Lint, gate tests, full unit suite, compile and production-browser tests
+        run: npm run ci
+      - name: Keep browser failure evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-results
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 14

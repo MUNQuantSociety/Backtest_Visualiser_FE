@@ -25,9 +25,13 @@ frontend:
           }
           console.log("Production API configuration checked.");'
         - npm ci --cache .npm --prefer-offline
+        # Fail closed: Actions must have tested this exact pushed commit before
+        # Amplify builds/publishes it. PR checks or a previous SHA do not count.
+        - npm run check:production-ci
     build:
       commands:
         - npm run lint
+        - npm run test:gate
         - npm test -- --pool=forks --maxWorkers=1
         - npm run build
   artifacts:

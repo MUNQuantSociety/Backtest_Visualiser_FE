@@ -62,11 +62,14 @@ export default function ComparePage() {
   const palette = useChartPalette();
   const [copied, setCopied] = useState(false);
 
-  const ids = (searchParams.get('runs') ?? '')
-    .split(',')
-    .map((id) => id.trim())
-    .filter(Boolean)
-    .slice(0, MAX_RUNS);
+  const ids = [
+    ...new Set(
+      (searchParams.get('runs') ?? '')
+        .split(',')
+        .map((id) => id.trim())
+        .filter(Boolean),
+    ),
+  ].slice(0, MAX_RUNS);
 
   function setRuns(next: readonly string[]) {
     const params = new URLSearchParams(searchParams);
@@ -75,12 +78,13 @@ export default function ComparePage() {
     setSearchParams(params, { replace: true });
   }
 
-  const { data: details, isPending } = useBacktestDetails(ids);
+  const { data: details, isPending, isError, refetch } = useBacktestDetails(ids);
 
   // No runs in the URL: open on a sensible pair rather than an empty page,
   // and put it in the URL so the link is the comparison from the start.
   const wantsDefault = ids.length === 0;
-  const { data: runList, isPending: listPending } = useBacktests({ pageSize: 100 });
+  const runsQuery = useBacktests({ pageSize: 100 });
+  const { data: runList, isPending: listPending } = runsQuery;
   const defaultKey = wantsDefault && runList ? defaultComparison(runList.items).join(',') : '';
   useEffect(() => {
     if (wantsDefault && defaultKey) {
@@ -114,7 +118,21 @@ export default function ComparePage() {
           description="Pick two to four runs and every gap between them is explained below."
           actions={picker}
         />
-        {settling ? (
+        {runsQuery.isError ? (
+          <EmptyState
+            title="Could not load saved runs"
+            description="The run list is unavailable. Retry to choose a comparison."
+            action={
+              <Button
+                onClick={() => {
+                  void runsQuery.refetch();
+                }}
+              >
+                Retry saved runs
+              </Button>
+            }
+          />
+        ) : settling ? (
           <div className="space-y-5">
             <div className="grid gap-3 sm:grid-cols-2">
               <Skeleton className="h-16" />
@@ -227,6 +245,10 @@ export default function ComparePage() {
               </span>
               {run ? (
                 <RunChip run={run} differingKeys={context.differingKeys} />
+              ) : isError && !isPending ? (
+                <p className="min-w-0 flex-1 text-sm text-muted-foreground">
+                  This run could not be loaded. Retry below or remove it from the comparison.
+                </p>
               ) : (
                 <div className="min-w-0 flex-1 space-y-1.5">
                   <Skeleton className="h-4 w-40" />
@@ -248,19 +270,33 @@ export default function ComparePage() {
         })}
       </div>
 
-      {ids.length < 2 ? (
+      {isError && !isPending ? (
+        <EmptyState
+          title="Could not load all selected runs"
+          description="A run may be unavailable or no longer accessible. Retry, or remove the unavailable run above."
+          action={
+            <Button
+              onClick={() => {
+                void refetch();
+              }}
+            >
+              Retry comparison
+            </Button>
+          }
+        />
+      ) : ids.length < 2 ? (
         <EmptyState
           title="One more to compare"
           description="A comparison needs at least two runs. Add another above."
         />
       ) : (
         <div className="grid gap-5 xl:grid-cols-[400px_minmax(0,1fr)]">
-          <div className="space-y-5">
+          <div className="min-w-0 space-y-5">
             <MetricsCard runs={ordered} loading={loading} />
             <ParametersCard runs={ordered} loading={loading} />
           </div>
 
-          <div className="space-y-5">
+          <div className="min-w-0 space-y-5">
             <ChartContainer
               title="Equity — rebased to 100"
               description={`Vertical distance between ${LETTERS.slice(0, ordered.length).join(' and ')} is the difference in return. ${benchmarkCurve(ordered).title} dashed.`}
