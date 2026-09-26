@@ -28,6 +28,7 @@ Public API/auth configuration must be present when building and testing locally.
 ## Enforcement and rollout
 
 - `.github/workflows/ci.yml` runs on PRs targeting dev/main and pushes to both branches. No path filters, skipped-test success, `continue-on-error`, or test retries. `Frontend quality gate` is the check to require in branch protection.
+- CI pins Ubuntu 24.04 and the reviewed v7 action commit SHAs, so a rolling OS label or moved action tag cannot silently change the pipeline. Update these pins through a tested PR; checkout does not persist credentials.
 - `amplify.yml` first checks production API/auth configuration, installs the lockfile, then requires successful **push CI for the exact checkout SHA and branch**. A green PR check or an older deployment is insufficient. It re-runs lint, unit/guard tests, and compilation with the actual Amplify environment before artifacts are published.
 - Missing workflow, failed/cancelled/skipped run, invalid SHA, GitHub API error/rate limit, or timeout blocks deployment. A manual Amplify rebuild's `AWS_COMMIT_ID=HEAD` resolves to its checkout SHA and still requires CI for that SHA.
 - This gate uses the public repository's read-only GitHub API and no secret. If the repository becomes private, adapt it to authenticated CI verification; do not disable the gate or put a token in `VITE_*`.
@@ -39,4 +40,4 @@ Public API/auth configuration must be present when building and testing locally.
 
 This is regression protection, not a promise that production can never fail. Backend availability, Cognito, CORS, user-specific data, and deployment configuration require live checks. The backend already has separate unit, PostgreSQL and image CI, invoked before ECS deployment; this frontend change does not alter backend ownership or deployment. Browser tests are Chromium-focused and do not certify every browser/input combination. Real account creation, production run submission/deletion and publisher navigation are not exercised against live services.
 
-References: [Playwright CI](https://playwright.dev/docs/ci), [production preview server configuration](https://playwright.dev/docs/test-webserver), [Amplify build environment variables](https://docs.aws.amazon.com/amplify/latest/userguide/environment-variables.html).
+References: [Playwright CI](https://playwright.dev/docs/ci), [production preview server configuration](https://playwright.dev/docs/test-webserver), [Amplify build environment variables](https://docs.aws.amazon.com/amplify/latest/userguide/environment-variables.html), [checkout action](https://github.com/actions/checkout), [Node setup action](https://github.com/actions/setup-node), [artifact upload action](https://github.com/actions/upload-artifact).
