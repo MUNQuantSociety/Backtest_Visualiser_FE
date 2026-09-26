@@ -406,7 +406,9 @@ function TopNav() {
   return (
     <div className="sticky top-14 z-40 border-b bg-card/95 backdrop-blur md:hidden">
       {/* The row scrolls sideways inside itself; the page body must not. */}
-      <nav aria-label="Main" className="overflow-x-auto">
+      {/* Contain absolutely positioned screen-reader labels in the scroll row.
+          Otherwise an off-screen link can widen the document on mobile. */}
+      <nav aria-label="Main" className="relative overflow-x-auto">
         <ul className="flex w-max items-center gap-1 px-2 py-2">
           {sections.flatMap((section) =>
             section.items.map((item) => (

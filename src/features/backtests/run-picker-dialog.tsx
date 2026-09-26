@@ -140,6 +140,21 @@ function RunList({
       </div>
     );
   }
+  if (runs.isError) {
+    return (
+      <div className="space-y-3 p-5" role="alert">
+        <p className="text-sm">Could not load saved runs.</p>
+        <Button
+          variant="outline"
+          onClick={() => {
+            void runs.refetch();
+          }}
+        >
+          Retry saved runs
+        </Button>
+      </div>
+    );
+  }
   const needle = query.trim().toLowerCase();
   const items = (runs.data?.items ?? [])
     .filter((run) => run.status === 'completed')

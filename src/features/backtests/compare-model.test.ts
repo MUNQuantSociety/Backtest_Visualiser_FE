@@ -127,6 +127,18 @@ describe('parameterRows / compareContext / describeComparison', () => {
     ]);
     expect(describeComparison(context, 2)).toMatch(/differ in window and universe/);
   });
+
+  it('compares actual multi-ticker universes rather than their shared MULTI label', () => {
+    const a = detail({ symbol: 'MULTI', parameters: { universe: ['AAPL', 'MSFT'] } });
+    const b = detail({ symbol: 'MULTI', parameters: { universe: ['AAPL', 'NVDA'] } });
+    expect(compareContext([a, b]).sameUniverse).toBe(false);
+    expect(describeComparison(compareContext([a, b]), 2)).toMatch(/differ in universe/);
+    const reordered = detail({
+      symbol: 'MULTI',
+      parameters: { universe: ['msft', 'AAPL', 'AAPL'] },
+    });
+    expect(compareContext([a, reordered]).sameUniverse).toBe(true);
+  });
 });
 
 describe('compareMetricRows / chipSummary', () => {

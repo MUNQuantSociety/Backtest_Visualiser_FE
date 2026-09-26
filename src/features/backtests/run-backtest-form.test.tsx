@@ -1146,6 +1146,8 @@ describe('section info bubbles', () => {
       await userEvent.click(trigger);
       const bubble = await screen.findByRole('tooltip');
       expect(bubble.textContent?.length ?? 0).toBeGreaterThan(40);
+      // A floating panel contains a div and must not be nested in a paragraph.
+      expect(bubble.closest('p')).toBeNull();
       expect(trigger).toHaveAttribute('aria-describedby', bubble.id);
       await userEvent.keyboard('{Escape}');
       await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument());

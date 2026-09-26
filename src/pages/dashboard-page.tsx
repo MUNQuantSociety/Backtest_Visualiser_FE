@@ -238,11 +238,6 @@ export default function DashboardPage() {
       }),
     [topGroups, chosenRunByStrategy],
   );
-  const hiddenRunIds = new Set(
-    topDetails
-      .filter((detail) => hiddenStrategyIds.has(detail.strategyId))
-      .map((detail) => detail.id),
-  );
   // Spans every stacked run, not just the ones drawn, so picking another run
   // does not refetch SPY's closes.
   const topDates = topGroups
@@ -306,7 +301,19 @@ export default function DashboardPage() {
     // runIndex is rebuilt each render from `runs`; its content follows `runs`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [topDetails, spyCloses.data, benchmarkMode, runs, topStart, topEnd]);
-  const visibleComparison = comparison.lines.filter((line) => !hiddenRunIds.has(line.id));
+  // Crosshair updates change pointer state. Keep chart inputs stable so those
+  // renders do not rebuild series and emit another crosshair update.
+  const { hiddenRunIds, visibleComparison } = useMemo(() => {
+    const hiddenRunIds = new Set(
+      topDetails
+        .filter((detail) => hiddenStrategyIds.has(detail.strategyId))
+        .map((detail) => detail.id),
+    );
+    return {
+      hiddenRunIds,
+      visibleComparison: comparison.lines.filter((line) => !hiddenRunIds.has(line.id)),
+    };
+  }, [comparison.lines, topDetails, hiddenStrategyIds]);
   const groupByRun = new Map(
     topGroups.flatMap((group) => group.runs.map((detail) => [detail.id, group] as const)),
   );

@@ -19,7 +19,11 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "validate": "npm run typecheck && npm run lint && npm run test"
+    "validate": "npm run typecheck && npm run lint && npm run test",
+    "test:browser": "playwright test",
+    "test:gate": "node --test tools/production-gate.test.mjs",
+    "ci": "npm run lint && npm run test:gate && npm test -- --pool=forks --maxWorkers=1 && npm run build && npm run test:browser",
+    "check:production-ci": "node tools/production-gate.mjs"
   },
   "dependencies": {
     "@floating-ui/react": "^0.27.20",
@@ -42,6 +46,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/vite": "^4.3.3",
     "@testing-library/jest-dom": "^7.0.0",
     "@testing-library/react": "^16.3.2",

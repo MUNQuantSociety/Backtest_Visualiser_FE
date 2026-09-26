@@ -1211,10 +1211,10 @@ export function RunBacktestForm({
 function Row({ label, tip, children }: { label: string; tip: string; children: ReactNode }) {
   return (
     <div className="grid gap-2 sm:grid-cols-[150px_1fr] sm:gap-4">
-      <p className="flex items-center gap-1 text-[13px] font-medium">
+      <div className="flex items-center gap-1 text-[13px] font-medium">
         {label}
         <InfoTip label={label}>{tip}</InfoTip>
-      </p>
+      </div>
       <div className="min-w-0">{children}</div>
     </div>
   );
