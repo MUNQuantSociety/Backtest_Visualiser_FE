@@ -20,10 +20,11 @@ export function isoDay(value: Date): string {
 }
 
 /**
- * The longest window the backend runs: `end - start` in days, the backend's
- * `MAX_BACKTEST_WINDOW_DAYS` default. Five calendar years across a Feb 29
- * are 1826 days, so the presets are floored here rather than handing the
- * backend a window it answers with a 422.
+ * The longest window the backend runs, `end - start` in days, when coverage
+ * does not say: the backend's `MAX_BACKTEST_WINDOW_DAYS` default. Coverage
+ * reports the deployment's own limit as `maxWindowDays`, and the form passes
+ * that in. Five calendar years across a Feb 29 are 1826 days, so the presets
+ * are floored rather than handing the backend a window it answers with a 422.
  */
 export const MAX_WINDOW_DAYS = 1825;
 
@@ -45,10 +46,11 @@ function clamp(day: string, start: string, end: string): string {
 export function presetWindow(
   preset: WindowPreset,
   coverage: { start: string; end: string },
+  maxWindowDays: number = MAX_WINDOW_DAYS,
 ): { startDate: string; endDate: string } {
   const { start, end } = coverage;
   const endDay = new Date(`${end}T00:00:00Z`);
-  const earliest = new Date(endDay.getTime() - MAX_WINDOW_DAYS * DAY_MS);
+  const earliest = new Date(endDay.getTime() - maxWindowDays * DAY_MS);
   let from = earliest;
   if (preset !== 'max') {
     const years = preset === '1y' ? 1 : preset === '2y' ? 2 : 5;
@@ -64,9 +66,10 @@ export function presetWindow(
 export function matchingPreset(
   window: { startDate: string; endDate: string },
   coverage: { start: string; end: string },
+  maxWindowDays: number = MAX_WINDOW_DAYS,
 ): WindowPreset | null {
   for (const { value } of WINDOW_PRESETS) {
-    const candidate = presetWindow(value, coverage);
+    const candidate = presetWindow(value, coverage, maxWindowDays);
     if (candidate.startDate === window.startDate && candidate.endDate === window.endDate) {
       return value;
     }

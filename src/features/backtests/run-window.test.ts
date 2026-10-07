@@ -47,6 +47,15 @@ describe('presetWindow', () => {
     expect(presetWindow('max', COVERAGE).startDate).toBe('2020-07-19');
   });
 
+  it('follows the limit the backend reports', () => {
+    expect(presetWindow('max', COVERAGE, 365)).toEqual({
+      startDate: '2024-07-18',
+      endDate: '2025-07-18',
+    });
+    expect(presetWindow('5y', COVERAGE, 365).startDate).toBe('2024-07-18');
+    expect(matchingPreset(presetWindow('max', COVERAGE, 365), COVERAGE, 365)).toBe('1y');
+  });
+
   it('leaves Max at the start of coverage when coverage is shorter than the cap', () => {
     expect(presetWindow('max', { start: '2023-01-03', end: '2025-07-18' })).toEqual({
       startDate: '2023-01-03',
