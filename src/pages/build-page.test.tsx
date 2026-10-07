@@ -4,7 +4,7 @@ import type * as BacktestsModule from '@/features/backtests';
 import type * as MarketModule from '@/features/market';
 import { apiClient, ApiError } from '@/lib/api-client';
 import type * as ApiClientModule from '@/lib/api-client';
-import { renderWithProviders, screen } from '@/test/test-utils';
+import { renderWithProviders, screen, userEvent } from '@/test/test-utils';
 
 import BuildPage from './build-page';
 
@@ -22,7 +22,10 @@ vi.mock('@/features/market', async (importOriginal) => ({
   ),
 }));
 // The editor and run dialog have their own tests; here they only need to be present.
-vi.mock('@/features/strategies', () => ({ StrategyEditor: () => <div>Strategy editor</div> }));
+vi.mock('@/features/strategies', () => ({
+  RuleBuilder: () => <div>Rule builder</div>,
+  StrategyEditor: () => <div>Strategy editor</div>,
+}));
 vi.mock('@/features/backtests', async (importOriginal) => ({
   ...(await importOriginal<typeof BacktestsModule>()),
   RunBacktestDialog: () => <button type="button">Run backtest</button>,
@@ -39,7 +42,7 @@ it('asks for a ticker before charting anything', () => {
 
   expect(screen.getByText('Search for a ticker')).toBeInTheDocument();
   expect(screen.getByRole('combobox', { name: 'Search ticker' })).toBeInTheDocument();
-  expect(screen.getByText('Strategy editor')).toBeInTheDocument();
+  expect(screen.getByText('Rule builder')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Run backtest' })).toBeInTheDocument();
   expect(apiClient.get).not.toHaveBeenCalledWith('/market-data/candles', expect.anything());
 });
@@ -63,4 +66,13 @@ it('says when FMP has no such symbol', async () => {
   renderWithProviders(<BuildPage />, { routes: ['/build?ticker=ZZZZ'] });
 
   expect(await screen.findByText('FMP has no history for ZZZZ')).toBeInTheDocument();
+});
+
+it('opens on the no-code builder and switches to the code editor', async () => {
+  renderWithProviders(<BuildPage />, { routes: ['/build'] });
+
+  await userEvent.click(screen.getByRole('radio', { name: 'Write code' }));
+
+  expect(screen.getByText('Strategy editor')).toBeInTheDocument();
+  expect(screen.queryByText('Rule builder')).not.toBeInTheDocument();
 });

@@ -10,10 +10,15 @@ import { Segmented } from '@/components/ui/segmented';
 import { env } from '@/config/env';
 import { RunBacktestDialog, TickerCombobox } from '@/features/backtests';
 import { CANDLE_RANGES, CandleChart, useCandles, type CandleRange } from '@/features/market';
-import { StrategyEditor } from '@/features/strategies';
+import { RuleBuilder, StrategyEditor } from '@/features/strategies';
 import { ApiError } from '@/lib/api-client';
 
 const RANGE_OPTIONS = CANDLE_RANGES.map((range) => ({ value: range, label: range }));
+type AuthorMode = 'rules' | 'code';
+const AUTHOR_MODES = [
+  { value: 'rules' as const, label: 'No code' },
+  { value: 'code' as const, label: 'Write code' },
+];
 const TICKER_PATTERN = /^[A-Z0-9^][A-Z0-9.^=-]{0,19}$/;
 
 /**
@@ -22,14 +27,16 @@ const TICKER_PATTERN = /^[A-Z0-9^][A-Z0-9.^=-]{0,19}$/;
  * The chart reads daily candles for any symbol FMP lists, through the
  * backend, so the provider key never reaches the browser. The ticker lives
  * in `?ticker=` so a chart is a link. Below it is the same strategy editor
- * the Backtests page opens in a dialog; once a saved strategy passes
- * validation, "Run backtest" runs it from here.
+ * the Backtests page opens in a dialog, behind a rule builder that needs
+ * no code at all. Once a saved strategy passes validation, "Run backtest"
+ * runs it from here.
  */
 export default function BuildPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const ticker = (searchParams.get('ticker') ?? '').trim().toUpperCase();
   const [typed, setTyped] = useState('');
   const [range, setRange] = useState<CandleRange>('1Y');
+  const [authorMode, setAuthorMode] = useState<AuthorMode>('rules');
   const searchRef = useRef<HTMLLabelElement>(null);
   const candles = useCandles(TICKER_PATTERN.test(ticker) ? ticker : '', range);
 
@@ -89,17 +96,30 @@ export default function BuildPage() {
       </ChartContainer>
 
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Your strategy</CardTitle>
-          <CardDescription>
-            Write <code className="tabular">OnData</code>, declare its indicators and state, or
-            upload a <code className="tabular">.py</code> file. Saving starts a validation run; once
-            it passes, pick it in Run backtest with the tickers you charted.
-          </CardDescription>
+        <CardHeader className="flex-row flex-wrap items-start justify-between gap-3 space-y-0">
+          <div className="min-w-0 flex-1 space-y-1">
+            <CardTitle className="text-base">Your strategy</CardTitle>
+            <CardDescription>
+              {authorMode === 'rules' ? (
+                <>Choose when to buy and when to sell from plain-English rules; no coding needed.</>
+              ) : (
+                <>
+                  Write <code className="tabular">OnData</code>, declare its indicators and state,
+                  or upload a <code className="tabular">.py</code> file.
+                </>
+              )}{' '}
+              Saving starts a validation run; once it passes, pick it in Run backtest with the
+              tickers you charted.
+            </CardDescription>
+          </div>
+          <Segmented
+            value={authorMode}
+            options={AUTHOR_MODES}
+            onChange={setAuthorMode}
+            ariaLabel="How to build the strategy"
+          />
         </CardHeader>
-        <CardContent>
-          <StrategyEditor />
-        </CardContent>
+        <CardContent>{authorMode === 'rules' ? <RuleBuilder /> : <StrategyEditor />}</CardContent>
       </Card>
     </div>
   );
