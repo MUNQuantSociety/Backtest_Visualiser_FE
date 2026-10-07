@@ -7,6 +7,7 @@ import {
   Filter,
   FlaskConical,
   GitCompareArrows,
+  Hammer,
   Globe,
   LayoutDashboard,
   ListChecks,
@@ -22,7 +23,6 @@ import { paths } from '@/app/paths';
 import { useAuthCtx } from '@/app/providers/auth-provider.context';
 import logo from '@/assets/logo_dark.svg';
 import { HelpMenu, HelpMenuItem } from '@/components/common/help-menu';
-import { CandlesSpark } from '@/components/icons/candles-spark';
 import { Button } from '@/components/ui/button';
 import { APP_NAME, PRODUCT_NAMES, SOCIETY_WEBSITE_URL } from '@/config/constants';
 import { env } from '@/config/env';
@@ -76,7 +76,7 @@ const sections: readonly NavSection[] = [
       { kind: 'route', to: paths.dashboard, label: 'Dashboard', icon: LayoutDashboard, end: true },
       { kind: 'route', to: paths.backtests, label: 'Backtests', icon: FlaskConical, end: false },
       { kind: 'route', to: paths.compare, label: 'Compare', icon: GitCompareArrows, end: false },
-      { kind: 'route', to: paths.build, label: 'Build', icon: CandlesSpark, end: false },
+      { kind: 'route', to: paths.build, label: 'Build', icon: Hammer, end: false },
     ],
   },
   {
