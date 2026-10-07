@@ -280,7 +280,7 @@ function TemplateCard({
       className={cn(
         'rounded-md border px-3 py-2 text-left transition-colors',
         selected
-          ? 'border-primary bg-selected text-selected-foreground'
+          ? 'slant-active border-transparent text-slant-foreground'
           : 'border-border hover:bg-muted/60',
       )}
     >
