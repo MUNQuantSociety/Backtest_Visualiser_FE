@@ -7,12 +7,12 @@ import {
   Filter,
   FlaskConical,
   GitCompareArrows,
-  Hammer,
   Globe,
   LayoutDashboard,
   ListChecks,
   LogOut,
   Menu,
+  PencilRuler,
   Settings,
   type LucideIcon,
 } from 'lucide-react';
@@ -76,7 +76,7 @@ const sections: readonly NavSection[] = [
       { kind: 'route', to: paths.dashboard, label: 'Dashboard', icon: LayoutDashboard, end: true },
       { kind: 'route', to: paths.backtests, label: 'Backtests', icon: FlaskConical, end: false },
       { kind: 'route', to: paths.compare, label: 'Compare', icon: GitCompareArrows, end: false },
-      { kind: 'route', to: paths.build, label: 'Build', icon: Hammer, end: false },
+      { kind: 'route', to: paths.build, label: 'Build', icon: PencilRuler, end: false },
     ],
   },
   {
