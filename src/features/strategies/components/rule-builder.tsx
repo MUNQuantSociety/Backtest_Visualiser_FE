@@ -31,6 +31,13 @@ import { ValidationOutcome } from './validation-outcome';
 const FIELD =
   'h-9 rounded-md border border-input bg-background px-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring';
 
+/** A saved builder-made strategy, reopened on its own rules. */
+export interface EditingRules {
+  name: string;
+  description: string;
+  rules: StrategyRules;
+}
+
 /**
  * Build a strategy by choosing rules, no code.
  *
@@ -38,14 +45,20 @@ const FIELD =
  * optionally add a stop-loss and take-profit, and save. The rules compile to
  * the same fragment the code editor sends, so saving starts the same
  * validation run, and the result is picked in Run backtest like any other.
+ * The rules travel with it, so the strategy can be reopened here later.
+ *
+ * `editing` opens on a saved strategy's rules. Saving still creates a new
+ * strategy, as the code editor does: the registry has no update.
  */
-export function RuleBuilder() {
+export function RuleBuilder({ editing }: { editing?: EditingRules | undefined } = {}) {
   const [rules, setRules] = useState<StrategyRules>(() =>
-    structuredClone(RULE_TEMPLATES[0]!.rules),
+    structuredClone(editing?.rules ?? RULE_TEMPLATES[0]!.rules),
   );
-  const [templateId, setTemplateId] = useState<string | null>(RULE_TEMPLATES[0]!.id);
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
+  const [templateId, setTemplateId] = useState<string | null>(
+    editing ? null : RULE_TEMPLATES[0]!.id,
+  );
+  const [name, setName] = useState(editing ? `${editing.name} (edited)` : '');
+  const [description, setDescription] = useState(editing?.description ?? '');
   const [error, setError] = useState<string | null>(null);
   const [showCode, setShowCode] = useState(false);
   const submit = useSubmitDraft();
@@ -84,7 +97,7 @@ export function RuleBuilder() {
       return;
     }
     submit.mutate(
-      { ...draft, name: name.trim(), description: description.trim() },
+      { ...draft, name: name.trim(), description: description.trim(), rules },
       {
         onSuccess: (result: StrategySubmissionResult) => {
           remember({
@@ -99,6 +112,12 @@ export function RuleBuilder() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
+      {editing ? (
+        <p className="rounded-md border border-border bg-background px-3 py-2 text-[13px] text-muted-foreground">
+          Editing the rules of <strong>{editing.name}</strong>. Saving creates a new strategy and
+          starts its own validation run; the original is left alone.
+        </p>
+      ) : null}
       <fieldset className="space-y-2">
         <legend className="text-sm font-medium">1. Start from an idea</legend>
         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">

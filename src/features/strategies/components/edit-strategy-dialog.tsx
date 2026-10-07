@@ -1,12 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
 import { Loader2, X } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 
+import { parseRules } from '../rules';
 import { fetchStrategySource } from '../strategies-api';
 import type { Strategy } from '../types';
 
+import { RuleBuilder } from './rule-builder';
 import { StrategyEditor } from './strategy-editor';
 
 /**
@@ -24,6 +26,8 @@ export function EditStrategyDialog({
   onClose: () => void;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  // A builder-made strategy opens on its rules; this switches it to the code.
+  const [asCode, setAsCode] = useState(false);
 
   const source = useQuery({
     queryKey: ['strategies', 'source', strategy?.id],
@@ -45,6 +49,14 @@ export function EditStrategyDialog({
     if (strategy && !dialog.open) dialog.showModal();
     if (!strategy && dialog.open) dialog.close();
   }, [strategy]);
+
+  // Each strategy opens the way it was made, whatever the last one was switched to.
+  const [openedFor, setOpenedFor] = useState(strategy?.id);
+  if (openedFor !== strategy?.id) {
+    setOpenedFor(strategy?.id);
+    setAsCode(false);
+  }
+  const rules = source.data ? parseRules(source.data.rules) : null;
 
   return (
     <dialog
@@ -101,7 +113,24 @@ export function EditStrategyDialog({
           </div>
         ) : null}
 
-        {strategy && source.data ? (
+        {strategy && source.data && rules && !asCode ? (
+          <div className="space-y-4">
+            <RuleBuilder
+              editing={{ name: strategy.name, description: strategy.description, rules }}
+            />
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setAsCode(true);
+              }}
+            >
+              Edit the code instead
+            </Button>
+          </div>
+        ) : null}
+
+        {strategy && source.data && (!rules || asCode) ? (
           <StrategyEditor
             editing={{
               key: strategy.id,

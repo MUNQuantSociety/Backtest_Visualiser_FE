@@ -50,6 +50,8 @@ it('saves a template as the compiled draft, named after it', async () => {
     ...compileRules(dip.rules),
     name: 'Buy the dip',
     description: dip.idea,
+    // Sent along so the strategy reopens here as rules, not code.
+    rules: dip.rules,
   });
 });
 
@@ -75,4 +77,21 @@ it('asks for a name before saving', async () => {
 
   expect(screen.getByText('Give the strategy a name.')).toBeInTheDocument();
   expect(apiClient.post).not.toHaveBeenCalled();
+});
+
+it('reopens saved rules and saves an edited copy under a new name', async () => {
+  const dip = RULE_TEMPLATES.find((template) => template.id === 'buy-the-dip')!;
+  renderWithProviders(
+    <RuleBuilder editing={{ name: 'My dip', description: 'Mine', rules: dip.rules }} />,
+  );
+
+  expect(screen.getByText('Buy when the 14-day RSI crosses below 30.')).toBeInTheDocument();
+  expect(screen.getByDisplayValue('My dip (edited)')).toBeInTheDocument();
+
+  await userEvent.click(screen.getByRole('button', { name: 'Save strategy' }));
+
+  expect(apiClient.post).toHaveBeenCalledWith(
+    '/strategies/draft',
+    expect.objectContaining({ name: 'My dip (edited)', rules: dip.rules }),
+  );
 });

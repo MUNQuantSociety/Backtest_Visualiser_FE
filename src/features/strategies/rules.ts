@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 import type { IndicatorSpec, StrategyDraft } from './types';
 
 /**
@@ -200,6 +202,44 @@ export function blankRules(): StrategyRules {
     stopLossPercent: null,
     takeProfitPercent: null,
   };
+}
+
+const operandSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('price') }),
+  z.object({
+    kind: z.literal('indicator'),
+    indicator: z.enum(RULE_INDICATOR_NAMES as [RuleIndicator, ...RuleIndicator[]]),
+    period: z.number(),
+  }),
+  z.object({ kind: z.literal('number'), value: z.number() }),
+]);
+
+const groupSchema = z.object({
+  match: z.enum(['all', 'any']),
+  conditions: z.array(
+    z.object({
+      left: operandSchema,
+      comparison: z.enum(Object.keys(COMPARISONS) as [Comparison, ...Comparison[]]),
+      right: operandSchema,
+    }),
+  ),
+});
+
+const rulesSchema = z.object({
+  buy: groupSchema,
+  sell: groupSchema,
+  stopLossPercent: z.number().nullable(),
+  takeProfitPercent: z.number().nullable(),
+});
+
+/**
+ * Rules read back from a saved strategy, or null when they are absent or not
+ * a shape this builder understands (an older or hand-edited record). Null
+ * sends the strategy to the code editor, which can always open it.
+ */
+export function parseRules(raw: unknown): StrategyRules | null {
+  const parsed = rulesSchema.safeParse(raw);
+  return parsed.success ? parsed.data : null;
 }
 
 /** "the 50-day moving average", "the price", "30". */

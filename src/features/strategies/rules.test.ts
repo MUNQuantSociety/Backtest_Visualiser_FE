@@ -4,6 +4,7 @@ import {
   blankRules,
   compileRules,
   describeRules,
+  parseRules,
   RULE_TEMPLATES,
   rulesProblems,
   type StrategyRules,
@@ -125,4 +126,23 @@ it('describes the rules as sentences', () => {
     'Sell when the price crosses below the 50-day moving average.',
     'Also sell if a holding falls 5% below what it cost.',
   ]);
+});
+
+describe('parseRules', () => {
+  it('reads back rules exactly as the builder saved them', () => {
+    for (const template of RULE_TEMPLATES) {
+      expect(parseRules(JSON.parse(JSON.stringify(template.rules)))).toEqual(template.rules);
+    }
+  });
+
+  it('refuses anything that is not builder rules, so the code editor opens instead', () => {
+    expect(parseRules(undefined)).toBeNull();
+    expect(parseRules(null)).toBeNull();
+    expect(parseRules({ buy: 'everything' })).toBeNull();
+    const unknownIndicator = structuredClone(blankRules()) as unknown as {
+      buy: { conditions: { right: Record<string, unknown> }[] };
+    };
+    unknownIndicator.buy.conditions[0]!.right = { kind: 'indicator', indicator: 'MACD', period: 9 };
+    expect(parseRules(unknownIndicator)).toBeNull();
+  });
 });

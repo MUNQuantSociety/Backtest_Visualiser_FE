@@ -334,7 +334,7 @@ export function useDeleteStrategy() {
  * pipeline — same scan, same store, same validation backtest.
  */
 export async function submitDraft(
-  submission: StrategyDraft & { name: string; description: string },
+  submission: StrategyDraft & { name: string; description: string; rules?: unknown },
 ): Promise<StrategySubmissionResult> {
   if (env.useFixtures) {
     throw new ApiError(
