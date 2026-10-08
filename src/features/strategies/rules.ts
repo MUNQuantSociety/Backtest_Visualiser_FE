@@ -14,44 +14,112 @@ import type { IndicatorSpec, StrategyDraft } from './types';
  * Long only. A sell rule closes a holding; it never opens a short.
  */
 
-/** The indicators offered to a non-coder, in their own words. */
+/**
+ * The indicators offered to a non-coder, in their own words.
+ *
+ * These are the FMP technical indicators the engine reads through
+ * `FmpIndicator` (backend `GET /market-data/fmp-indicators` lists the same
+ * names). A rule-built strategy trades on FMP's numbers, and the Build chart
+ * draws the same series, so what the author sees is what the backtest reads.
+ *
+ * `pane` says which scale a value lives on: `price` lines are in dollars like
+ * the price itself, `separate` ones are on their own scale. `range` bounds a
+ * value where it has bounds, so a threshold outside it can be caught early.
+ */
 export const RULE_INDICATORS = {
-  SimpleMovingAverage: {
+  sma: {
     short: 'SMA',
     phrase: 'moving average',
     label: 'Moving average',
     help: 'The average closing price over the last N days. Smooths out daily noise.',
     defaultPeriod: 50,
+    pane: 'price',
+    range: null,
   },
-  ExponentialMovingAverage: {
+  ema: {
     short: 'EMA',
     phrase: 'exponential moving average',
     label: 'Exponential moving average',
     help: 'Like a moving average, but recent days count more, so it reacts faster.',
     defaultPeriod: 20,
+    pane: 'price',
+    range: null,
   },
-  RelativeStrengthIndex: {
+  wma: {
+    short: 'WMA',
+    phrase: 'weighted moving average',
+    label: 'Weighted moving average',
+    help: 'A moving average that leans on recent days in a straight line, newest most.',
+    defaultPeriod: 20,
+    pane: 'price',
+    range: null,
+  },
+  dema: {
+    short: 'DEMA',
+    phrase: 'double exponential moving average',
+    label: 'Double exponential moving average',
+    help: 'An exponential average with less lag, so it turns sooner.',
+    defaultPeriod: 20,
+    pane: 'price',
+    range: null,
+  },
+  tema: {
+    short: 'TEMA',
+    phrase: 'triple exponential moving average',
+    label: 'Triple exponential moving average',
+    help: 'The quickest of the averages: least lag, but more false turns.',
+    defaultPeriod: 20,
+    pane: 'price',
+    range: null,
+  },
+  rsi: {
     short: 'RSI',
     phrase: 'RSI',
     label: 'RSI (overbought / oversold)',
     help: 'A score from 0 to 100. Below 30 is often read as oversold, above 70 as overbought.',
     defaultPeriod: 14,
+    pane: 'separate',
+    range: [0, 100],
   },
-  RateOfChange: {
-    short: 'ROC',
-    phrase: 'momentum (%)',
-    label: 'Momentum (% change)',
-    help: 'How much the price has moved, in percent, over the last N days.',
-    defaultPeriod: 10,
-  },
-  AverageTrueRange: {
-    short: 'ATR',
-    phrase: 'volatility (ATR, $)',
-    label: 'Volatility (ATR)',
-    help: 'How far the price typically moves in a day, in dollars.',
+  williams: {
+    short: '%R',
+    phrase: 'Williams %R',
+    label: 'Williams %R (overbought / oversold)',
+    help: 'From -100 to 0: where the close sits in its recent range. Above -20 is often read as overbought, below -80 as oversold.',
     defaultPeriod: 14,
+    pane: 'separate',
+    range: [-100, 0],
   },
-} as const;
+  adx: {
+    short: 'ADX',
+    phrase: 'trend strength (ADX)',
+    label: 'Trend strength (ADX)',
+    help: 'From 0 to 100: how strong the trend is, whichever way it points. Above 25 is often read as a strong trend.',
+    defaultPeriod: 14,
+    pane: 'separate',
+    range: [0, 100],
+  },
+  standarddeviation: {
+    short: 'Std dev',
+    phrase: 'volatility (standard deviation)',
+    label: 'Volatility (standard deviation)',
+    help: 'How far the price has been swinging around its average, in dollars.',
+    defaultPeriod: 20,
+    pane: 'separate',
+    range: [0, null],
+  },
+} as const satisfies Record<
+  string,
+  {
+    short: string;
+    phrase: string;
+    label: string;
+    help: string;
+    defaultPeriod: number;
+    pane: 'price' | 'separate';
+    range: readonly [number, number | null] | null;
+  }
+>;
 
 export type RuleIndicator = keyof typeof RULE_INDICATORS;
 
@@ -96,17 +164,10 @@ export const MAX_CONDITIONS = 5;
 export const MIN_PERIOD = 2;
 export const MAX_PERIOD = 250;
 
-const sma = (period: number): Operand => ({
-  kind: 'indicator',
-  indicator: 'SimpleMovingAverage',
-  period,
-});
-const rsi = (period: number): Operand => ({
-  kind: 'indicator',
-  indicator: 'RelativeStrengthIndex',
-  period,
-});
-const roc = (period: number): Operand => ({ kind: 'indicator', indicator: 'RateOfChange', period });
+const sma = (period: number): Operand => ({ kind: 'indicator', indicator: 'sma', period });
+const ema = (period: number): Operand => ({ kind: 'indicator', indicator: 'ema', period });
+const rsi = (period: number): Operand => ({ kind: 'indicator', indicator: 'rsi', period });
+const adx = (period: number): Operand => ({ kind: 'indicator', indicator: 'adx', period });
 const num = (value: number): Operand => ({ kind: 'number', value });
 const PRICE: Operand = { kind: 'price' };
 
@@ -156,16 +217,19 @@ export const RULE_TEMPLATES: readonly RuleTemplate[] = [
   {
     id: 'momentum',
     name: 'Momentum',
-    idea: 'Buy what is already rising in an uptrend; sell when the move fades.',
+    idea: 'Buy into a strong uptrend; sell when the price slips back under its average.',
     rules: {
       buy: {
         match: 'all',
         conditions: [
-          { left: roc(20), comparison: 'above', right: num(5) },
-          { left: PRICE, comparison: 'above', right: sma(50) },
+          { left: PRICE, comparison: 'above', right: ema(50) },
+          { left: adx(14), comparison: 'above', right: num(25) },
         ],
       },
-      sell: { match: 'any', conditions: [{ left: roc(20), comparison: 'below', right: num(0) }] },
+      sell: {
+        match: 'any',
+        conditions: [{ left: PRICE, comparison: 'crossesBelow', right: ema(50) }],
+      },
       stopLossPercent: 8,
       takeProfitPercent: 25,
     },
@@ -204,11 +268,25 @@ export function blankRules(): StrategyRules {
   };
 }
 
+/**
+ * Names the builder saved before it read FMP's indicators, for the three with
+ * an FMP twin. The other two it offered then (rate of change and ATR) have no
+ * FMP version, so rules using them no longer parse and open as code instead.
+ */
+const LEGACY_INDICATORS: Readonly<Record<string, RuleIndicator>> = {
+  SimpleMovingAverage: 'sma',
+  ExponentialMovingAverage: 'ema',
+  RelativeStrengthIndex: 'rsi',
+};
+
 const operandSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('price') }),
   z.object({
     kind: z.literal('indicator'),
-    indicator: z.enum(RULE_INDICATOR_NAMES as [RuleIndicator, ...RuleIndicator[]]),
+    indicator: z.preprocess(
+      (name) => (typeof name === 'string' ? (LEGACY_INDICATORS[name] ?? name) : name),
+      z.enum(RULE_INDICATOR_NAMES as [RuleIndicator, ...RuleIndicator[]]),
+    ),
     period: z.number(),
   }),
   z.object({ kind: z.literal('number'), value: z.number() }),
@@ -306,6 +384,8 @@ export function rulesProblems(rules: StrategyRules): string[] {
       }
       if (condition.left.kind === 'number' && condition.right.kind === 'number')
         problems.push(`${where}: compare at least one price or indicator, not two numbers.`);
+      const scaleProblem = mismatchedScales(condition);
+      if (scaleProblem) problems.push(`${where}: ${scaleProblem}`);
     });
   }
   for (const [label, value] of [
@@ -318,9 +398,47 @@ export function rulesProblems(rules: StrategyRules): string[] {
   return problems;
 }
 
+/** Which scale an operand's value is on; a number fits any. */
+function scaleOf(operand: Operand): 'price' | RuleIndicator | null {
+  if (operand.kind === 'number') return null;
+  if (operand.kind === 'price') return 'price';
+  return RULE_INDICATORS[operand.indicator].pane === 'price' ? 'price' : operand.indicator;
+}
+
+/**
+ * A comparison that can never mean anything, in words: the price against the
+ * RSI, or an RSI against 150. Indicators with the same bounded scale (RSI and
+ * ADX both run 0 to 100) may still be compared.
+ */
+function mismatchedScales(condition: Condition): string | null {
+  const [left, right] = [condition.left, condition.right];
+  const [leftScale, rightScale] = [scaleOf(left), scaleOf(right)];
+  if (leftScale && rightScale && leftScale !== rightScale) {
+    const ranges = [leftScale, rightScale].map((scale) =>
+      scale === 'price' ? null : JSON.stringify(RULE_INDICATORS[scale].range),
+    );
+    if (ranges[0] === null || ranges[1] === null || ranges[0] !== ranges[1])
+      return `${describeOperand(left)} and ${describeOperand(right)} are on different scales, so comparing them means nothing. Compare each with a number instead.`;
+  }
+  for (const [indicator, number] of [
+    [left, right],
+    [right, left],
+  ] as const) {
+    if (indicator.kind !== 'indicator' || number.kind !== 'number') continue;
+    const range = RULE_INDICATORS[indicator.indicator].range;
+    if (!range || !Number.isFinite(number.value)) continue;
+    const [low, high] = range;
+    if (number.value < low || (high !== null && number.value > high))
+      return high === null
+        ? `${describeOperand(indicator)} is never below ${String(low)}, so ${String(number.value)} can never be reached.`
+        : `${describeOperand(indicator)} only runs from ${String(low)} to ${String(high)}, so ${String(number.value)} can never be reached.`;
+  }
+  return null;
+}
+
 /** The attribute an indicator operand is read from, e.g. `sma_50`. */
 function attributeOf(operand: Extract<Operand, { kind: 'indicator' }>): string {
-  return `${RULE_INDICATORS[operand.indicator].short.toLowerCase()}_${String(operand.period)}`;
+  return `${operand.indicator}_${String(operand.period)}`;
 }
 
 /** The key an operand's value is kept under in `now` and `before`. */
@@ -376,10 +494,12 @@ export function compileRules(rules: StrategyRules): StrategyDraft {
   for (const operand of operands) {
     if (operand.kind !== 'indicator') continue;
     const attribute = attributeOf(operand);
+    // Read from FMP's technical-indicator API, the same series the Build
+    // chart draws, rather than computed by the engine.
     indicators.set(attribute, {
       attribute,
-      indicator: operand.indicator,
-      params: { period: operand.period },
+      indicator: 'FmpIndicator',
+      params: { name: operand.indicator, period: operand.period },
     });
   }
   const attributes = [...indicators.keys()].sort();

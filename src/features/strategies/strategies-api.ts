@@ -334,7 +334,13 @@ export function useDeleteStrategy() {
  * pipeline — same scan, same store, same validation backtest.
  */
 export async function submitDraft(
-  submission: StrategyDraft & { name: string; description: string; rules?: unknown },
+  submission: StrategyDraft & {
+    name: string;
+    description: string;
+    rules?: unknown;
+    /** What it trades; omitted, the backend's default pair (AAPL, MSFT). */
+    tickers?: readonly string[];
+  },
 ): Promise<StrategySubmissionResult> {
   if (env.useFixtures) {
     throw new ApiError(

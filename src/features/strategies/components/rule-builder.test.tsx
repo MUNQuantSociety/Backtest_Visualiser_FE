@@ -2,7 +2,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 
 import { apiClient } from '@/lib/api-client';
 import type * as ApiClientModule from '@/lib/api-client';
-import { renderWithProviders, screen, userEvent } from '@/test/test-utils';
+import { renderWithProviders, screen, userEvent, within } from '@/test/test-utils';
 
 import { compileRules, RULE_TEMPLATES } from '../rules';
 
@@ -52,6 +52,8 @@ it('saves a template as the compiled draft, named after it', async () => {
     description: dip.idea,
     // Sent along so the strategy reopens here as rules, not code.
     rules: dip.rules,
+    // Nothing charted: the backend's default pair.
+    tickers: ['AAPL', 'MSFT'],
   });
 });
 
@@ -94,4 +96,80 @@ it('reopens saved rules and saves an edited copy under a new name', async () => 
     '/strategies/draft',
     expect.objectContaining({ name: 'My dip (edited)', rules: dip.rules }),
   );
+});
+
+it('trades the charted ticker unless the author changes the list', async () => {
+  renderWithProviders(<RuleBuilder ticker="NVDA" />);
+
+  await userEvent.click(screen.getByRole('button', { name: /Buy the dip/ }));
+  await userEvent.click(screen.getByRole('button', { name: 'Save strategy' }));
+
+  expect(apiClient.post).toHaveBeenCalledWith(
+    '/strategies/draft',
+    expect.objectContaining({ tickers: ['NVDA'] }),
+  );
+});
+
+it('adds and removes tickers, and refuses a duplicate or a non-symbol', async () => {
+  renderWithProviders(<RuleBuilder ticker="NVDA" />);
+  const field = screen.getByRole('textbox', { name: 'Add a ticker for the strategy to trade' });
+
+  await userEvent.type(field, 'amd{Enter}');
+  await userEvent.type(field, 'nvda{Enter}');
+  expect(screen.getByText('NVDA is already on the list.')).toBeInTheDocument();
+  await userEvent.clear(field);
+  await userEvent.type(field, 'not a ticker{Enter}');
+  expect(screen.getByText('NOT A TICKER is not a ticker symbol.')).toBeInTheDocument();
+
+  await userEvent.click(screen.getByRole('button', { name: 'Remove NVDA' }));
+  await userEvent.click(screen.getByRole('button', { name: /Buy the dip/ }));
+  await userEvent.click(screen.getByRole('button', { name: 'Save strategy' }));
+
+  expect(apiClient.post).toHaveBeenCalledWith(
+    '/strategies/draft',
+    expect.objectContaining({ tickers: ['AMD'] }),
+  );
+});
+
+it('will not save a strategy with nothing to trade', async () => {
+  renderWithProviders(<RuleBuilder ticker="NVDA" />);
+
+  await userEvent.click(screen.getByRole('button', { name: 'Remove NVDA' }));
+  await userEvent.click(screen.getByRole('button', { name: /Buy the dip/ }));
+  await userEvent.click(screen.getByRole('button', { name: 'Save strategy' }));
+
+  expect(screen.getAllByText('Pick at least one ticker for it to trade.').length).toBeGreaterThan(
+    0,
+  );
+  expect(apiClient.post).not.toHaveBeenCalled();
+});
+
+it('offers only the indicators the server lists', async () => {
+  vi.mocked(apiClient.get).mockImplementation((url) =>
+    url === '/market-data/fmp-indicators'
+      ? Promise.resolve({
+          items: ['sma', 'rsi'].map((name) => ({
+            name,
+            label: name,
+            shortLabel: name,
+            pane: name === 'sma' ? 'price' : 'separate',
+            defaultPeriod: 14,
+            minPeriod: 2,
+            maxPeriod: 250,
+            minValue: null,
+            maxValue: null,
+          })),
+        })
+      : new Promise(() => undefined),
+  );
+  renderWithProviders(<RuleBuilder />);
+
+  const picker = screen.getByRole('combobox', { name: 'Buy condition 1, left side' });
+  await vi.waitFor(() => {
+    expect(within(picker).queryByRole('option', { name: 'Trend strength (ADX)' })).toBeNull();
+  });
+  expect(within(picker).getByRole('option', { name: 'Moving average' })).toBeInTheDocument();
+  expect(
+    within(picker).getByRole('option', { name: 'RSI (overbought / oversold)' }),
+  ).toBeInTheDocument();
 });

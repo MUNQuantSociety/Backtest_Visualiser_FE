@@ -116,7 +116,12 @@ export function EditStrategyDialog({
         {strategy && source.data && rules && !asCode ? (
           <div className="space-y-4">
             <RuleBuilder
-              editing={{ name: strategy.name, description: strategy.description, rules }}
+              editing={{
+                name: strategy.name,
+                description: strategy.description,
+                rules,
+                tickers: strategy.universe,
+              }}
             />
             <Button
               variant="ghost"

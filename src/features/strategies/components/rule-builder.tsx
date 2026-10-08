@@ -2,6 +2,7 @@ import { Code2, Loader2, Plus, Sparkles, X } from 'lucide-react';
 import { useId, useState, type FormEvent } from 'react';
 
 import { Button } from '@/components/ui/button';
+import { useFmpIndicators } from '@/features/market';
 import { cn } from '@/lib/utils';
 
 import {
@@ -20,6 +21,7 @@ import {
   type Condition,
   type Operand,
   type RuleGroup,
+  type RuleIndicator,
   type StrategyRules,
 } from '../rules';
 import { useSubmitDraft } from '../strategies-api';
@@ -36,7 +38,14 @@ export interface EditingRules {
   name: string;
   description: string;
   rules: StrategyRules;
+  /** The tickers it trades, so the copy trades them too. */
+  tickers?: readonly string[] | undefined;
 }
+
+/** What the backend trades when a draft names no tickers. */
+const DEFAULT_TICKERS = ['AAPL', 'MSFT'] as const;
+const MAX_TICKERS = 50;
+const TICKER_PATTERN = /^[A-Z0-9^][A-Z0-9.^=-]{0,19}$/;
 
 /**
  * Build a strategy by choosing rules, no code.
@@ -49,8 +58,15 @@ export interface EditingRules {
  *
  * `editing` opens on a saved strategy's rules. Saving still creates a new
  * strategy, as the code editor does: the registry has no update.
+ *
+ * `ticker` is the one being charted. Until the author changes the list, the
+ * strategy trades that ticker, so what they looked at is what they test.
+ * The backend checks every symbol with FMP before it stores anything.
  */
-export function RuleBuilder({ editing }: { editing?: EditingRules | undefined } = {}) {
+export function RuleBuilder({
+  editing,
+  ticker,
+}: { editing?: EditingRules | undefined; ticker?: string | undefined } = {}) {
   const [rules, setRules] = useState<StrategyRules>(() =>
     structuredClone(editing?.rules ?? RULE_TEMPLATES[0]!.rules),
   );
@@ -61,6 +77,18 @@ export function RuleBuilder({ editing }: { editing?: EditingRules | undefined } 
   const [description, setDescription] = useState(editing?.description ?? '');
   const [error, setError] = useState<string | null>(null);
   const [showCode, setShowCode] = useState(false);
+  // Null until the author edits the list; until then it follows the chart.
+  const [tickersOverride, setTickersOverride] = useState<string[] | null>(
+    editing?.tickers?.length ? [...editing.tickers] : null,
+  );
+  const tickers =
+    tickersOverride ?? (ticker && TICKER_PATTERN.test(ticker) ? [ticker] : [...DEFAULT_TICKERS]);
+  const catalogue = useFmpIndicators();
+  // The server's list decides what can be offered; the local one stands in
+  // until it answers, or when it cannot.
+  const available = catalogue.data
+    ? RULE_INDICATOR_NAMES.filter((name) => catalogue.data.some((item) => item.name === name))
+    : RULE_INDICATOR_NAMES;
   const submit = useSubmitDraft();
   const { remember } = useSubmissions();
   const nameId = useId();
@@ -96,8 +124,12 @@ export function RuleBuilder({ editing }: { editing?: EditingRules | undefined } 
       setError(problems[0] ?? 'Check the rules and try again.');
       return;
     }
+    if (tickers.length === 0) {
+      setError('Pick at least one ticker for it to trade.');
+      return;
+    }
     submit.mutate(
-      { ...draft, name: name.trim(), description: description.trim(), rules },
+      { ...draft, name: name.trim(), description: description.trim(), rules, tickers },
       {
         onSuccess: (result: StrategySubmissionResult) => {
           remember({
@@ -147,6 +179,7 @@ export function RuleBuilder({ editing }: { editing?: EditingRules | undefined } 
         <legend className="text-sm font-medium">2. Set your rules</legend>
         <GroupEditor
           side="buy"
+          available={available}
           group={rules.buy}
           onChange={(buy) => {
             update({ ...rules, buy });
@@ -154,6 +187,7 @@ export function RuleBuilder({ editing }: { editing?: EditingRules | undefined } 
         />
         <GroupEditor
           side="sell"
+          available={available}
           group={rules.sell}
           onChange={(sell) => {
             update({ ...rules, sell });
@@ -209,10 +243,18 @@ export function RuleBuilder({ editing }: { editing?: EditingRules | undefined } 
         )}
       </section>
 
+      <TickerList
+        tickers={tickers}
+        onChange={(next) => {
+          setTickersOverride(next);
+          submit.reset();
+        }}
+      />
+
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
           <label htmlFor={nameId} className="text-sm font-medium">
-            4. Name it
+            5. Name it
           </label>
           <input
             id={nameId}
@@ -311,10 +353,12 @@ function TemplateCard({
 
 function GroupEditor({
   side,
+  available,
   group,
   onChange,
 }: {
   side: 'buy' | 'sell';
+  available: readonly RuleIndicator[];
   group: RuleGroup;
   onChange: (group: RuleGroup) => void;
 }) {
@@ -366,6 +410,7 @@ function GroupEditor({
           >
             <OperandPicker
               label={`${verb} condition ${String(index + 1)}, left side`}
+              available={available}
               value={condition.left}
               onChange={(left) => {
                 setCondition(index, { ...condition, left });
@@ -387,6 +432,7 @@ function GroupEditor({
             </select>
             <OperandPicker
               label={`${verb} condition ${String(index + 1)}, right side`}
+              available={available}
               value={condition.right}
               onChange={(right) => {
                 setCondition(index, { ...condition, right });
@@ -437,15 +483,23 @@ function GroupEditor({
 /** "Price", an indicator with its period, or a fixed number. */
 function OperandPicker({
   label,
+  available,
   value,
   onChange,
 }: {
   label: string;
+  available: readonly RuleIndicator[];
   value: Operand;
   onChange: (operand: Operand) => void;
 }) {
   const kind = value.kind === 'indicator' ? value.indicator : value.kind;
   const help = value.kind === 'indicator' ? RULE_INDICATORS[value.indicator].help : undefined;
+  // The one already chosen stays offered even if the server stops listing it,
+  // so the select never shows a value it has no option for.
+  const offered =
+    value.kind === 'indicator' && !available.includes(value.indicator)
+      ? [...available, value.indicator]
+      : available;
 
   return (
     <span className="flex items-center gap-1" title={help}>
@@ -468,7 +522,7 @@ function OperandPicker({
         className={FIELD}
       >
         <option value="price">Price</option>
-        {RULE_INDICATOR_NAMES.map((indicator) => (
+        {offered.map((indicator) => (
           <option key={indicator} value={indicator}>
             {RULE_INDICATORS[indicator].label}
           </option>
@@ -505,6 +559,103 @@ function OperandPicker({
         />
       ) : null}
     </span>
+  );
+}
+
+/** The tickers the strategy trades: chips to remove, a field to add. */
+function TickerList({
+  tickers,
+  onChange,
+}: {
+  tickers: readonly string[];
+  onChange: (tickers: string[]) => void;
+}) {
+  const [draft, setDraft] = useState('');
+  const [problem, setProblem] = useState<string | null>(null);
+  const inputId = useId();
+  const problemId = useId();
+
+  function add() {
+    const symbol = draft.trim().toUpperCase();
+    if (!symbol) return;
+    if (!TICKER_PATTERN.test(symbol)) {
+      setProblem(`${symbol} is not a ticker symbol.`);
+      return;
+    }
+    if (tickers.includes(symbol)) {
+      setProblem(`${symbol} is already on the list.`);
+      return;
+    }
+    if (tickers.length >= MAX_TICKERS) {
+      setProblem(`A strategy can trade at most ${String(MAX_TICKERS)} tickers.`);
+      return;
+    }
+    onChange([...tickers, symbol]);
+    setDraft('');
+    setProblem(null);
+  }
+
+  return (
+    <fieldset className="space-y-2">
+      <legend className="text-sm font-medium">4. Choose what it trades</legend>
+      <p className="text-xs text-muted-foreground">
+        Starts with the ticker on the chart. Each one is checked with FMP when you save, and the
+        money is split equally between them.
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        {tickers.map((symbol) => (
+          <span
+            key={symbol}
+            className="tabular flex items-center gap-1 rounded-md border border-border bg-background py-1 pr-1 pl-2 text-xs"
+          >
+            {symbol}
+            <button
+              type="button"
+              aria-label={`Remove ${symbol}`}
+              onClick={() => {
+                onChange(tickers.filter((existing) => existing !== symbol));
+              }}
+              className="rounded-sm p-0.5 text-muted-foreground hover:text-foreground"
+            >
+              <X className="size-3" aria-hidden />
+            </button>
+          </span>
+        ))}
+        <label htmlFor={inputId} className="sr-only">
+          Add a ticker for the strategy to trade
+        </label>
+        <input
+          id={inputId}
+          value={draft}
+          onChange={(event) => {
+            setDraft(event.target.value);
+            setProblem(null);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              add();
+            }
+          }}
+          placeholder="Add ticker"
+          aria-invalid={problem !== null}
+          aria-describedby={problem ? problemId : undefined}
+          className={cn(FIELD, 'tabular w-28 uppercase')}
+        />
+        <Button type="button" variant="outline" size="sm" onClick={add}>
+          <Plus className="mr-1.5 size-3.5" aria-hidden />
+          Add
+        </Button>
+      </div>
+      {tickers.length === 0 ? (
+        <p className="text-xs text-[var(--loss)]">Pick at least one ticker for it to trade.</p>
+      ) : null}
+      {problem ? (
+        <p id={problemId} role="alert" className="text-xs text-[var(--loss)]">
+          {problem}
+        </p>
+      ) : null}
+    </fieldset>
   );
 }
 

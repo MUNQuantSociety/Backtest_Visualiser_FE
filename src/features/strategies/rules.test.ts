@@ -7,17 +7,18 @@ import {
   parseRules,
   RULE_TEMPLATES,
   rulesProblems,
+  type Operand,
   type StrategyRules,
 } from './rules';
 
 const sma = (period: number) => ({
   kind: 'indicator' as const,
-  indicator: 'SimpleMovingAverage' as const,
+  indicator: 'sma' as const,
   period,
 });
 
 describe('compileRules', () => {
-  it('registers each indicator once, named by kind and period', () => {
+  it('registers each indicator once, read from FMP and named by kind and period', () => {
     const rules: StrategyRules = {
       ...blankRules(),
       buy: {
@@ -31,8 +32,8 @@ describe('compileRules', () => {
     };
 
     expect(compileRules(rules).indicators).toEqual([
-      { attribute: 'sma_20', indicator: 'SimpleMovingAverage', params: { period: 20 } },
-      { attribute: 'sma_50', indicator: 'SimpleMovingAverage', params: { period: 50 } },
+      { attribute: 'sma_20', indicator: 'FmpIndicator', params: { name: 'sma', period: 20 } },
+      { attribute: 'sma_50', indicator: 'FmpIndicator', params: { name: 'sma', period: 50 } },
     ]);
   });
 
@@ -53,7 +54,7 @@ describe('compileRules', () => {
         conditions: [
           { left: { kind: 'price' }, comparison: 'below', right: sma(50) },
           {
-            left: { kind: 'indicator', indicator: 'RelativeStrengthIndex', period: 14 },
+            left: { kind: 'indicator', indicator: 'rsi', period: 14 },
             comparison: 'above',
             right: { kind: 'number', value: 70 },
           },
@@ -144,5 +145,86 @@ describe('parseRules', () => {
     };
     unknownIndicator.buy.conditions[0]!.right = { kind: 'indicator', indicator: 'MACD', period: 9 };
     expect(parseRules(unknownIndicator)).toBeNull();
+  });
+});
+
+describe('saved rules from before the builder read FMP', () => {
+  it('carries the moving averages and RSI over to their FMP twins', () => {
+    const legacy = {
+      buy: {
+        match: 'all',
+        conditions: [
+          {
+            left: { kind: 'indicator', indicator: 'SimpleMovingAverage', period: 50 },
+            comparison: 'crossesAbove',
+            right: { kind: 'indicator', indicator: 'ExponentialMovingAverage', period: 200 },
+          },
+        ],
+      },
+      sell: {
+        match: 'all',
+        conditions: [
+          {
+            left: { kind: 'indicator', indicator: 'RelativeStrengthIndex', period: 14 },
+            comparison: 'above',
+            right: { kind: 'number', value: 70 },
+          },
+        ],
+      },
+      stopLossPercent: null,
+      takeProfitPercent: null,
+    };
+
+    const parsed = parseRules(legacy);
+
+    expect(parsed?.buy.conditions[0]).toEqual({
+      left: { kind: 'indicator', indicator: 'sma', period: 50 },
+      comparison: 'crossesAbove',
+      right: { kind: 'indicator', indicator: 'ema', period: 200 },
+    });
+    expect(parsed?.sell.conditions[0]?.left).toEqual({
+      kind: 'indicator',
+      indicator: 'rsi',
+      period: 14,
+    });
+  });
+
+  it('opens rules using rate of change as code, since FMP has no such indicator', () => {
+    const legacy = structuredClone(blankRules()) as unknown as {
+      buy: { conditions: { right: Record<string, unknown> }[] };
+    };
+    legacy.buy.conditions[0]!.right = { kind: 'indicator', indicator: 'RateOfChange', period: 20 };
+
+    expect(parseRules(legacy)).toBeNull();
+  });
+});
+
+describe('comparisons that can never mean anything', () => {
+  const rsi14 = { kind: 'indicator' as const, indicator: 'rsi' as const, period: 14 };
+  const rulesWith = (left: Operand, right: Operand): StrategyRules => ({
+    ...blankRules(),
+    buy: { match: 'all', conditions: [{ left, comparison: 'above', right }] },
+  });
+
+  it('flags the price against an indicator on its own scale', () => {
+    expect(rulesProblems(rulesWith({ kind: 'price' }, rsi14))).toEqual([
+      'Buy condition 1: the price and the 14-day RSI are on different scales, so comparing them means nothing. Compare each with a number instead.',
+    ]);
+  });
+
+  it('flags a threshold the indicator can never reach', () => {
+    expect(rulesProblems(rulesWith(rsi14, { kind: 'number', value: 150 }))).toEqual([
+      'Buy condition 1: the 14-day RSI only runs from 0 to 100, so 150 can never be reached.',
+    ]);
+    const williams = { kind: 'indicator' as const, indicator: 'williams' as const, period: 14 };
+    expect(rulesProblems(rulesWith(williams, { kind: 'number', value: 20 }))).toEqual([
+      'Buy condition 1: the 14-day Williams %R only runs from -100 to 0, so 20 can never be reached.',
+    ]);
+  });
+
+  it('allows a moving average against the price, and RSI against ADX', () => {
+    expect(rulesProblems(rulesWith({ kind: 'price' }, sma(200)))).toEqual([]);
+    const adx14 = { kind: 'indicator' as const, indicator: 'adx' as const, period: 14 };
+    expect(rulesProblems(rulesWith(rsi14, adx14))).toEqual([]);
   });
 });
