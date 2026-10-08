@@ -1,6 +1,6 @@
 /** Public surface of the market feature. */
 
-export { CandleChart } from './components/candle-chart';
+export { CandleChart, type ChartLine } from './components/candle-chart';
 export { IndicatorsTable } from './components/indicators-table';
 export { NewsList } from './components/news-list';
 export { RunNewsPanel } from './components/run-news-panel';
@@ -22,3 +22,12 @@ export {
   type CandleRange,
 } from './candles-api';
 export type { NewsArticle, TickerIndicators } from './types';
+export {
+  fetchFmpIndicators,
+  fetchIndicatorSeries,
+  useFmpIndicators,
+  useIndicatorSeries,
+  type FmpIndicatorInfo,
+  type IndicatorLineRequest,
+  type IndicatorSeries,
+} from './fmp-indicators-api';
