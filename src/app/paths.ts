@@ -6,6 +6,8 @@ export const paths = {
   libraryStrategy: (id: string) => `/backtests?strategy=${encodeURIComponent(id)}`,
   backtestDetail: (id: string) => `/backtests/${id}`,
   compare: '/compare',
+  /** Chart any ticker and write a strategy to run against it. */
+  build: '/build',
   tickerDetail: (ticker: string) => `/tickers/${encodeURIComponent(ticker)}`,
   /* MQS Master — the live trading system. */
   live: '/live',
