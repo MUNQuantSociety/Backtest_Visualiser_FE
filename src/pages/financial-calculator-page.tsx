@@ -4,10 +4,13 @@ import { PageHeader } from '@/components/common/page-header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   annuityPresentValue,
+  closestTreasury,
+  describeTerm,
   futureValue,
   netPresentValue,
   parseCashFlows,
   presentValue,
+  useTreasuryRates,
   type Calculation,
 } from '@/features/calculator';
 import { cn } from '@/lib/utils';
@@ -32,7 +35,8 @@ const money = (value: number) => formatCurrency(value);
  * Everyday time-value-of-money calculations, after MQSMaster's finance
  * calculator: future value, present value, net present value and the present
  * value of an annuity. Each card recalculates as it is typed in and says what
- * its answer means. Everything runs in the browser; nothing is sent anywhere.
+ * its answer means. The math runs in the browser; the only request is for
+ * today's Treasury yields, which each rate field offers as a real rate.
  */
 export default function FinancialCalculatorPage() {
   return (
@@ -68,7 +72,12 @@ function FutureValueCard() {
       }
     >
       <NumberField label="Amount today ($)" value={amount} onChange={setAmount} />
-      <NumberField label="Interest rate (% a year)" value={rate} onChange={setRate} />
+      <RateField
+        label="Interest rate (%/yr)"
+        value={rate}
+        onChange={setRate}
+        years={toNumber(years)}
+      />
       <NumberField label="Years" value={years} onChange={setYears} />
     </CalculatorCard>
   );
@@ -91,7 +100,12 @@ function PresentValueCard() {
       }
     >
       <NumberField label="Future amount ($)" value={amount} onChange={setAmount} />
-      <NumberField label="Discount rate (% a year)" value={rate} onChange={setRate} />
+      <RateField
+        label="Discount rate (%/yr)"
+        value={rate}
+        onChange={setRate}
+        years={toNumber(years)}
+      />
       <NumberField label="Years" value={years} onChange={setYears} />
     </CalculatorCard>
   );
@@ -120,7 +134,12 @@ function NetPresentValueCard() {
       tone={(value) => (value > 0 ? 'profit' : value < 0 ? 'loss' : 'neutral')}
     >
       <NumberField label="Initial investment ($)" value={investment} onChange={setInvestment} />
-      <NumberField label="Discount rate (% a year)" value={rate} onChange={setRate} />
+      <RateField
+        label="Discount rate (%/yr)"
+        value={rate}
+        onChange={setRate}
+        years={parseCashFlows(flows).length}
+      />
       <div className="space-y-1.5 sm:col-span-2">
         <label htmlFor={flowsId} className="text-sm font-medium">
           Cash flows, one per year ($)
@@ -187,7 +206,12 @@ function AnnuityCard() {
           ))}
         </select>
       </div>
-      <NumberField label="Interest rate (% a year)" value={rate} onChange={setRate} />
+      <RateField
+        label="Interest rate (%/yr)"
+        value={rate}
+        onChange={setRate}
+        years={toNumber(years)}
+      />
       <NumberField label="Years" value={years} onChange={setYears} />
     </CalculatorCard>
   );
@@ -224,7 +248,7 @@ function CalculatorCard({
         <CardDescription>{description}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid items-end gap-3 sm:grid-cols-2">{children}</div>
+        <div className="grid items-start gap-3 sm:grid-cols-2">{children}</div>
         <div
           role="status"
           aria-live="polite"
@@ -279,6 +303,44 @@ function NumberField({
         }}
         className={FIELD}
       />
+    </div>
+  );
+}
+
+/**
+ * A rate field that can fill itself with a real rate: the Treasury yield whose
+ * maturity is closest to the calculation's horizon, from the latest curve.
+ * Without the curve (offline, or fixture mode) it is a plain number field.
+ */
+function RateField({
+  label,
+  value,
+  onChange,
+  years,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  years: number;
+}) {
+  const treasury = useTreasuryRates();
+  const match = treasury.data ? closestTreasury(treasury.data.yields, years) : null;
+  return (
+    <div className="space-y-1">
+      <NumberField label={label} value={value} onChange={onChange} />
+      {match && treasury.data ? (
+        <button
+          type="button"
+          onClick={() => {
+            onChange(String(match.ratePercent));
+          }}
+          aria-label={`Use the ${describeTerm(match.term)} Treasury yield, ${String(match.ratePercent)}%`}
+          title={`US Treasury yield on ${treasury.data.date}, from FMP`}
+          className="block text-left text-xs text-primary underline-offset-4 hover:underline"
+        >
+          {match.term} Treasury: {match.ratePercent}%
+        </button>
+      ) : null}
     </div>
   );
 }

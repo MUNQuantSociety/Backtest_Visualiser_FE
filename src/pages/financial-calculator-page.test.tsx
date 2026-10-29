@@ -1,8 +1,33 @@
-import { expect, it } from 'vitest';
+import { beforeEach, expect, it, vi } from 'vitest';
 
+import { apiClient } from '@/lib/api-client';
+import type * as ApiClientModule from '@/lib/api-client';
 import { renderWithProviders, screen, userEvent } from '@/test/test-utils';
 
 import FinancialCalculatorPage from './financial-calculator-page';
+
+vi.mock('@/config/env', () => ({
+  env: { apiBaseUrl: '/api', apiTimeout: 30_000, useFixtures: false, isDev: false, isProd: true },
+}));
+vi.mock('@/lib/api-client', async (importOriginal) => ({
+  ...(await importOriginal<typeof ApiClientModule>()),
+  apiClient: { get: vi.fn() },
+}));
+
+const CURVE = {
+  date: '2026-10-28',
+  yields: [
+    { term: '3M', years: 0.25, ratePercent: 4.18 },
+    { term: '3Y', years: 3, ratePercent: 4.8 },
+    { term: '5Y', years: 5, ratePercent: 4.85 },
+    { term: '10Y', years: 10, ratePercent: 5.05 },
+  ],
+};
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.mocked(apiClient.get).mockResolvedValue(CURVE);
+});
 
 it('shows a worked answer in every card from the start', () => {
   renderWithProviders(<FinancialCalculatorPage />);
@@ -59,7 +84,7 @@ it('marks a project that loses money', async () => {
 
 it('handles a monthly annuity at 0%', async () => {
   renderWithProviders(<FinancialCalculatorPage />);
-  const rate = screen.getAllByRole('spinbutton', { name: 'Interest rate (% a year)' })[1]!;
+  const rate = screen.getAllByRole('spinbutton', { name: 'Interest rate (%/yr)' })[1]!;
 
   await userEvent.clear(rate);
   await userEvent.type(rate, '0');
@@ -67,4 +92,39 @@ it('handles a monthly annuity at 0%', async () => {
   expect(
     screen.getByRole('status', { name: 'Present value of an annuity result' }),
   ).toHaveTextContent('$30,000.00');
+});
+
+it('offers the Treasury yield closest to each horizon, and uses it on a click', async () => {
+  renderWithProviders(<FinancialCalculatorPage />);
+
+  // Future value over 10 years, and NPV over three yearly cash flows.
+  const tenYear = await screen.findAllByRole('button', {
+    name: 'Use the 10-year Treasury yield, 5.05%',
+  });
+  expect(
+    screen.getByRole('button', { name: 'Use the 3-year Treasury yield, 4.8%' }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole('button', { name: 'Use the 5-year Treasury yield, 4.85%' }),
+  ).toBeInTheDocument();
+  expect(apiClient.get).toHaveBeenCalledTimes(1);
+
+  await userEvent.click(tenYear[0]!);
+
+  expect(screen.getByRole('status', { name: 'Future value result' })).toHaveTextContent(
+    'at 5.05% a year grows to',
+  );
+});
+
+it('stays a plain calculator when the Treasury rates cannot be fetched', async () => {
+  vi.mocked(apiClient.get).mockRejectedValue(new Error('offline'));
+  renderWithProviders(<FinancialCalculatorPage />);
+
+  await vi.waitFor(() => {
+    expect(apiClient.get).toHaveBeenCalled();
+  });
+  expect(screen.queryByRole('button', { name: /Treasury/ })).not.toBeInTheDocument();
+  expect(screen.getByRole('status', { name: 'Future value result' })).toHaveTextContent(
+    '$1,628.89',
+  );
 });
