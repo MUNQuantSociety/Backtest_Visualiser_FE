@@ -13,6 +13,7 @@ export const routePatterns = {
   backtests: paths.backtests,
   backtestDetail: '/backtests/:backtestId',
   compare: '/compare',
+  build: paths.build,
   tickerDetail: '/tickers/:ticker',
 
   live: '/live',
@@ -61,6 +62,13 @@ export const router = createBrowserRouter([
         lazy: async () => {
           const ComparePage = await import('@/pages/compare-page');
           return { Component: ComparePage.default };
+        },
+      },
+      {
+        path: routePatterns.build,
+        lazy: async () => {
+          const BuildPage = await import('@/pages/build-page');
+          return { Component: BuildPage.default };
         },
       },
       {

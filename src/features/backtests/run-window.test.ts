@@ -5,6 +5,7 @@ import {
   coverageYearTicks,
   latestFirstBar,
   matchingPreset,
+  MAX_WINDOW_DAYS,
   presetWindow,
   sessionsIn,
   tickerCoverageState,
@@ -25,6 +26,38 @@ describe('presetWindow', () => {
     // Five years back from 2025-07-18 is 2020-07-18 — inside coverage — but
     // from a short dataset it is not, and the answer is "as much as you have".
     expect(presetWindow('5y', { start: '2023-01-03', end: '2025-07-18' })).toEqual({
+      startDate: '2023-01-03',
+      endDate: '2025-07-18',
+    });
+  });
+
+  it('keeps 5Y within the backend cap when the five years span a leap day', () => {
+    // Five calendar years back from 2026-10-06 is 1826 days, one more than
+    // the backend runs; the preset starts a day later instead.
+    expect(presetWindow('5y', { start: '2006-11-01', end: '2026-10-06' })).toEqual({
+      startDate: '2021-10-07',
+      endDate: '2026-10-06',
+    });
+  });
+
+  it('holds Max to the longest window one run allows', () => {
+    const { startDate, endDate } = presetWindow('max', { start: '2006-11-01', end: '2026-10-06' });
+    const days = (Date.parse(endDate) - Date.parse(startDate)) / 86_400_000;
+    expect(days).toBe(MAX_WINDOW_DAYS);
+    expect(presetWindow('max', COVERAGE).startDate).toBe('2020-07-19');
+  });
+
+  it('follows the limit the backend reports', () => {
+    expect(presetWindow('max', COVERAGE, 365)).toEqual({
+      startDate: '2024-07-18',
+      endDate: '2025-07-18',
+    });
+    expect(presetWindow('5y', COVERAGE, 365).startDate).toBe('2024-07-18');
+    expect(matchingPreset(presetWindow('max', COVERAGE, 365), COVERAGE, 365)).toBe('1y');
+  });
+
+  it('leaves Max at the start of coverage when coverage is shorter than the cap', () => {
+    expect(presetWindow('max', { start: '2023-01-03', end: '2025-07-18' })).toEqual({
       startDate: '2023-01-03',
       endDate: '2025-07-18',
     });

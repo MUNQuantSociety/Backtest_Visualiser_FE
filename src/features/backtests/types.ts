@@ -167,6 +167,8 @@ export const coverageResponseSchema = z.object({
   start: z.string().nullable().default(null),
   end: z.string().nullable().default(null),
   missing: z.array(z.string()).default([]),
+  /** The longest window a run accepts, in days; absent from an older backend. */
+  maxWindowDays: z.number().int().positive().nullish(),
 });
 export type CoverageResponse = z.infer<typeof coverageResponseSchema>;
 

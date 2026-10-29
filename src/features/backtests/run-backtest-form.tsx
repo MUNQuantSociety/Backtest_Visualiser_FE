@@ -224,7 +224,11 @@ export function RunBacktestForm({
 
   const activePreset =
     window && covered?.start && covered.end
-      ? matchingPreset(window, { start: covered.start, end: covered.end })
+      ? matchingPreset(
+          window,
+          { start: covered.start, end: covered.end },
+          covered.maxWindowDays ?? undefined,
+        )
       : null;
   const clampedTo = latestFirstBar(covered);
 
@@ -248,7 +252,11 @@ export function RunBacktestForm({
 
   function applyPreset(windowPreset: WindowPreset) {
     if (!covered?.start || !covered.end) return;
-    const next = presetWindow(windowPreset, { start: covered.start, end: covered.end });
+    const next = presetWindow(
+      windowPreset,
+      { start: covered.start, end: covered.end },
+      covered.maxWindowDays ?? undefined,
+    );
     log.info('date preset selected', { strategyKey, windowPreset, ...next });
     setStartOverride(next.startDate);
     setEndOverride(next.endDate);

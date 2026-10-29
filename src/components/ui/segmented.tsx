@@ -51,7 +51,7 @@ export function Segmented<T extends string>({
             className={cn(
               'tabular cursor-pointer rounded-sm px-2.5 py-1 text-xs transition-colors',
               active
-                ? 'bg-selected font-medium text-selected-foreground'
+                ? 'slant-active font-medium text-slant-foreground'
                 : 'text-muted-foreground hover:text-foreground',
             )}
           >
