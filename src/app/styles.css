@@ -22,6 +22,7 @@
   --color-brand: var(--brand);
   --color-selected: var(--selected);
   --color-selected-foreground: var(--selected-foreground);
+  --color-slant-foreground: var(--slant-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
@@ -88,6 +89,13 @@
   --brand: oklch(0.902 0.152 181.4);
   --selected: oklch(0.94 0.02 240);
   --selected-foreground: oklch(0.38 0.09 245);
+  /* The slanted menu highlight (`.slant-active`) is the one selection state
+     in the logo's teal. It only marks navigation and pickers, never sits
+     beside a signed number, so it cannot be misread as profit. The edge is
+     darker here because the logo's own teal vanishes on a white card. */
+  --slant: oklch(0.93 0.05 182);
+  --slant-foreground: oklch(0.4 0.08 182);
+  --slant-edge: oklch(0.72 0.13 182);
 
   --destructive: oklch(0.55 0.19 25);
   --destructive-foreground: oklch(0.985 0 0);
@@ -132,6 +140,9 @@
   --brand: oklch(0.902 0.152 181.4);
   --selected: oklch(0.235 0.022 240);
   --selected-foreground: oklch(0.86 0.06 240);
+  --slant: oklch(0.3 0.055 182);
+  --slant-foreground: oklch(0.9 0.12 182);
+  --slant-edge: var(--brand);
 
   --destructive: oklch(0.62 0.17 22);
   --destructive-foreground: oklch(0.145 0.006 255);
@@ -211,6 +222,60 @@
 }
 
 @layer components {
+  /* The selected item in a menu: a tilted shape behind it, with an offset
+     accent sliver, that pops in when the selection lands. A nod to game pause
+     menus, kept to navigation and pickers; data never tilts. The element
+     itself stays square and unrotated, so text and focus rings read as usual. */
+  .slant-active {
+    position: relative;
+    isolation: isolate;
+    background: transparent;
+  }
+
+  .slant-active::before,
+  .slant-active::after {
+    content: '';
+    position: absolute;
+    inset: 1px -3px;
+    /* Fixed offsets, not percentages: a wide card and a narrow tab get the
+       same small tilt rather than one proportional to their size. */
+    clip-path: polygon(6px 3px, 100% 0, calc(100% - 6px) 100%, 0 calc(100% - 3px));
+    animation: slant-pop 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .slant-active::before {
+    z-index: -1;
+    background: var(--slant);
+  }
+
+  .slant-active::after {
+    z-index: -2;
+    background: var(--slant-edge);
+    opacity: 0.55;
+    translate: 3px 3px;
+  }
+
+  @keyframes slant-pop {
+    from {
+      transform: scale(0.9) rotate(-2deg);
+      opacity: 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .slant-active::before,
+    .slant-active::after {
+      animation: none;
+    }
+  }
+
+  @media print {
+    .slant-active::before,
+    .slant-active::after {
+      display: none;
+    }
+  }
+
   .library-scroll-region {
     overflow-y: scroll;
     overscroll-behavior: contain;

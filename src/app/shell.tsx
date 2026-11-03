@@ -7,6 +7,7 @@ import {
   Filter,
   FlaskConical,
   GitCompareArrows,
+  Hammer,
   Globe,
   LayoutDashboard,
   ListChecks,
@@ -75,6 +76,7 @@ const sections: readonly NavSection[] = [
       { kind: 'route', to: paths.dashboard, label: 'Dashboard', icon: LayoutDashboard, end: true },
       { kind: 'route', to: paths.backtests, label: 'Backtests', icon: FlaskConical, end: false },
       { kind: 'route', to: paths.compare, label: 'Compare', icon: GitCompareArrows, end: false },
+      { kind: 'route', to: paths.build, label: 'Build', icon: Hammer, end: false },
     ],
   },
   {
@@ -420,7 +422,7 @@ function TopNav() {
                     cn(
                       'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm whitespace-nowrap transition-colors',
                       isActive
-                        ? 'bg-selected font-medium text-selected-foreground'
+                        ? 'slant-active font-medium text-slant-foreground'
                         : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground',
                     )
                   }
@@ -519,7 +521,7 @@ function Sidebar({ expanded }: SidebarProps) {
                         // drift sideways as the panel opens.
                         expanded ? 'px-3' : 'px-6',
                         isActive
-                          ? 'bg-selected font-medium text-selected-foreground'
+                          ? 'slant-active font-medium text-slant-foreground'
                           : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground',
                       )
                     }

@@ -19,6 +19,17 @@ export function isoDay(value: Date): string {
   return value.toISOString().slice(0, 10);
 }
 
+/**
+ * The longest window the backend runs, `end - start` in days, when coverage
+ * does not say: the backend's `MAX_BACKTEST_WINDOW_DAYS` default. Coverage
+ * reports the deployment's own limit as `maxWindowDays`, and the form passes
+ * that in. Five calendar years across a Feb 29 are 1826 days, so the presets
+ * are floored rather than handing the backend a window it answers with a 422.
+ */
+export const MAX_WINDOW_DAYS = 1825;
+
+const DAY_MS = 86_400_000;
+
 function clamp(day: string, start: string, end: string): string {
   if (day < start) return start;
   if (day > end) return end;
@@ -28,35 +39,43 @@ function clamp(day: string, start: string, end: string): string {
 /**
  * The window a preset means, clamped to coverage. A preset that would reach
  * before the data starts is floored there rather than refused: "as much as
- * you have" is what someone pressing 5Y on a two-year dataset wants.
+ * you have" is what someone pressing 5Y on a two-year dataset wants. Every
+ * preset, Max included, is also held to `MAX_WINDOW_DAYS`, so Max means as
+ * much as one run allows.
  */
 export function presetWindow(
   preset: WindowPreset,
   coverage: { start: string; end: string },
+  maxWindowDays: number = MAX_WINDOW_DAYS,
 ): { startDate: string; endDate: string } {
   const { start, end } = coverage;
-  if (preset === 'max') return { startDate: start, endDate: end };
-  const years = preset === '1y' ? 1 : preset === '2y' ? 2 : 5;
-  const from = new Date(`${end}T00:00:00Z`);
-  from.setUTCFullYear(from.getUTCFullYear() - years);
-  return { startDate: clamp(isoDay(from), start, end), endDate: end };
+  const endDay = new Date(`${end}T00:00:00Z`);
+  const earliest = new Date(endDay.getTime() - maxWindowDays * DAY_MS);
+  let from = earliest;
+  if (preset !== 'max') {
+    const years = preset === '1y' ? 1 : preset === '2y' ? 2 : 5;
+    const calendar = new Date(endDay);
+    calendar.setUTCFullYear(calendar.getUTCFullYear() - years);
+    if (calendar > earliest) from = calendar;
+  }
+  const floor = start > isoDay(from) ? start : isoDay(from);
+  return { startDate: clamp(floor, start, end), endDate: end };
 }
 
 /** The preset a window currently matches, if any, so the control can show it. */
 export function matchingPreset(
   window: { startDate: string; endDate: string },
   coverage: { start: string; end: string },
+  maxWindowDays: number = MAX_WINDOW_DAYS,
 ): WindowPreset | null {
   for (const { value } of WINDOW_PRESETS) {
-    const candidate = presetWindow(value, coverage);
+    const candidate = presetWindow(value, coverage, maxWindowDays);
     if (candidate.startDate === window.startDate && candidate.endDate === window.endDate) {
       return value;
     }
   }
   return null;
 }
-
-const DAY_MS = 86_400_000;
 
 function daysBetween(start: string, end: string): number {
   return Math.max(
