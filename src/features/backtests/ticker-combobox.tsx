@@ -34,9 +34,6 @@ interface TickerComboboxProps {
    * a hundred pixels; a list that narrow cannot show a company name.
    */
   anchorRef: RefObject<HTMLElement | null>;
-  /** The input's accessible name; "Add ticker" in the run form. */
-  label?: string | undefined;
-  placeholder?: string | undefined;
 }
 
 /**
@@ -64,8 +61,6 @@ export function TickerCombobox({
   invalid,
   describedBy,
   anchorRef,
-  label = 'Add ticker',
-  placeholder = 'Add ticker…',
 }: TickerComboboxProps) {
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
@@ -167,7 +162,7 @@ export function TickerCombobox({
         }}
         id={id}
         role="combobox"
-        aria-label={label}
+        aria-label="Add ticker"
         aria-autocomplete="list"
         aria-expanded={open && hasContent}
         aria-controls={listboxId}
@@ -175,7 +170,7 @@ export function TickerCombobox({
         aria-invalid={invalid}
         aria-describedby={describedBy}
         value={value}
-        placeholder={placeholder}
+        placeholder="Add ticker…"
         disabled={disabled}
         autoComplete="off"
         className="tabular min-w-24 flex-1 bg-transparent px-1 text-xs outline-none placeholder:text-muted-foreground"
@@ -234,7 +229,7 @@ export function TickerCombobox({
                   },
                 })}
               >
-                <span className="tabular shrink-0 font-medium">{match.symbol}</span>
+                <span className="tabular font-medium">{match.symbol}</span>
                 {match.name ? <span className="min-w-0 truncate">{match.name}</span> : null}
                 <span className="ml-auto flex shrink-0 items-center gap-1.5 text-muted-foreground">
                   {match.exchange ? <span>{match.exchange}</span> : null}

@@ -255,8 +255,6 @@ export const strategySourceSchema = z.object({
   body: z.string().nullable().default(null),
   indicators: z.array(indicatorSpecSchema).nullable().default(null),
   state: z.record(z.string(), z.unknown()).nullable().default(null),
-  /** The no-code builder's rules, for a strategy built with it; read with `parseRules`. */
-  rules: z.unknown().optional(),
 });
 export type StrategySource = z.infer<typeof strategySourceSchema>;
 

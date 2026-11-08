@@ -1,4 +1,3 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import { createMemoryRouter, Outlet, RouterProvider } from 'react-router';
 import { afterAll, describe, expect, it, vi } from 'vitest';
@@ -8,8 +7,6 @@ import { router } from './index';
 vi.mock('@/app/root-layout', () => ({ RootLayout: () => <Outlet /> }));
 vi.mock('@/pages/dashboard-page', () => ({ default: () => null }));
 vi.mock('@/pages/library-page', () => ({ default: () => <h1>Backtests hub</h1> }));
-// The real screener fetches data; its own tests cover it. Here only the route matters.
-vi.mock('@/pages/stock-screener-page', () => ({ default: () => <h1>Stock Screener</h1> }));
 
 afterAll(() => router.dispose());
 
@@ -30,15 +27,9 @@ describe('Tools routes', () => {
   it.each([
     ['/tools/screener', 'Stock Screener'],
     ['/tools/calculator', 'Financial Calculator'],
-  ])('serves the page at %s', async (path, heading) => {
+  ])('serves a placeholder page at %s', async (path, heading) => {
     const memory = createMemoryRouter(router.routes, { initialEntries: [path] });
-    // The calculator fetches Treasury rates, so it needs the app's query client.
-    const queries = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(
-      <QueryClientProvider client={queries}>
-        <RouterProvider router={memory} />
-      </QueryClientProvider>,
-    );
+    render(<RouterProvider router={memory} />);
     expect(await screen.findByRole('heading', { name: heading })).toBeInTheDocument();
     memory.dispose();
   });

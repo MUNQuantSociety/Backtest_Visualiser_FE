@@ -199,32 +199,6 @@ export function returnCorrelation(
   };
 }
 
-/** The strategy fields the book reads; a catalogue `Strategy` has them all. */
-interface CatalogueStrategy {
-  id: string;
-  name: string;
-  className: string;
-  status: string;
-  universe: readonly string[];
-}
-
-/**
- * Active strategies as the book draws them, one palette slot each in catalogue
- * order. Shared so the dashboard and the stock screener agree on which
- * strategies, and so which tickers, make up the watchlist.
- */
-export function activeBookStrategies(strategies: readonly CatalogueStrategy[]): BookStrategy[] {
-  return strategies
-    .filter((strategy) => strategy.status === 'active')
-    .map((strategy, index) => ({
-      id: strategy.id,
-      name: strategy.name,
-      shortName: strategy.className,
-      universe: strategy.universe,
-      colorIndex: index,
-    }));
-}
-
 export interface UniverseRow {
   ticker: string;
   /** Strategies trading it, by palette index — segments of the stacked bar. */
