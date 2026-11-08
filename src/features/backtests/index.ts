@@ -20,6 +20,7 @@ export {
   sliceToPeriod,
   summariseBook,
   universeRows,
+  activeBookStrategies,
   type AlphaRow,
   type BookStrategy,
   type BookSummary,
@@ -69,6 +70,7 @@ export {
   type StatusFilter,
 } from './run-filters';
 export { RunsTable } from './runs-table';
+export { TickerCombobox } from './ticker-combobox';
 export { TradesTable } from './trades-table';
 export { TickerPnlTable } from './ticker-pnl-table';
 export { recordedFillCount } from './trade-report';
