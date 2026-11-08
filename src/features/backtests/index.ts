@@ -20,6 +20,7 @@ export {
   sliceToPeriod,
   summariseBook,
   universeRows,
+  activeBookStrategies,
   type AlphaRow,
   type BookStrategy,
   type BookSummary,

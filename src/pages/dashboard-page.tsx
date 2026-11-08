@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Segmented } from '@/components/ui/segmented';
 import {
+  activeBookStrategies,
   alphaRows,
   bookCurve,
   buyHoldCurve,
@@ -133,16 +134,7 @@ export default function DashboardPage() {
   const tableRuns = useMemo(() => mergeRunRows(runs, pendingRows), [runs, pendingRows]);
 
   const strategies = useMemo<BookStrategy[]>(
-    () =>
-      (strategiesQuery.data ?? [])
-        .filter((strategy) => strategy.status === 'active')
-        .map((strategy, index) => ({
-          id: strategy.id,
-          name: strategy.name,
-          shortName: strategy.className,
-          universe: strategy.universe,
-          colorIndex: index,
-        })),
+    () => activeBookStrategies(strategiesQuery.data ?? []),
     [strategiesQuery.data],
   );
 
