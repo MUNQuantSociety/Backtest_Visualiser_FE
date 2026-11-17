@@ -2,6 +2,7 @@
 
 export { WatchlistCard } from './components/watchlist-card';
 export { perplexityFinanceUrl } from './external-links';
+export { useWatchlistUniverse } from './use-watchlist-universe';
 export {
   normaliseTicker,
   resolveWatchlist,
