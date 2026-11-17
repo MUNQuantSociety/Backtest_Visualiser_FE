@@ -15,6 +15,8 @@ import { useChartPalette } from '@/utils/use-chart-palette';
 
 import type { Candle } from '../candles-api';
 
+import { ChartDrawings } from './chart-drawings';
+
 /** An indicator line drawn with the candles. */
 export interface ChartLine {
   /** Stable per line, e.g. `rsi-14`. */
@@ -43,19 +45,29 @@ const FIRST_LINE_PANE = 2;
  * `lines` overlay moving averages on the candles and give each bounded or
  * differently scaled indicator (RSI, ADX and the like) a panel of its own.
  * Pass a stable array: a new one rebuilds every line.
+ *
+ * With a `drawingKey` (the ticker) the chart gets a Draw menu for trend lines,
+ * levels and the like, kept in this browser per key.
  */
 export function CandleChart({
   candles,
   lines = NO_LINES,
+  drawingKey,
 }: {
   candles: readonly Candle[];
   lines?: readonly ChartLine[];
+  drawingKey?: string;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
   const lineSeriesRef = useRef<ISeriesApi<'Line'>[]>([]);
+  // State as well as refs: the drawing layer renders from them.
+  const [api, setApi] = useState<{
+    chart: IChartApi;
+    series: ISeriesApi<'Candlestick'>;
+  } | null>(null);
   const [hoveredDate, setHoveredDate] = useState<string | null>(null);
   const palette = useChartPalette();
   const paletteRef = useRef(palette);
@@ -82,10 +94,12 @@ export function CandleChart({
       timeScale: { fixLeftEdge: true, fixRightEdge: true, borderVisible: false },
     });
     chartRef.current = chart;
-    candleSeriesRef.current = chart.addSeries(CandlestickSeries, {
+    const candleSeries = chart.addSeries(CandlestickSeries, {
       priceLineVisible: false,
       borderVisible: false,
     });
+    candleSeriesRef.current = candleSeries;
+    setApi({ chart, series: candleSeries });
     volumeSeriesRef.current = chart.addSeries(
       HistogramSeries,
       {
@@ -112,6 +126,7 @@ export function CandleChart({
       );
     });
     return () => {
+      setApi(null);
       chart.remove();
       chartRef.current = null;
       candleSeriesRef.current = null;
@@ -212,7 +227,25 @@ export function CandleChart({
           ))}
         </dl>
       ) : null}
-      <div ref={containerRef} className="min-h-0 flex-1" data-testid="candle-chart" />
+      <div className="min-h-0 flex-1">
+        {drawingKey === undefined ? (
+          <div ref={containerRef} className="size-full" data-testid="candle-chart" />
+        ) : (
+          <ChartDrawings
+            chart={api?.chart ?? null}
+            series={api?.series ?? null}
+            candles={candles}
+            storageKey={drawingKey}
+            color={palette.ink}
+          >
+            <div
+              ref={containerRef}
+              className="absolute inset-0 isolate"
+              data-testid="candle-chart"
+            />
+          </ChartDrawings>
+        )}
+      </div>
     </div>
   );
 }

@@ -249,7 +249,7 @@ function ChartBody({
     <div className="flex size-full flex-col gap-2">
       {indicatorBar}
       <div className="min-h-0 flex-1">
-        <CandleChart candles={candles.data} lines={lines} />
+        <CandleChart candles={candles.data} lines={lines} drawingKey={ticker} />
       </div>
     </div>
   );
