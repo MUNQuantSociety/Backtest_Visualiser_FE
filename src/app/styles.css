@@ -223,9 +223,10 @@
 
 @layer components {
   /* The selected item in a menu: a tilted shape behind it, with an offset
-     accent sliver, that pops in when the selection lands. A nod to game pause
-     menus, kept to navigation and pickers; data never tilts. The element
-     itself stays square and unrotated, so text and focus rings read as usual. */
+     accent sliver, that pops in when the selection lands. An experimental UI
+     design, kept to navigation and pickers; data never tilts.
+     The element itself stays square and unrotated, so text and focus rings
+     read as usual. */
   .slant-active {
     position: relative;
     isolation: isolate;
